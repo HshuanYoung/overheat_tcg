@@ -1,27 +1,35 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '10401004',
   fullName: '',
   specialName: '剑仙子',
   type: 'UNIT',
   color: 'BLUE',
-  colorReq: ['BLUE'],
-  acValue: 2,
-  power: 500,
+  gamecardId: null,
+  colorReq: {},
+  acValue: 1,
+  power: 1000,
   damage: 0,
   godMark: false,
-  isExhausted: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
   canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '启',
-      limit: 'ONCE_PER_TURN',
-      triggerLocation: ['UNIT'],
-      content: 'MOVE',
-      description: '将这个单位返回持有者的手牌。之后，选择你的侵蚀区中的1张正面卡，将其返回持有者的卡组，将卡组洗切。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
+      playCost: 0,
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/10401002_thumb.jpg',

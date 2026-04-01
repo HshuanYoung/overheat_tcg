@@ -1,25 +1,36 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '20400001',
   fullName: '歌月拂风',
   specialName: '歌月拂风',
   type: 'STORY',
   color: 'BLUE',
-  colorReq: ['BLUE'],
+  gamecardId: null,
+  colorReq: {},
   faction: '无',
-  acValue: 3,
+  acValue: 1,
+  power: 1000,
+  damage: 0,
   godMark: false,
-  isExhausted: false,
-  canAttack: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
+  canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '启',
-      description: '选择战场上的1张非[God Mark]卡，将其返回持有者的手牌。若你的战场上有「风花」单位，选择的卡可以是战场上的1张[God Mark]卡。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
       playCost: 0,
-      content: 'MOVE',
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/20400001_thumb.jpg',

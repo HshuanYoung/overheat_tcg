@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Card, PlayerState, StackItem } from '../types/game';
+import { Card, PlayerState, StackItem, GameState } from '../types/game';
 import { CardComponent } from './Card';
-import { Shield, Sword, Zap, Trash2, LogOut, Layers, AlertTriangle, Search } from 'lucide-react';
+import { GameService } from '../services/gameService';
+import { Shield, Sword, Zap, Trash2, LogOut, Layers, AlertTriangle, Search, Play } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface PlayFieldProps {
   player: PlayerState;
   opponent: PlayerState;
+  game: GameState;
   onCardClick?: (card: Card, zone: string, index?: number) => void;
   onHoverCard?: (card: Card | null) => void;
-  paymentSelection?: { useFeijing: string[], exhaustIds: string[] };
+  onPlayCard?: (card: Card) => void;
+  paymentSelection?: { useFeijing: string[], exhaustIds: string[], erosionFrontIds?: string[] };
   stack: StackItem[];
   myUid: string;
+  selectedAttackers?: string[];
 }
 
 const CardSlot: React.FC<{
@@ -28,7 +32,8 @@ const CardSlot: React.FC<{
   isDeck?: boolean;
   count?: number;
   showCount?: boolean;
-}> = ({ card, label, onClick, onHover, className, isErosion, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true }) => {
+  isAttacking?: boolean;
+}> = ({ card, label, onClick, onHover, className, isErosion, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking }) => {
   // Calculate thickness layers (max 8 for visual performance)
   const layers = Math.min(Math.floor(count / 3), 8);
   
@@ -39,7 +44,7 @@ const CardSlot: React.FC<{
         <div 
           key={i}
           className="absolute inset-0 rounded-md border border-white/10 bg-zinc-900"
-          style={{ transform: `translate(${(i + 1) * 0.5}px, -${(i + 1) * 0.5}px)`, zIndex: -i - 1 }}
+          style={{ transform: `translate(${(i + 1) * 1.5}px, -${(i + 1) * 1.5}px)`, zIndex: -i - 1 }}
         />
       ))}
       
@@ -49,6 +54,7 @@ const CardSlot: React.FC<{
           (card || isDeck || count > 0) ? "border-[#f27d26]/50 bg-black/40 shadow-lg" : "border-white/10 bg-white/5",
           isExhausted ? "rotate-90 scale-90 opacity-80" : "",
           isSelectedForPayment ? "ring-2 ring-[#f27d26] ring-offset-2 ring-offset-black z-10" : "",
+          isAttacking ? "ring-4 ring-red-600 ring-offset-2 ring-offset-black z-10 shadow-[0_0_20px_rgba(220,38,38,0.8)]" : "",
           className
         )}
         onClick={onClick}
@@ -118,16 +124,19 @@ const PlayerHalf: React.FC<{
   isOpponent?: boolean;
   onCardClick?: (card: Card, zone: string, index?: number) => void;
   onHoverCard?: (card: Card | null) => void;
-  paymentSelection?: { useFeijing: string[], exhaustIds: string[] };
-}> = ({ player, isOpponent, onCardClick, onHoverCard, paymentSelection }) => {
+  onPlayCard?: (card: Card) => void;
+  paymentSelection?: { useFeijing: string[], exhaustIds: string[], erosionFrontIds?: string[] };
+  selectedAttackers?: string[];
+}> = ({ player, isOpponent, onCardClick, onHoverCard, onPlayCard, paymentSelection, selectedAttackers }) => {
   const romanNumerals = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ'];
   const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[] } | null>(null);
+  const [hoveredHandCardId, setHoveredHandCardId] = useState<string | null>(null);
   
   if (!player) return null;
 
   return (
     <div className={cn(
-      "flex-1 grid grid-cols-[120px_1fr_120px] gap-4 p-4 relative",
+      "flex-1 grid grid-cols-[120px_1fr_120px] gap-4 p-4 relative h-full min-h-0",
       isOpponent ? "bg-red-500/5" : "bg-blue-500/5"
     )}>
       <CardListModal 
@@ -138,7 +147,7 @@ const PlayerHalf: React.FC<{
       />
 
       {/* LEFT COLUMN */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 h-full min-h-0 justify-center">
         {isOpponent ? (
           // Opponent Left: Deck, Grave, Exile
           <div className="flex flex-col gap-2">
@@ -152,6 +161,7 @@ const PlayerHalf: React.FC<{
               className="border-red-900/30"
               onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
               onHover={onHoverCard}
+              isFaceUp={true}
             />
             <CardSlot 
               card={(player.exile?.length || 0) > 0 ? player.exile[player.exile.length - 1] : null} 
@@ -159,6 +169,7 @@ const PlayerHalf: React.FC<{
               className="border-purple-900/30"
               onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
               onHover={onHoverCard}
+              isFaceUp={true}
             />
           </div>
         ) : (
@@ -184,112 +195,223 @@ const PlayerHalf: React.FC<{
       </div>
 
       {/* CENTER COLUMN: HAND, UNIT, EROSION */}
-      <div className={cn(
-        "flex flex-col gap-4",
-        isOpponent ? "flex-col" : "flex-col-reverse"
-      )}>
-        {/* Hand Area */}
-        <div className="flex items-center gap-4">
-          {isOpponent && (
-            <div className="w-20 shrink-0">
-              <CardSlot 
-                card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
-                label="PLAY" count={player.playZone?.length || 0}
-                className="border-yellow-500/30"
-                onHover={onHoverCard}
-              />
-            </div>
-          )}
-          <div className="flex-1 h-24 flex items-center justify-center gap-1 overflow-x-auto px-4 bg-black/20 rounded-xl border border-white/5 custom-scrollbar">
-            {player.hand?.map((card, i) => (
-              <div 
-                key={i} 
-                className="w-14 shrink-0 hover:-translate-y-2 transition-transform cursor-pointer"
-                onMouseEnter={() => onHoverCard?.(card)}
-                onMouseLeave={() => onHoverCard?.(null)}
-                onClick={() => onCardClick?.(card, 'hand', i)}
-              >
-                {isOpponent ? <CardComponent isBack /> : <CardComponent card={card} />}
-              </div>
-            ))}
-            {(player.hand?.length || 0) === 0 && <span className="text-[10px] text-white/20 uppercase font-bold italic">Empty Hand</span>}
-          </div>
-          {!isOpponent && (
-            <div className="w-20 shrink-0">
-              <CardSlot 
-                card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
-                label="PLAY" count={player.playZone?.length || 0}
-                className="border-yellow-500/30"
-                onHover={onHoverCard}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className={cn(
-          "flex flex-col gap-4",
-          isOpponent ? "flex-col" : "flex-col-reverse"
-        )}>
-          {/* UNIT ZONE */}
-          <div className="grid grid-cols-6 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => {
-              const unit = player.unitZone?.[i];
-              return (
+      <div className="flex flex-col gap-2 h-full min-h-0 justify-center">
+        {isOpponent ? (
+          <>
+            {/* Opponent Hand Area */}
+            <div className="flex items-center gap-4">
+              <div className="w-20 shrink-0">
                 <CardSlot 
-                  key={i}
-                  card={unit || null}
-                  label={`UNIT ${i+1}`}
+                  card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
+                  label="PLAY" count={player.playZone?.length || 0}
+                  className="border-yellow-500/30"
                   onHover={onHoverCard}
-                  onClick={() => unit && onCardClick?.(unit, 'unit', i)}
-                  isExhausted={unit ? player.hasExhaustedThisTurn?.includes(unit.id) : false}
-                  isSelectedForPayment={unit ? paymentSelection?.exhaustIds.includes(unit.id) : false}
-                  showCount={false}
                 />
-              );
-            })}
-          </div>
-
-          {/* EROSION ZONE */}
-          <div className="grid grid-cols-10 gap-1">
-            {romanNumerals.map((num, i) => {
-              const frontCard = player.erosionFront?.[i];
-              const backCard = player.erosionBack?.[i];
-              return (
-                <div key={i} className="flex flex-col gap-1">
-                  <div className="relative aspect-[3/4]">
-                    {backCard && (
-                      <CardSlot 
-                        card={null}
-                        isFaceUp={false}
-                        onHover={() => onHoverCard?.(backCard)}
-                        className="border-red-900/50"
-                        showCount={false}
-                      />
-                    )}
-                    {frontCard && (
-                      <CardSlot 
-                        card={frontCard}
-                        isFaceUp={true}
-                        onHover={onHoverCard}
-                        className="absolute inset-0 border-red-600"
-                        showCount={false}
-                      />
-                    )}
-                    {!frontCard && !backCard && (
-                      <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
-                        <span className="text-[8px] opacity-20">{num}</span>
-                      </div>
-                    )}
-                  </div>
+              </div>
+              <div className="flex-1 h-24 flex items-center justify-center gap-1 overflow-x-auto px-4 bg-black/20 rounded-xl border border-white/5 custom-scrollbar">
+                <div className="text-white/50 text-sm font-bold tracking-widest uppercase">
+                  手牌数量: {player.hand?.length || 0}
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </div>
+            </div>
+
+            {/* Opponent Erosion Zone */}
+            <div className="grid grid-cols-10 gap-1">
+              {romanNumerals.map((num, i) => {
+                const frontCard = player.erosionFront?.[i];
+                const backCard = player.erosionBack?.[i];
+                return (
+                  <div key={i} className="flex flex-col gap-1 items-center">
+                    <span className="text-[10px] font-black text-white/30">{num}</span>
+                    <div className="relative aspect-[3/4] w-full">
+                      {backCard && (
+                        <CardSlot 
+                          card={null}
+                          isFaceUp={false}
+                          onHover={() => onHoverCard?.(backCard)}
+                          className="border-red-900/50"
+                          showCount={false}
+                        />
+                      )}
+                      {frontCard && (
+                        <CardSlot 
+                          card={frontCard}
+                          isFaceUp={true}
+                          onHover={onHoverCard}
+                          onClick={() => onCardClick?.(frontCard, 'erosion_front', i)}
+                          isSelectedForPayment={paymentSelection?.erosionFrontIds?.includes(frontCard.id)}
+                          className="absolute inset-0 border-red-600"
+                          showCount={false}
+                        />
+                      )}
+                      {!frontCard && !backCard && (
+                        <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
+                          <span className="text-[8px] opacity-20">{num}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Opponent Unit Zone */}
+            <div className="grid grid-cols-6 gap-2">
+              {Array.from({ length: 6 }).map((_, i) => {
+                const unit = player.unitZone?.[i];
+                return (
+                  <CardSlot 
+                    key={i}
+                    card={unit || null}
+                    label={`UNIT ${i+1}`}
+                    onHover={onHoverCard}
+                    onClick={() => unit && onCardClick?.(unit, 'unit', i)}
+                    isExhausted={unit ? player.hasExhaustedThisTurn?.includes(unit.id) : false}
+                    isSelectedForPayment={unit ? paymentSelection?.exhaustIds.includes(unit.id) : false}
+                    isAttacking={unit ? selectedAttackers?.includes(unit.id) : false}
+                    showCount={false}
+                  />
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Player Unit Zone */}
+            <div className="grid grid-cols-6 gap-2">
+              {Array.from({ length: 6 }).map((_, i) => {
+                const unit = player.unitZone?.[i];
+                return (
+                  <CardSlot 
+                    key={i}
+                    card={unit || null}
+                    label={`UNIT ${i+1}`}
+                    onHover={onHoverCard}
+                    onClick={() => unit && onCardClick?.(unit, 'unit', i)}
+                    isExhausted={unit ? player.hasExhaustedThisTurn?.includes(unit.id) : false}
+                    isSelectedForPayment={unit ? paymentSelection?.exhaustIds.includes(unit.id) : false}
+                    isAttacking={unit ? selectedAttackers?.includes(unit.id) : false}
+                    showCount={false}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Player Erosion Zone */}
+            <div className="grid grid-cols-10 gap-1">
+              {romanNumerals.map((num, i) => {
+                const frontCard = player.erosionFront?.[i];
+                const backCard = player.erosionBack?.[i];
+                return (
+                  <div key={i} className="flex flex-col gap-1 items-center">
+                    <div className="relative aspect-[3/4] w-full">
+                      {backCard && (
+                        <CardSlot 
+                          card={null}
+                          isFaceUp={false}
+                          onHover={() => onHoverCard?.(backCard)}
+                          className="border-red-900/50"
+                          showCount={false}
+                        />
+                      )}
+                      {frontCard && (
+                        <CardSlot 
+                          card={frontCard}
+                          isFaceUp={true}
+                          onHover={onHoverCard}
+                          onClick={() => onCardClick?.(frontCard, 'erosion_front', i)}
+                          isSelectedForPayment={paymentSelection?.erosionFrontIds?.includes(frontCard.id)}
+                          className="absolute inset-0 border-red-600"
+                          showCount={false}
+                        />
+                      )}
+                      {!frontCard && !backCard && (
+                        <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
+                          <span className="text-[8px] opacity-20">{num}</span>
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-black text-white/30">{num}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Player Hand Area */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative min-h-[140px] flex items-end justify-center perspective-[1000px] bg-black/20 rounded-xl border border-white/5">
+                {player.hand?.map((card, i) => {
+                  const total = player.hand.length;
+                  const middle = (total - 1) / 2;
+                  const offset = i - middle;
+                  const rotation = offset * 4; // 4 degrees per card
+                  const translateY = Math.abs(offset) * 2; // push down outer cards
+                  const canPlayCheck = GameService.canPlayCard(player, card);
+                  const isHovered = hoveredHandCardId === card.id;
+
+                  return (
+                    <div 
+                      key={i} 
+                      className="absolute bottom-[-20px] w-24 origin-bottom transition-all duration-200 cursor-pointer group"
+                      style={{
+                        transform: isHovered 
+                          ? `translateX(${offset * 30}px) translateY(-40px) scale(1.2) rotate(0deg) translateZ(50px)` 
+                          : `translateX(${offset * 30}px) translateY(${translateY}px) rotate(${rotation}deg)`,
+                        zIndex: isHovered ? 50 : i
+                      }}
+                      onMouseEnter={() => {
+                        onHoverCard?.(card);
+                        setHoveredHandCardId(card.id);
+                      }}
+                      onMouseLeave={() => {
+                        onHoverCard?.(null);
+                        setHoveredHandCardId(null);
+                      }}
+                      onClick={() => onCardClick?.(card, 'hand', i)}
+                    >
+                      <CardComponent card={card} className="shadow-2xl" />
+                      
+                      {/* Play Button Overlay */}
+                      {isHovered && (
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
+                          {canPlayCheck.canPlay ? (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onPlayCard?.(card);
+                              }}
+                              className="bg-[#f27d26] text-black text-[10px] font-bold px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(242,125,38,0.5)] hover:scale-110 transition-transform flex items-center gap-1"
+                            >
+                              <Play className="w-3 h-3 fill-current" />
+                              PLAY
+                            </button>
+                          ) : (
+                            <div className="bg-red-900/90 text-red-200 text-[9px] font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap border border-red-500/30">
+                              {canPlayCheck.reason}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {(player.hand?.length || 0) === 0 && <span className="text-[10px] text-white/20 uppercase font-bold italic absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">Empty Hand</span>}
+              </div>
+              <div className="w-20 shrink-0">
+                <CardSlot 
+                  card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
+                  label="PLAY" count={player.playZone?.length || 0}
+                  className="border-yellow-500/30"
+                  onHover={onHoverCard}
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* RIGHT COLUMN */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 h-full min-h-0 justify-center">
         {isOpponent ? (
           // Opponent Right: Item Zone
           <div className="grid grid-cols-2 grid-rows-5 gap-1 h-full">
@@ -318,6 +440,7 @@ const PlayerHalf: React.FC<{
               className="border-purple-900/30"
               onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
               onHover={onHoverCard}
+              isFaceUp={true}
             />
             <CardSlot 
               card={(player.grave?.length || 0) > 0 ? player.grave[player.grave.length - 1] : null} 
@@ -325,6 +448,7 @@ const PlayerHalf: React.FC<{
               className="border-red-900/30"
               onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
               onHover={onHoverCard}
+              isFaceUp={true}
             />
             <CardSlot 
               card={null} isDeck label="DECK" count={player.deck?.length || 0} 
@@ -337,9 +461,9 @@ const PlayerHalf: React.FC<{
   );
 };
 
-export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, onCardClick, onHoverCard, paymentSelection, stack, myUid }) => {
+export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onHoverCard, onPlayCard, paymentSelection, stack, myUid, selectedAttackers }) => {
   return (
-    <div className="relative w-full h-full bg-[#0a0a0a] border-4 border-[#1a1a1a] rounded-3xl shadow-2xl overflow-hidden font-mono text-white select-none flex flex-col">
+    <div className="relative w-full h-full max-w-7xl mx-auto bg-[#0a0a0a] border-2 border-[#1a1a1a] rounded-xl shadow-2xl overflow-hidden font-mono text-white select-none flex flex-col">
       {/* Grid Pattern Background */}
       <div className="absolute inset-0 opacity-10 pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(circle, #f27d26 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
@@ -348,44 +472,75 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, onCardCl
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
 
       {/* Opponent Half */}
-      <PlayerHalf 
-        player={opponent} 
-        isOpponent 
-        onCardClick={onCardClick}
-        onHoverCard={onHoverCard}
-      />
+      <div className="flex-1 min-h-0">
+        <PlayerHalf 
+          player={opponent} 
+          isOpponent 
+          onCardClick={onCardClick}
+          onHoverCard={onHoverCard}
+        />
+      </div>
 
-      {/* STACK AREA (Play Area) */}
-      <div className="h-24 border-y border-white/10 bg-white/5 flex items-center justify-center gap-4 relative z-10">
-        <div className="absolute left-4 text-[10px] font-black uppercase italic tracking-widest opacity-20">Counter Stack</div>
-        {stack.map((item, i) => (
-          <motion.div 
-            key={i}
-            initial={{ scale: 0.8, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="w-16 relative group"
-            onMouseEnter={() => onHoverCard?.(item.card)}
-            onMouseLeave={() => onHoverCard?.(null)}
-          >
-            <CardComponent card={item.card} />
-            <div className={cn(
-              "absolute -top-2 -left-2 px-2 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg",
-              item.ownerUid === myUid ? "bg-[#f27d26] text-black" : "bg-red-600 text-white"
-            )}>
-              {item.ownerUid === myUid ? "Me" : "Opp"}
-            </div>
-          </motion.div>
-        ))}
-        {stack.length === 0 && <span className="text-[10px] text-white/10 uppercase font-bold italic tracking-widest">Stack Empty</span>}
+      {/* STACK AREA & PHASE INDICATOR */}
+      <div className="h-16 shrink-0 border-y border-white/10 bg-white/5 flex items-center justify-between px-6 relative z-10">
+        {/* Left: Stack */}
+        <div className="flex items-center gap-4 flex-1">
+          {stack.length === 0 && <span className="text-[10px] text-white/10 uppercase font-bold italic tracking-widest">Stack Empty</span>}
+          {stack.map((item, i) => (
+            <motion.div 
+              key={i}
+              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className="w-12 relative group"
+              onMouseEnter={() => onHoverCard?.(item.card)}
+              onMouseLeave={() => onHoverCard?.(null)}
+            >
+              <CardComponent card={item.card} />
+              <div className={cn(
+                "absolute -top-2 -left-2 px-2 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg",
+                item.ownerUid === myUid ? "bg-[#f27d26] text-black" : "bg-red-600 text-white"
+              )}>
+                {item.ownerUid === myUid ? "Me" : "Opp"}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Center: Phase Indicator */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6 bg-black/50 px-8 py-2 rounded-full border border-white/10 backdrop-blur-md">
+          <div className="flex flex-col items-center">
+            <span className="text-[8px] text-white/40 uppercase tracking-widest">回合数</span>
+            <span className="text-sm font-black italic text-[#f27d26]">T{game.turnCount}</span>
+          </div>
+          <div className="h-6 w-px bg-white/10" />
+          <div className="flex flex-col items-center">
+            <span className="text-[8px] text-white/40 uppercase tracking-widest">当前阶段</span>
+            <span className="text-sm font-black italic text-white uppercase">{game.phase}</span>
+          </div>
+          <div className="h-6 w-px bg-white/10" />
+          <div className={cn(
+             "px-4 py-1 rounded-full text-xs font-black uppercase italic tracking-widest shadow-lg",
+             game.players[game.currentTurnPlayer].uid === myUid ? "bg-[#f27d26] text-black shadow-[#f27d26]/20" : "bg-red-600 text-white shadow-red-600/20"
+           )}>
+             {game.players[game.currentTurnPlayer].uid === myUid ? "你的回合" : "对手回合"}
+          </div>
+        </div>
+        
+        {/* Right: Empty for balance */}
+        <div className="flex-1" />
       </div>
 
       {/* Player Half */}
-      <PlayerHalf 
-        player={player} 
-        onCardClick={onCardClick}
-        onHoverCard={onHoverCard}
-        paymentSelection={paymentSelection}
-      />
+      <div className="flex-1 min-h-0">
+        <PlayerHalf 
+          player={player} 
+          onCardClick={onCardClick}
+          onHoverCard={onHoverCard}
+          onPlayCard={onPlayCard}
+          paymentSelection={paymentSelection}
+          selectedAttackers={selectedAttackers}
+        />
+      </div>
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

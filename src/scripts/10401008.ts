@@ -1,34 +1,36 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '10401008',
   fullName: '四方剑仙 「北冥」',
   specialName: '北冥',
   type: 'UNIT',
   color: 'BLUE',
-  colorReq: ['BLUE'],
-  faction: '百濑之水城',
-  acValue: 4,
-  power: 3000,
-  damage: 3,
-  godMark: true,
-  isExhausted: false,
+  gamecardId: null,
+  colorReq: {},
+  faction: '无',
+  acValue: 1,
+  power: 1000,
+  damage: 0,
+  godMark: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
   canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '启',
-      limit: 'ONCE_PER_TURN',
-      description: '将被选择的卡破坏。之后，选择1名对手，给予他X点伤害，X为被破坏的卡的ACCESS值。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
       playCost: 0,
-      content: 'DAMAGE',
-    },
-    {
-      type: '启',
-      description: '将手牌中的这张卡放置到战场上。',
-      playCost: 0,
-      content: 'PLAY',
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/10401008_thumb.jpg',

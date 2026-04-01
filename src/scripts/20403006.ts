@@ -1,25 +1,36 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '20403006',
   fullName: '接变委托',
   specialName: '接变委托',
   type: 'STORY',
   color: 'BLUE',
-  colorReq: ['BLUE'],
-  faction: '冒险者公会',
-  acValue: 2,
+  gamecardId: null,
+  colorReq: {},
+  faction: '无',
+  acValue: 1,
+  power: 1000,
+  damage: 0,
   godMark: false,
-  isExhausted: false,
-  canAttack: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
+  canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '启',
-      description: '选择你的侵蚀区中的1张正面的ACCESS值+2以下的非[God Mark]单位卡，将其放置到战场上。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
       playCost: 0,
-      content: 'PLAY',
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/20403006_thumb.jpg',

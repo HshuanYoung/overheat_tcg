@@ -1,26 +1,36 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '30400002',
   fullName: '水仙心法',
   specialName: '水仙心法',
   type: 'ITEM',
   color: 'BLUE',
-  colorReq: ['BLUE'],
+  gamecardId: null,
+  colorReq: {},
   faction: '无',
-  acValue: 2,
+  acValue: 1,
+  power: 1000,
+  damage: 0,
   godMark: false,
-  isExhausted: false,
-  canAttack: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
+  canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '诱',
-      limit: 'ONCE_PER_TURN',
-      description: '你的单位由于卡的效果返回手牌时，你可以选择你的侵蚀区中的1张正面卡，将其加入手牌。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
       playCost: 0,
-      content: 'MOVE',
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/30400002_thumb.jpg',

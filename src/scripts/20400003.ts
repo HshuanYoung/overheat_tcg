@@ -1,25 +1,36 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '20400003',
   fullName: '公平交易',
   specialName: '公平交易',
   type: 'STORY',
   color: 'BLUE',
-  colorReq: ['BLUE'],
+  gamecardId: null,
+  colorReq: {},
   faction: '无',
-  acValue: -3,
+  acValue: 1,
+  power: 1000,
+  damage: 0,
   godMark: false,
-  isExhausted: false,
-  canAttack: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
+  canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '启',
-      description: '你选择1名对手，那名对手选择下列的1项效果并执行：◆抽3张卡，选择自己的2张手牌，将其放置到侵蚀区。◆选择1个横置单位，将其破坏。若你在女神化状态下使用这张卡，由你代替那名对手选择效果和对象。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
       playCost: 0,
-      content: 'CHOICE',
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/20400003_thumb.jpg',

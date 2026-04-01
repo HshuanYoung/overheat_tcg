@@ -11,10 +11,41 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { GameState, PlayerState, Card, Deck } from '../types/game';
+import { GameState, PlayerState, Card, Deck, TriggerLocation } from '../types/game';
 import { CARD_LIBRARY } from '../data/cards';
 
 const GAMES_COLLECTION = 'games';
+
+function cleanForFirestore(obj: any): any {
+  if (obj === undefined) {
+    return undefined;
+  }
+  if (obj === null) {
+    return null;
+  }
+  if (typeof obj === 'function') {
+    return undefined;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanForFirestore(item)).filter(item => item !== undefined);
+  }
+  if (typeof obj === 'object') {
+    if (obj instanceof Date) {
+      return obj;
+    }
+    const cleaned: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = cleanForFirestore(obj[key]);
+        if (value !== undefined) {
+          cleaned[key] = value;
+        }
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
 
 export const GameService = {
   // Validate deck: 50 cards, max 10 God Mark, max 4 per card
@@ -37,6 +68,398 @@ export const GameService = {
     }
 
     return { valid: true };
+  },
+
+  moveCard(
+    gameState: GameState,
+    sourcePlayerId: string,
+    sourceZone: TriggerLocation,
+    targetPlayerId: string,
+    targetZone: TriggerLocation,
+    cardId: string,
+    options?: { targetIndex?: number; faceDown?: boolean; insertAtBottom?: boolean }
+  ): boolean {
+    const sourcePlayer = gameState.players[sourcePlayerId];
+    const targetPlayer = gameState.players[targetPlayerId];
+    if (!sourcePlayer || !targetPlayer) return false;
+
+    let card: Card | null = null;
+    let sourceArray: any[] = [];
+
+    switch (sourceZone) {
+      case 'HAND': sourceArray = sourcePlayer.hand; break;
+      case 'GRAVE': sourceArray = sourcePlayer.grave; break;
+      case 'EXILE': sourceArray = sourcePlayer.exile; break;
+      case 'PLAY': sourceArray = sourcePlayer.playZone; break;
+      case 'DECK': sourceArray = sourcePlayer.deck; break;
+      case 'UNIT': sourceArray = sourcePlayer.unitZone; break;
+      case 'ITEM': sourceArray = sourcePlayer.itemZone; break;
+      case 'EROSION_FRONT': sourceArray = sourcePlayer.erosionFront; break;
+      case 'EROSION_BACK': sourceArray = sourcePlayer.erosionBack; break;
+    }
+
+    const index = sourceArray.findIndex(c => c && c.id === cardId);
+    if (index !== -1) {
+      card = sourceArray[index];
+      if (sourceZone === 'UNIT' || sourceZone === 'ITEM' || sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') {
+        sourceArray[index] = null;
+      } else {
+        sourceArray.splice(index, 1);
+      }
+    }
+
+    if (!card) return false;
+
+    card.cardlocation = targetZone;
+    if (options?.faceDown !== undefined) {
+      card.displayState = options.faceDown ? 'FRONT_FACEDOWN' : 'FRONT_UPRIGHT';
+    }
+
+    let targetArray: any[] = [];
+    switch (targetZone) {
+      case 'HAND': targetArray = targetPlayer.hand; break;
+      case 'GRAVE': targetArray = targetPlayer.grave; break;
+      case 'EXILE': targetArray = targetPlayer.exile; break;
+      case 'PLAY': targetArray = targetPlayer.playZone; break;
+      case 'DECK': targetArray = targetPlayer.deck; break;
+      case 'UNIT': targetArray = targetPlayer.unitZone; break;
+      case 'ITEM': targetArray = targetPlayer.itemZone; break;
+      case 'EROSION_FRONT': targetArray = targetPlayer.erosionFront; break;
+      case 'EROSION_BACK': targetArray = targetPlayer.erosionBack; break;
+    }
+
+    if (targetZone === 'UNIT' || targetZone === 'ITEM' || targetZone === 'EROSION_FRONT' || targetZone === 'EROSION_BACK') {
+      if (options?.targetIndex !== undefined && options.targetIndex >= 0 && options.targetIndex < targetArray.length) {
+        targetArray[options.targetIndex] = card;
+      } else {
+        const emptyIndex = targetArray.findIndex(c => c === null);
+        if (emptyIndex !== -1) {
+          targetArray[emptyIndex] = card;
+        } else {
+          targetArray.push(card);
+        }
+      }
+    } else {
+      if (options?.insertAtBottom) {
+        targetArray.unshift(card);
+      } else {
+        targetArray.push(card);
+      }
+    }
+
+    return true;
+  },
+
+  canPlayCard(player: PlayerState, card: Card): { canPlay: boolean; reason?: string } {
+    if (card.type === 'UNIT') {
+      if (!player.unitZone.some(c => c === null)) {
+        return { canPlay: false, reason: '单位区已满' };
+      }
+      if (card.specialName && player.unitZone.some(c => c?.specialName === card.specialName)) {
+        return { canPlay: false, reason: '单位区已有同名专用卡' };
+      }
+    } else if (card.type === 'ITEM') {
+      if (card.specialName && player.itemZone.some(c => c?.specialName === card.specialName)) {
+        return { canPlay: false, reason: '道具区已有同名专用卡' };
+      }
+    }
+
+    const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
+    const countColors = (c: Card | null) => {
+      if (c && c.color !== 'NONE') availableColors[c.color] = (availableColors[c.color] || 0) + 1;
+    };
+    player.unitZone.forEach(countColors);
+    player.itemZone.forEach(countColors);
+    player.erosionFront.forEach(countColors);
+
+    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
+      if ((availableColors[color] || 0) < (reqCount as number)) {
+        return { canPlay: false, reason: `缺少颜色: ${color}` };
+      }
+    }
+
+    const playEffect = card.effects.find(e => e.type === 'ACTIVATE' || e.type === 'TRIGGER' || e.type === 'ALWAYS');
+    if (playEffect?.erosionBackLimit) {
+      const backCount = player.erosionBack.filter(c => c !== null).length;
+      if (backCount < playEffect.erosionBackLimit[0] || backCount > playEffect.erosionBackLimit[1]) {
+        return { canPlay: false, reason: '侵蚀区背面卡数量不符合要求' };
+      }
+    }
+
+    return { canPlay: true };
+  },
+
+  payCost(gameState: GameState, playerId: string, cost: number, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }): { success: boolean; reason?: string } {
+    const player = gameState.players[playerId];
+    if (cost === 0) return { success: true };
+
+    if (cost < 0) {
+      const absCost = Math.abs(cost);
+      if (!paymentSelection.erosionFrontIds || paymentSelection.erosionFrontIds.length !== absCost) {
+        return { success: false, reason: `请选择 ${absCost} 张侵蚀区正面卡` };
+      }
+      
+      for (const id of paymentSelection.erosionFrontIds) {
+        if (!player.erosionFront.some(c => c?.id === id)) {
+          return { success: false, reason: '选择的侵蚀区卡牌无效' };
+        }
+      }
+
+      for (const id of paymentSelection.erosionFrontIds) {
+        this.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'GRAVE', id);
+      }
+      return { success: true };
+    }
+
+    if (cost > 0) {
+      let remainingCost = cost;
+      let feijingCard: Card | undefined;
+      
+      if (paymentSelection.feijingCardId) {
+        feijingCard = player.hand.find(c => c.id === paymentSelection.feijingCardId && c.feijingMark);
+        if (feijingCard) {
+          remainingCost = Math.max(0, remainingCost - 3);
+        }
+      }
+
+      const unitsToExhaust: Card[] = [];
+      if (paymentSelection.exhaustUnitIds) {
+        for (const uid of paymentSelection.exhaustUnitIds) {
+          if (remainingCost <= 0) break;
+          const unit = player.unitZone.find(c => c?.id === uid && !c.isExhausted);
+          if (unit) {
+            unitsToExhaust.push(unit);
+            remainingCost -= 1;
+          }
+        }
+      }
+
+      if (remainingCost > 0) {
+        const totalErosion = player.erosionFront.filter(c => c !== null).length + player.erosionBack.filter(c => c !== null).length;
+        if (remainingCost > 10 - totalErosion) {
+          return { success: false, reason: '侵蚀区空间不足以支付剩余费用' };
+        }
+      }
+
+      if (feijingCard) {
+        this.moveCard(gameState, playerId, 'HAND', playerId, 'GRAVE', feijingCard.id);
+      }
+      for (const unit of unitsToExhaust) {
+        unit.isExhausted = true;
+      }
+      for (let i = 0; i < remainingCost; i++) {
+        const topCard = player.deck.pop();
+        if (topCard) {
+          topCard.cardlocation = 'EROSION_FRONT';
+          const emptyIndex = player.erosionFront.findIndex(c => c === null);
+          if (emptyIndex !== -1) {
+            player.erosionFront[emptyIndex] = topCard;
+          } else {
+            player.erosionFront.push(topCard);
+          }
+        }
+      }
+      return { success: true };
+    }
+
+    return { success: false, reason: '未知错误' };
+  },
+
+  async playCard(gameId: string, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }) {
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+    const gameSnap = await getDoc(gameRef);
+    if (!gameSnap.exists()) throw new Error('Game not found');
+    const gameState = gameSnap.data() as GameState;
+
+    const player = gameState.players[playerId];
+    const card = player.hand.find(c => c.id === cardId);
+    if (!card) throw new Error('Card not found in hand');
+
+    const canPlay = this.canPlayCard(player, card);
+    if (!canPlay.canPlay) throw new Error(canPlay.reason);
+
+    const playEffect = card.effects.find(e => e.type === 'ACTIVATE' || e.type === 'TRIGGER' || e.type === 'ALWAYS');
+    const cost = playEffect?.playCost || 0;
+
+    const paymentResult = this.payCost(gameState, playerId, cost, paymentSelection);
+    if (!paymentResult.success) throw new Error(paymentResult.reason);
+
+    this.moveCard(gameState, playerId, 'HAND', playerId, 'PLAY', cardId);
+    gameState.logs.push(`${player.displayName} 打出了 ${card.fullName}`);
+
+    gameState.phase = 'COUNTERING';
+    gameState.isCountering = 1;
+    gameState.counterStack.push({
+      card,
+      ownerUid: playerId,
+      type: 'PLAY',
+      timestamp: Date.now()
+    });
+
+    await setDoc(gameRef, cleanForFirestore(gameState));
+  },
+
+  async resolvePlay(gameId: string) {
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+    const gameSnap = await getDoc(gameRef);
+    if (!gameSnap.exists()) return;
+    const gameState = gameSnap.data() as GameState;
+
+    if (gameState.counterStack.length === 0) return;
+
+    const stackItem = gameState.counterStack.pop();
+    if (!stackItem) return;
+
+    const card = stackItem.card;
+
+    if (card.type === 'UNIT') {
+      this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'UNIT', card.id);
+    } else if (card.type === 'ITEM') {
+      this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'ITEM', card.id);
+    } else {
+      this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'GRAVE', card.id);
+    }
+
+    gameState.phase = 'MAIN';
+    gameState.isCountering = 0;
+    gameState.logs.push(`${card.fullName} 结算完成`);
+
+    await setDoc(gameRef, cleanForFirestore(gameState));
+  },
+
+  async declareAttack(gameId: string, playerId: string, attackerIds: string[]) {
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+    const gameSnap = await getDoc(gameRef);
+    if (!gameSnap.exists()) throw new Error('Game not found');
+    const gameState = gameSnap.data() as GameState;
+
+    if (gameState.phase !== 'BATTLE') throw new Error('Not in battle phase');
+    
+    const player = gameState.players[playerId];
+    const attackers: Card[] = [];
+
+    for (const id of attackerIds) {
+      const unit = player.unitZone.find(c => c?.id === id);
+      if (!unit) throw new Error('Attacker not found in unit zone');
+      if (unit.isExhausted) throw new Error('Attacker is already exhausted');
+      attackers.push(unit);
+    }
+
+    // Exhaust attackers
+    for (const unit of attackers) {
+      unit.isExhausted = true;
+    }
+
+    const attackerNames = attackers.map(a => a.fullName).join(' 和 ');
+    gameState.logs.push(`${player.displayName} 宣告了攻击: ${attackerNames}`);
+
+    // TODO: Implement blocking and damage resolution
+    // For now, just log it.
+
+    await setDoc(gameRef, cleanForFirestore(gameState));
+  },
+
+  async advancePhase(gameId: string, action?: 'DECLARE_BATTLE' | 'DECLARE_END' | 'RETURN_MAIN') {
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+    const gameSnap = await getDoc(gameRef);
+    if (!gameSnap.exists()) return;
+    const gameState = gameSnap.data() as GameState;
+
+    const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+    const currentPlayer = gameState.players[currentPlayerId];
+
+    switch (gameState.phase) {
+      case 'INIT':
+      case 'MULLIGAN':
+        gameState.phase = 'START';
+        gameState.turnCount = 1;
+        this.executeStartPhase(gameState, currentPlayer);
+        break;
+      case 'START':
+        gameState.phase = 'DRAW';
+        this.executeDrawPhase(gameState, currentPlayer);
+        break;
+      case 'DRAW':
+        gameState.phase = 'MAIN';
+        gameState.logs.push(`${currentPlayer.displayName} 进入主要阶段`);
+        break;
+      case 'MAIN':
+        if (action === 'DECLARE_BATTLE') {
+          gameState.phase = 'BATTLE';
+          gameState.logs.push(`${currentPlayer.displayName} 进入战斗阶段`);
+        } else if (action === 'DECLARE_END') {
+          gameState.phase = 'END';
+          this.executeEndPhase(gameState, currentPlayer);
+          
+          // Automatically transition to next player's START phase
+          gameState.currentTurnPlayer = gameState.currentTurnPlayer === 0 ? 1 : 0;
+          gameState.turnCount += 1;
+          gameState.phase = 'START';
+          const nextPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+          const nextPlayer = gameState.players[nextPlayerId];
+          
+          // Update isTurn flags
+          currentPlayer.isTurn = false;
+          nextPlayer.isTurn = true;
+          
+          gameState.logs.push(`--- 回合 ${gameState.turnCount}: ${nextPlayer.displayName} ---`);
+          this.executeStartPhase(gameState, nextPlayer);
+        }
+        break;
+      case 'BATTLE':
+        if (action === 'RETURN_MAIN') {
+          gameState.phase = 'MAIN';
+          gameState.logs.push(`${currentPlayer.displayName} 返回主要阶段`);
+        }
+        break;
+      case 'END':
+        // This case is now handled automatically in DECLARE_END
+        break;
+    }
+
+    await setDoc(gameRef, cleanForFirestore(gameState));
+  },
+
+  executeStartPhase(gameState: GameState, player: PlayerState) {
+    gameState.logs.push(`${player.displayName} 的开始阶段`);
+    player.unitZone.forEach(card => {
+      if (card && card.canResetCount === 0) {
+        card.isExhausted = false;
+      } else if (card && card.canResetCount > 0) {
+        card.canResetCount -= 1;
+      }
+    });
+    player.itemZone.forEach(card => {
+      if (card && card.canResetCount === 0) {
+        card.isExhausted = false;
+      } else if (card && card.canResetCount > 0) {
+        card.canResetCount -= 1;
+      }
+    });
+    // Check effects at START phase (TODO)
+  },
+
+  executeDrawPhase(gameState: GameState, player: PlayerState) {
+    gameState.logs.push(`${player.displayName} 的抽卡阶段`);
+    // Check effects at DRAW phase (TODO)
+    if (player.deck.length > 0) {
+      const card = player.deck.pop();
+      if (card) {
+        card.cardlocation = 'HAND';
+        player.hand.push(card);
+        gameState.logs.push(`${player.displayName} 抽了一张卡`);
+      }
+    } else {
+      gameState.logs.push(`${player.displayName} 卡组为空！`);
+      gameState.gameStatus = 2;
+      gameState.winReason = 'DECK_OUT';
+      gameState.winnerId = gameState.playerIds.find(id => id !== player.uid);
+    }
+  },
+
+  executeEndPhase(gameState: GameState, player: PlayerState) {
+    gameState.logs.push(`${player.displayName} 的结束阶段`);
+    // Check effects at END phase (TODO)
   },
 
   // Create a new game and wait for opponent
@@ -86,11 +509,11 @@ export const GameService = {
       }
     };
 
-    await setDoc(doc(db, GAMES_COLLECTION, gameId), {
+    await setDoc(doc(db, GAMES_COLLECTION, gameId), cleanForFirestore({
       ...gameState,
       status: 'WAITING',
       createdAt: Date.now()
-    });
+    }));
     return gameId;
   },
 
@@ -170,11 +593,11 @@ export const GameService = {
       }
     };
 
-    await setDoc(doc(db, GAMES_COLLECTION, gameId), {
+    await setDoc(doc(db, GAMES_COLLECTION, gameId), cleanForFirestore({
       ...gameState,
       status: 'ACTIVE',
       createdAt: Date.now()
-    });
+    }));
     return gameId;
   },
 
@@ -231,13 +654,53 @@ export const GameService = {
       game.logs.push(`调度结束。第 1 回合开始，由 ${game.players[firstPlayerUid].displayName} 先行。`);
     }
 
-    await updateDoc(gameRef, {
+    await updateDoc(gameRef, cleanForFirestore({
       players: game.players,
       phase: game.phase,
       turnCount: game.turnCount,
       currentTurnPlayer: game.currentTurnPlayer,
       logs: game.logs
-    });
+    }));
+  },
+
+  async endTurn(gameId: string) {
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+    const gameSnap = await getDoc(gameRef);
+    if (!gameSnap.exists()) throw new Error('Game not found');
+    
+    const game = gameSnap.data() as GameState;
+    if (game.phase !== 'MAIN' && game.phase !== 'BATTLE') return;
+
+    // Switch turn
+    const nextPlayerIdx = game.currentTurnPlayer === 0 ? 1 : 0;
+    const nextPlayerUid = game.playerIds[nextPlayerIdx];
+    const currentPlayerUid = game.playerIds[game.currentTurnPlayer];
+
+    game.players[currentPlayerUid].isTurn = false;
+    game.players[nextPlayerUid].isTurn = true;
+    game.currentTurnPlayer = nextPlayerIdx;
+    game.turnCount += 1;
+    game.phase = 'MAIN';
+
+    // Reset exhausted state for the new player
+    game.players[nextPlayerUid].unitZone.forEach(c => { if (c) c.isExhausted = false; });
+    game.players[nextPlayerUid].itemZone.forEach(c => { if (c) c.isExhausted = false; });
+    game.players[nextPlayerUid].hasExhaustedThisTurn = [];
+
+    // Draw card for the new player
+    if (game.players[nextPlayerUid].deck.length > 0) {
+      const drawnCard = game.players[nextPlayerUid].deck.shift()!;
+      game.players[nextPlayerUid].hand.push(drawnCard);
+      game.logs.push(`${game.players[nextPlayerUid].displayName} 回合开始，抽了一张牌。`);
+    }
+
+    await updateDoc(gameRef, cleanForFirestore({
+      players: game.players,
+      currentTurnPlayer: game.currentTurnPlayer,
+      turnCount: game.turnCount,
+      phase: game.phase,
+      logs: game.logs
+    }));
   },
 
   // Bot logic
@@ -251,12 +714,12 @@ export const GameService = {
     if (!bot || !bot.isTurn) return;
 
     // 1. Try to play a unit if possible
-    const unitInHand = bot.hand.find(c => c.type === 'UNIT' && this.canPlayCard(game, 'BOT_PLAYER', c).can);
+    const unitInHand = bot.hand.find(c => c.type === 'UNIT' && this.canPlayCard(bot, c).canPlay);
     if (unitInHand) {
       try {
-        await this.playCardToStack(gameId, unitInHand.id);
+        await this.playCard(gameId, 'BOT_PLAYER', unitInHand.id, {});
         // Bot always resolves immediately for now
-        await this.resolveStack(gameId);
+        await this.resolvePlay(gameId);
       } catch (e) {
         console.error('Bot failed to play unit', e);
       }
@@ -318,14 +781,14 @@ export const GameService = {
     players[uids[0]].isFirst = firstPlayerUid === uids[0];
     players[uids[1]].isFirst = firstPlayerUid === uids[1];
 
-    await updateDoc(gameRef, {
+    await updateDoc(gameRef, cleanForFirestore({
       players,
       playerIds: uids,
       phase: 'MULLIGAN',
       currentTurnPlayer: firstIdx,
       status: 'ACTIVE',
       logs: [...gameData.logs, `${opponentState.displayName} 加入了游戏。请进行调度 (Mulligan)。`]
-    });
+    }));
   },
 
   // Helper: Shuffle deck
@@ -335,182 +798,5 @@ export const GameService = {
       [array[i], array[j]] = [array[j], array[i]];
     }
     return array;
-  },
-
-  // Pre-check if card can be played
-  canPlayCard(game: GameState, playerUid: string, card: Card): { can: boolean; error?: string } {
-    const player = game.players[playerUid];
-    if (!player) return { can: false, error: 'Player not found' };
-    if (!player.isTurn) return { can: false, error: '不是你的回合' };
-    if (game.phase !== 'MAIN') return { can: false, error: '当前阶段无法出牌' };
-
-    // Check cost (Ac Value)
-    const totalErosion = player.erosionFront.length + player.erosionBack.length;
-    if (totalErosion < card.acValue) {
-      return { can: false, error: `侵蚀值不足 (需要: ${card.acValue}, 当前: ${totalErosion})` };
-    }
-
-    // Check Unit Zone if it's a unit
-    if (card.type === 'UNIT') {
-      const emptySlot = player.unitZone.findIndex(slot => slot === null);
-      if (emptySlot === -1) return { can: false, error: '单位区已满' };
-    }
-
-    return { can: true };
-  },
-
-  // Play card to stack
-  async playCardToStack(gameId: string, cardId: string) {
-    const gameRef = doc(db, GAMES_COLLECTION, gameId);
-    const gameSnap = await getDoc(gameRef);
-    if (!gameSnap.exists()) return;
-    
-    const game = gameSnap.data() as GameState;
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-    
-    const player = game.players[uid];
-    const cardIndex = player.hand.findIndex(c => c.id === cardId);
-    if (cardIndex === -1) return;
-    const card = player.hand[cardIndex];
-
-    const check = this.canPlayCard(game, uid, card);
-    if (!check.can) throw new Error(check.error);
-
-    // Move to play zone
-    player.hand.splice(cardIndex, 1);
-    player.playZone.push(card);
-
-    // Add to counter stack
-    game.counterStack.push({
-      card,
-      ownerUid: uid,
-      type: 'PLAY',
-      timestamp: Date.now()
-    });
-    game.isCountering = 1;
-
-    game.logs.push(`${player.displayName} 打出了 [${card.fullName}]。`);
-
-    await updateDoc(gameRef, {
-      players: game.players,
-      counterStack: game.counterStack,
-      isCountering: game.isCountering,
-      logs: game.logs
-    });
-  },
-
-  // Resolve stack (Counter Stack)
-  async resolveStack(gameId: string, paymentSelection?: { useFeijing: string[], exhaustIds: string[] }) {
-    const gameRef = doc(db, GAMES_COLLECTION, gameId);
-    const gameSnap = await getDoc(gameRef);
-    if (!gameSnap.exists()) return;
-    
-    const game = gameSnap.data() as GameState;
-    if (game.counterStack.length === 0) return;
-
-    // Resolve from top to bottom (LIFO)
-    while (game.counterStack.length > 0) {
-      const item = game.counterStack.pop()!;
-      const player = game.players[item.ownerUid];
-      const card = item.card;
-
-      // 1. Pay cost (Ac Value)
-      // For now, assume cost is paid by moving from deck to erosion back
-      for (let i = 0; i < card.acValue; i++) {
-        const erosionCard = player.deck.pop();
-        if (erosionCard) player.erosionBack.push(erosionCard);
-      }
-
-      // 2. Resolve effect
-      if (card.type === 'UNIT') {
-        const emptySlot = player.unitZone.findIndex(slot => slot === null);
-        if (emptySlot !== -1) {
-          player.unitZone[emptySlot] = card;
-          // Trigger ENTER effects
-          const enterEffect = card.effects.find(e => e.type === '诱');
-          if (enterEffect) {
-            game.logs.push(`触发 [${card.fullName}] 的诱发效果: ${enterEffect.description}`);
-          }
-        }
-      } else if (card.type === 'ITEM') {
-        player.itemZone.push(card);
-      } else {
-        // Story or other types go to grave after resolution
-        player.grave.push(card);
-      }
-
-      // Remove from play zone
-      const pzIdx = player.playZone.findIndex(c => c.id === card.id);
-      if (pzIdx !== -1) player.playZone.splice(pzIdx, 1);
-
-      game.logs.push(`[${card.fullName}] 结算完成。`);
-    }
-
-    game.isCountering = 0;
-
-    await updateDoc(gameRef, {
-      players: game.players,
-      counterStack: game.counterStack,
-      isCountering: game.isCountering,
-      logs: game.logs
-    });
-  },
-
-  // End Turn
-  async endTurn(gameId: string) {
-    const gameRef = doc(db, GAMES_COLLECTION, gameId);
-    const gameSnap = await getDoc(gameRef);
-    if (!gameSnap.exists()) return;
-    
-    const game = gameSnap.data() as GameState;
-    const currentUid = game.playerIds[game.currentTurnPlayer];
-    const player = game.players[currentUid];
-    
-    if (!player.isTurn) return;
-
-    // Phase transition: END -> START (next player)
-    player.isTurn = false;
-    
-    // Switch player
-    game.currentTurnPlayer = (game.currentTurnPlayer === 0 ? 1 : 0) as 0 | 1;
-    const nextUid = game.playerIds[game.currentTurnPlayer];
-    const nextPlayer = game.players[nextUid];
-    
-    nextPlayer.isTurn = true;
-    game.phase = 'START';
-    
-    if (game.currentTurnPlayer === 0) {
-      game.turnCount++;
-    }
-
-    game.logs.push(`${player.displayName} 结束了回合。第 ${game.turnCount} 回合，${nextPlayer.displayName} 的回合开始。`);
-
-    // Start Phase Logic: Reset exhausted cards
-    nextPlayer.unitZone.forEach(u => { if (u) u.isExhausted = false; });
-    nextPlayer.itemZone.forEach(i => { i.isExhausted = false; });
-
-    // Draw Phase: Draw 1
-    const drawCard = nextPlayer.deck.pop();
-    if (drawCard) nextPlayer.hand.push(drawCard);
-
-    // Erosion Phase: Move 1 from deck to erosion back
-    const erosionCard = nextPlayer.deck.pop();
-    if (erosionCard) nextPlayer.erosionBack.push(erosionCard);
-
-    game.phase = 'MAIN';
-
-    await updateDoc(gameRef, {
-      players: game.players,
-      currentTurnPlayer: game.currentTurnPlayer,
-      turnCount: game.turnCount,
-      phase: game.phase,
-      logs: game.logs
-    });
-
-    // If next player is bot, trigger bot move
-    if (nextUid === 'BOT_PLAYER') {
-      setTimeout(() => this.botMove(gameId), 1000);
-    }
   }
 };

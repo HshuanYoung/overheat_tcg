@@ -1,27 +1,36 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '10402006',
   fullName: '狐族交易术学徒',
   specialName: '狐族交易术学徒',
   type: 'UNIT',
   color: 'BLUE',
-  colorReq: ['BLUE'],
-  faction: '九尾商会联盟',
+  gamecardId: null,
+  colorReq: {},
+  faction: '无',
   acValue: 1,
   power: 1000,
-  damage: 1,
+  damage: 0,
   godMark: false,
-  isExhausted: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
   canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '诱',
-      description: '这个单位进入战场时，选择1名玩家公开他自己的手牌。之后，选择他的1张手牌和他的侵蚀区中的1张正面卡，将侵蚀区中所选的卡加入他的手牌，将手牌中所选的卡放置到他的侵蚀区。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
       playCost: 0,
-      content: 'MOVE',
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/10402006_thumb.jpg',

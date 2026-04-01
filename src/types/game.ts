@@ -1,44 +1,48 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
 
 export type CardType = 'UNIT' | 'STORY' | 'ITEM';
 export type CardColor = 'RED' | 'WHITE' | 'YELLOW' | 'BLUE' | 'GREEN' | 'NONE';
-export type EffectType = '永' | '诱' | '启';
-export type EffectLimit = 'ONCE_PER_TURN' | 'MULTI_PER_TURN' | 'ONCE_PER_GAME' | 'MULTI_PER_GAME' | 'UNLIMITED';
-export type TriggerLocation = 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK';
+export type EffectType = 'ALWAYS' | 'TRIGGER' | 'ACTIVATE';
+export type TriggerLocation = 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK' | 'PLAY' | 'DECK';
+
 
 export interface CardEffect {
   type: EffectType;
-  limit?: EffectLimit;
-  erosionFrontLimit?: number; // 0-10
-  erosionBackLimit?: number;  // 0-9
-  erosionTotalLimit?: number; // 0-10
+  limitCount?: number; // For ONCE_PER_TURN and ONCE_PER_GAME, this should be 1. For MULTI_PER_TURN and MULTI_PER_GAME, this can be any positive integer.
+  limitNowCount?:number;  //at the start of turn,reset to limitCount，each time use this effect,limitNowCount-1,when limitNowCount is 0,can't use this effect
+  limitGlobal?:boolean; //0:use every turn,1:only use once in the whole game
+  limitNameType?:boolean; //0:check gameid，1:check cardid
+  erosionFrontLimit?: [number, number];   //scope:[2,8] means "this effect can only be triggered when there are 2 to 8 cards in the front erosion zone",[0,11] means not limited
+  erosionBackLimit?: [number, number];  
+  erosionTotalLimit?: [number, number]; 
   playCost?: number;
-  playColorReq?: CardColor[];
+  playColorReq?: { [color in CardColor]?: number };
   triggerLocation?: TriggerLocation[];
   factionReq?: string;
   godUnitReq?: boolean;
+  execute?: (card: Card, gameState: GameState,playerState: PlayerState) => void; // The function to execute when the effect is triggered
   content?: string; // Description of the effect: Move, Draw, Add Power, etc.
   description: string; // Human readable text
 }
 
 export interface Card {
   id: string;
+  gamecardId: string;
   fullName: string;
   specialName?: string;
   type: CardType;
   color: CardColor;
-  colorReq: CardColor[];
+  colorReq: { [color in CardColor]?: number };
   acValue: number;
   power?: number;
   damage?: number;
   godMark: boolean;
+  displayState: 'FRONT_UPRIGHT' | 'FRONT_FACEDOWN' | 'BACK_UPRIGHT';
+  isrush: boolean;
   isExhausted: boolean;
   canAttack: boolean;
+  cardlocation?: 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK' | 'PLAY' | 'DECK';
   feijingMark: boolean;
-  canReset: boolean;
+  canResetCount: number;    //only 0 can be reset,if not 0,at the start of turn,canResetCount-1
   effects: CardEffect[];
   imageUrl: string;
   fullImageUrl: string;
@@ -53,8 +57,8 @@ export interface PlayerState {
   grave: Card[];
   exile: Card[];
   itemZone: Card[];
-  erosionFront: Card[];
-  erosionBack: Card[];
+  erosionFront: (Card | null)[];
+  erosionBack: (Card | null)[];
   unitZone: (Card | null)[];
   playZone: Card[];
   isTurn: boolean;
@@ -72,7 +76,7 @@ export interface StackItem {
   timestamp: number;
 }
 
-export type GamePhase = 'START' | 'DRAW' | 'EROSION' | 'MAIN' | 'BATTLE' | 'END' | 'MULLIGAN' | 'INIT';
+export type GamePhase = 'START' | 'DRAW' | 'EROSION' | 'MAIN' | 'BATTLE' | 'COUNTERING' | 'END' | 'MULLIGAN' | 'INIT';
 
 export interface GameState {
   gameId: string;

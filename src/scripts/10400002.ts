@@ -1,4 +1,8 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
+
+
+const activate_10400002_1 = (card: Card, gameState: GameState,playerState: PlayerState) => {
+}
 
 const card: Card = {
   id: '10400002',
@@ -6,28 +10,33 @@ const card: Card = {
   specialName: '翡翠水蜥',
   type: 'UNIT',
   color: 'BLUE',
-  colorReq: ['BLUE'],
+  gamecardId: null,
+  colorReq: {},
   faction: '无',
   acValue: 0,
   power: 0,
   damage: 0,
   godMark: false,
-  isExhausted: false,
-  canAttack: true,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
+  canAttack: false,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '启',
+      type: 'ACTIVATE',
       description: '这个能力只能从侵蚀区发动，且不能用于对抗。将这张卡放置到战场上。',
       playCost: 0,
       triggerLocation: ['EROSION_FRONT'],
       content: 'PLAY',
+      execute:activate_10400002_1,
     }
   ],
   imageUrl: '/pics/10400002_thumb.jpg',
   fullImageUrl: '/pics/10400002_full.jpg',
   rarity: 'U',
 };
+
 
 export default card;

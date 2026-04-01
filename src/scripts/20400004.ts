@@ -1,25 +1,36 @@
-import { Card } from '../types/game';
+import { Card,GameState,PlayerState} from '../types/game';
 
+
+const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
+
+}
 const card: Card = {
   id: '20400004',
   fullName: '交易失败',
   specialName: '交易失败',
   type: 'STORY',
   color: 'BLUE',
-  colorReq: ['BLUE'],
+  gamecardId: null,
+  colorReq: {},
   faction: '无',
-  acValue: 2,
+  acValue: 1,
+  power: 1000,
+  damage: 0,
   godMark: false,
-  isExhausted: false,
-  canAttack: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted:false,
+  isrush: false,
+  canAttack: true,
   feijingMark: false,
-  canReset: true,
+  canResetCount: 0,
   effects: [
     {
-      type: '诱',
-      description: '只能在对抗对手使用道具卡的宣言时使用。反击那张道具卡。',
+      type: 'TRIGGER',
+      description: '这个单位进入战场时，所有玩家抽1张卡。',
       playCost: 0,
-      content: 'NEGATE',
+      playColorReq: {'BLUE': 2},
+      content: 'DRAW',
+      execute:trigger_10400003_1,
     }
   ],
   imageUrl: '/pics/20400004_thumb.jpg',

@@ -6,9 +6,9 @@ const card: Card = {
   fullName: '测试巨龙 (Test Dragon)',
   specialName: '',
   type: 'UNIT',
-  color: 'RED',
+  color: 'BLUE',
   gamecardId: null as any,
-  colorReq: { RED: 1 },
+  colorReq: { BLUE: 1 },
   faction: '测试阵营',
   acValue: 3,
   power: 3000,
@@ -73,7 +73,12 @@ const card: Card = {
     {
       id: 'effect_activated_1',
       type: 'ACTIVATED',
-      description: '【启动】支付1点侵蚀，抽一张卡。',
+      triggerLocation: ['UNIT'],
+      limitCount: 1,
+      limitGlobal: false, // Turn limit
+      limitNameType: true, // By card name
+      erosionFrontLimit: [1, 10], // Requires at least 1 front erosion card
+      description: '【启动】[一回合一次] 支付1点侵蚀，抽一张卡。',
       cost: (gameState: GameState, playerState: PlayerState, card: Card) => {
         // Check if player has at least 1 front erosion card
         const faceUpCards = playerState.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
@@ -91,6 +96,38 @@ const card: Card = {
           drawnCard.cardlocation = 'HAND';
           playerState.hand.push(drawnCard);
           gameState.logs.push(`${playerState.displayName} 通过 [测试巨龙] 的效果抽了一张卡。`);
+        }
+      }
+    },
+    {
+      id: 'effect_activated_2',
+      type: 'ACTIVATED',
+      triggerLocation: ['HAND'],
+      limitCount: 1,
+      limitGlobal: true, // Game limit
+      limitNameType: true, // By card name
+      playCost: 2,
+      playColorReq: { BLUE: 1 },
+      targetcost: [0, 4], // Target cost 0-4
+      factionReq: '测试阵营',
+      description: '【启动】[一局一次][手牌] 丢弃这张卡，破坏对方一个费用4以下的单位。',
+      cost: (gameState: GameState, playerState: PlayerState, card: Card) => {
+        // Discard this card
+        return GameService.moveCard(gameState, playerState.uid, 'HAND', playerState.uid, 'GRAVE', card.gamecardId);
+      },
+      execute: (card: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => {
+        // Find a valid target automatically for demonstration
+        const opponentUid = Object.keys(gameState.players).find(uid => uid !== playerState.uid);
+        if (opponentUid) {
+          const opponent = gameState.players[opponentUid];
+          const validTargets = opponent.unitZone.filter(c => c !== null && c.acValue <= 4);
+          if (validTargets.length > 0) {
+            const target = validTargets[0];
+            GameService.moveCard(gameState, opponent.uid, 'UNIT', opponent.uid, 'GRAVE', target!.gamecardId);
+            gameState.logs.push(`${playerState.displayName} 从手牌发动 [测试巨龙] 的效果，破坏了 ${opponent.displayName} 的 [${target!.fullName}]。`);
+          } else {
+            gameState.logs.push(`${playerState.displayName} 从手牌发动 [测试巨龙] 的效果，但对方没有合法的目标。`);
+          }
         }
       }
     }

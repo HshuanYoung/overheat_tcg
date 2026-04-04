@@ -38,6 +38,7 @@ export interface CardEffect {
   triggerLocation?: TriggerLocation[];
   factionReq?: string;
   godUnitReq?: boolean;
+  targetcost?: [number, number]; // [min, max]
   
   // New Event System Properties
   triggerEvent?: GameEventType;
@@ -81,6 +82,7 @@ export interface Card {
   feijingMark: boolean;
   canResetCount?: number;    //only 0 can be reset,if not 0,at the start of turn,canResetCount-1
   effects?: CardEffect[];
+  influencingEffects?: { sourceCardName: string; description: string }[];
   imageUrl: string;
   fullImageUrl: string;
   rarity: 'C' | 'U' | 'R' | 'SR' | 'UR' | 'PR';
@@ -150,6 +152,7 @@ export interface GameState {
     defender?: string; // gamecardId
     isAlliance: boolean;
   };
+  effectUsage?: Record<string, number>;
 }
 
 export interface Deck {

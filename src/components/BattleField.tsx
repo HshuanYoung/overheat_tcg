@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { GameState, PlayerState, Card, StackItem, CardEffect } from '../types/game';
+import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation } from '../types/game';
 import { GameService, cleanForFirestore } from '../services/gameService';
 import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2 } from 'lucide-react';
+import { Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const BattleField: React.FC = () => {
@@ -31,6 +31,26 @@ export const BattleField: React.FC = () => {
   const [showDefenseModal, setShowDefenseModal] = useState(false);
   const [selectedErosionCardId, setSelectedErosionCardId] = useState<string | null>(null);
   const [erosionChoice, setErosionChoice] = useState<'A' | 'B' | 'C' | null>(null);
+  
+  const [cardMenu, setCardMenu] = useState<{
+    card: Card;
+    zone: string;
+    index?: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [allianceTargetSelection, setAllianceTargetSelection] = useState<string | null>(null);
+  const [effectConfirmation, setEffectConfirmation] = useState<{
+    card: Card;
+    effect: CardEffect;
+    effectIndex: number;
+    triggerLocation: TriggerLocation;
+  } | null>(null);
+  const [effectSelection, setEffectSelection] = useState<{
+    card: Card;
+    effects: { effect: CardEffect; index: number }[];
+    triggerLocation: TriggerLocation;
+  } | null>(null);
 
   // Handle 30s response timeout
   useEffect(() => {
@@ -159,10 +179,10 @@ export const BattleField: React.FC = () => {
     return me.unitZone.filter(c => c !== null && !c.isExhausted) as Card[];
   };
 
-  const handleDeclareAttack = async () => {
-    if (!gameId || selectedAttackers.length === 0) return;
+  const handleDeclareAttack = async (attackers: string[] = selectedAttackers, alliance: boolean = isAlliance) => {
+    if (!gameId || attackers.length === 0) return;
     try {
-      await GameService.declareAttack(gameId, myUid, selectedAttackers, isAlliance);
+      await GameService.declareAttack(gameId, myUid, attackers, alliance);
       setSelectedAttackers([]);
       setIsAlliance(false);
       setShowAttackModal(false);
@@ -171,10 +191,10 @@ export const BattleField: React.FC = () => {
     }
   };
 
-  const handleDeclareDefense = async (isDefending: boolean) => {
+  const handleDeclareDefense = async (defenderId?: string) => {
     if (!gameId) return;
     try {
-      await GameService.declareDefense(gameId, myUid, isDefending ? selectedDefender || undefined : undefined);
+      await GameService.declareDefense(gameId, myUid, defenderId);
       setSelectedDefender(null);
       setShowDefenseModal(false);
     } catch (error: any) {
@@ -218,7 +238,7 @@ export const BattleField: React.FC = () => {
     }
   };
 
-  const handleCardClick = (card: Card, zone: string, index?: number) => {
+  const handleCardClick = (card: Card, zone: string, index?: number, e?: React.MouseEvent) => {
     // Handle discarding cards
     if (game.phase === 'DISCARD' && zone === 'hand') {
       if (me.uid === auth.currentUser?.uid) {
@@ -227,13 +247,28 @@ export const BattleField: React.FC = () => {
       return;
     }
 
-    if (!me.isTurn && game.phase !== 'DEFENSE_DECLARATION') return;
+    if (!me.isTurn && game.phase !== 'DEFENSE_DECLARATION') {
+      if (e) {
+        e.stopPropagation();
+        setCardMenu({ card, zone, index, x: e.clientX, y: e.clientY });
+      }
+      return;
+    }
 
     // Handle selecting defender in Defense Phase
     if (game.phase === 'DEFENSE_DECLARATION' && zone === 'unit') {
       // If it's my turn to defend (opponent is attacking)
       if (opponent?.isTurn && me.unitZone.some(c => c?.gamecardId === card.gamecardId) && !card.isExhausted) {
         setSelectedDefender(prev => prev === card.gamecardId ? null : card.gamecardId);
+      }
+      return;
+    }
+
+    // Handle selecting alliance target
+    if (allianceTargetSelection) {
+      if (zone === 'unit' && me.unitZone.some(c => c?.gamecardId === card.gamecardId) && canUnitAttack(card) && card.gamecardId !== allianceTargetSelection) {
+        handleDeclareAttack([allianceTargetSelection, card.gamecardId], true);
+        setAllianceTargetSelection(null);
       }
       return;
     }
@@ -279,48 +314,23 @@ export const BattleField: React.FC = () => {
       return;
     }
 
-    // Activate [启] ability during Main Phase or Battle Free Phase
-    if ((game.phase === 'MAIN' || game.phase === 'BATTLE_FREE') && (zone === 'unit' || zone === 'item' || zone === 'erosion_front' || zone === 'hand')) {
-      // Only allow activating abilities of my own cards
-      const isMyCard = [...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand].some(c => c?.gamecardId === card.gamecardId);
-      if (isMyCard) {
-        const effectIndex = card.effects?.findIndex(e => e.type === 'ACTIVATE' || e.type === 'ACTIVATED');
-        if (effectIndex !== undefined && effectIndex !== -1) {
-          const effect = card.effects![effectIndex];
-          // Check if triggerLocation matches current zone
-          let zoneMatches = false;
-          if (!effect.triggerLocation || effect.triggerLocation.length === 0) {
-            // Default to unit or item if not specified
-            zoneMatches = zone === 'unit' || zone === 'item';
-          } else {
-            const zoneMap: Record<string, string> = {
-              'unit': 'UNIT',
-              'item': 'ITEM',
-              'erosion_front': 'EROSION_FRONT',
-              'hand': 'HAND'
-            };
-            zoneMatches = effect.triggerLocation.includes(zoneMap[zone] as any);
-          }
-          
-          if (zoneMatches) {
-            activateAbility(card, effect, effectIndex);
-            return; // Return early so we don't also play the card from hand
-          }
-        }
-      }
-    }
-
-    // Handle playing card from hand
-    if (zone === 'hand' && game.phase === 'MAIN') {
-      playCardFromHand(card);
+    // If no specific selection mode is active, show the card menu
+    if (e) {
+      e.stopPropagation();
+      setCardMenu({ card, zone, index, x: e.clientX, y: e.clientY });
     }
   };
 
-  const activateAbility = async (card: Card, effect: CardEffect, effectIndex: number) => {
+  const activateAbility = async (card: Card, effect: CardEffect, effectIndex: number, triggerLocation?: TriggerLocation) => {
     if (!gameId) return;
 
     if (card.canActivateEffect === false) {
       alert("此卡牌目前无法发动效果！");
+      return;
+    }
+
+    if (!GameService.checkEffectLimitsAndReqs(game, myUid, card, effect, triggerLocation)) {
+      alert("不满足发动条件或已达到使用次数限制！");
       return;
     }
 
@@ -344,6 +354,7 @@ export const BattleField: React.FC = () => {
     game.counterStack.push(newStackItem);
     game.phase = 'COUNTERING';
     game.isCountering = 1;
+    GameService.recordEffectUsage(game, myUid, card, effect);
     game.logs.push(`${me.displayName} 发动了 [${card.fullName}] 的 [启] 能力: ${effect.description}`);
 
     try {
@@ -471,7 +482,10 @@ export const BattleField: React.FC = () => {
               <div key={`${card.gamecardId}-${i}`} className="flex flex-col items-center gap-4">
                 <motion.div
                   whileHover={{ y: -10 }}
-                  onClick={() => setPreviewCard(card)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCardMenu({ card, zone: 'hand', index: i, x: e.clientX, y: e.clientY });
+                  }}
                   className={cn(
                     "w-40 cursor-pointer transition-all rounded-xl overflow-hidden border-2",
                     isSelected ? "border-[#f27d26] scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]" : "border-transparent opacity-60"
@@ -504,7 +518,7 @@ export const BattleField: React.FC = () => {
         >
           {selectedMulligan.length > 0 ? `更换 ${selectedMulligan.length} 张卡牌` : '接受初始手牌'}
         </button>
-        
+
         {/* Full Image Overlay for Mulligan */}
         <AnimatePresence>
           {previewCard && (
@@ -540,7 +554,10 @@ export const BattleField: React.FC = () => {
   }
 
   return (
-    <div className="h-screen bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative">
+    <div 
+      className="h-screen bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative"
+      onClick={() => setCardMenu(null)}
+    >
       {/* Erosion Phase Overlay */}
       <AnimatePresence>
         {game.phase === 'EROSION' && me.isTurn && (
@@ -940,11 +957,17 @@ export const BattleField: React.FC = () => {
             <div 
               className={cn(
                 "flex flex-col cursor-pointer hover:bg-white/5 px-2 py-1 rounded transition-colors",
-                (game.phase === 'MAIN' || game.phase === 'BATTLE') && "hover:bg-white/10"
+                "hover:bg-white/10"
               )}
               onClick={() => {
-                if (game.playerIds[game.currentTurnPlayer] === myUid && (game.phase === 'MAIN' || game.phase === 'BATTLE')) {
-                  setShowPhaseMenu(true);
+                if (game.playerIds[game.currentTurnPlayer] === myUid) {
+                  if (['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'].includes(game.phase)) {
+                    setShowPhaseMenu(true);
+                  }
+                } else {
+                  if (game.phase === 'DEFENSE_DECLARATION') {
+                    setShowPhaseMenu(true);
+                  }
                 }
               }}
             >
@@ -980,7 +1003,7 @@ export const BattleField: React.FC = () => {
                             setShowPhaseMenu(false);
                           }}
                         >
-                          进入战斗阶段
+                          进入战斗阶段 (Enter Battle)
                         </button>
                       )}
                       <button 
@@ -990,7 +1013,7 @@ export const BattleField: React.FC = () => {
                           setShowPhaseMenu(false);
                         }}
                       >
-                        结束回合
+                        结束回合 (End Turn)
                       </button>
                     </>
                   )}
@@ -1003,7 +1026,42 @@ export const BattleField: React.FC = () => {
                           setShowPhaseMenu(false);
                         }}
                       >
-                        结束战斗阶段
+                        回到主要阶段 (Return to Main)
+                      </button>
+                    </>
+                  )}
+                  {game.phase === 'DEFENSE_DECLARATION' && (
+                    <>
+                      <button 
+                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
+                        onClick={() => {
+                          handleDeclareDefense(undefined);
+                          setShowPhaseMenu(false);
+                        }}
+                      >
+                        不防御 (Do Not Defend)
+                      </button>
+                    </>
+                  )}
+                  {game.phase === 'BATTLE_FREE' && (
+                    <>
+                      <button 
+                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
+                        onClick={() => {
+                          GameService.advancePhase(gameId!, 'DAMAGE_CALCULATION');
+                          setShowPhaseMenu(false);
+                        }}
+                      >
+                        进入伤害判定阶段 (Damage Calculation)
+                      </button>
+                      <button 
+                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
+                        onClick={() => {
+                          GameService.advancePhase(gameId!, 'COUNTERING');
+                          setShowPhaseMenu(false);
+                        }}
+                      >
+                        进入对抗阶段 (Countering)
                       </button>
                     </>
                   )}
@@ -1056,94 +1114,6 @@ export const BattleField: React.FC = () => {
           </div>
         </div>
 
-        {/* Attack Declaration Modal */}
-        <AnimatePresence>
-          {showAttackModal && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-md flex items-center justify-center p-8"
-            >
-              <div className="max-w-5xl w-full flex flex-col items-center gap-8">
-                <div className="text-center">
-                  <h2 className="text-4xl font-black italic text-red-500 mb-2 uppercase tracking-tighter">宣告攻击 (Attack Declaration)</h2>
-                  <p className="text-zinc-400 uppercase tracking-[0.3em] text-sm">请选择攻击单位，并确认攻击方式</p>
-                </div>
-
-                <div className="flex flex-col items-center gap-6 w-full">
-                  <div className="flex gap-4">
-                    <button 
-                      onClick={() => {
-                        setIsAlliance(!isAlliance);
-                        setSelectedAttackers([]);
-                      }}
-                      className={cn(
-                        "px-8 py-3 rounded-xl font-black uppercase italic tracking-widest transition-all border-2",
-                        isAlliance ? "bg-red-600 border-red-400 text-white" : "bg-zinc-800 border-white/10 text-white/50"
-                      )}
-                    >
-                      联军模式: {isAlliance ? 'ON' : 'OFF'}
-                    </button>
-                  </div>
-
-                  <div className="flex gap-6 overflow-x-auto p-8 max-w-full custom-scrollbar">
-                    {getAvailableAttackers().map(card => {
-                      const isSelected = selectedAttackers.includes(card.gamecardId);
-                      return (
-                        <motion.div
-                          key={card.gamecardId}
-                          whileHover={{ y: -10 }}
-                          onClick={() => {
-                            setSelectedAttackers(prev => {
-                              if (prev.includes(card.gamecardId)) return prev.filter(id => id !== card.gamecardId);
-                              if (isAlliance) {
-                                if (prev.length >= 2) return [prev[1], card.gamecardId];
-                                return [...prev, card.gamecardId];
-                              } else {
-                                return [card.gamecardId];
-                              }
-                            });
-                          }}
-                          className={cn(
-                            "w-40 shrink-0 cursor-pointer transition-all rounded-xl overflow-hidden border-2",
-                            isSelected ? "border-red-500 scale-105 shadow-[0_0_30px_rgba(220,38,38,0.4)]" : "border-transparent opacity-60"
-                          )}
-                        >
-                          <CardComponent card={card} disableZoom={true} />
-                        </motion.div>
-                      );
-                    })}
-                    {getAvailableAttackers().length === 0 && (
-                      <div className="text-white/20 italic text-xl py-20">没有可以攻击的单位</div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-4">
-                    <button 
-                      onClick={handleDeclareAttack}
-                      disabled={selectedAttackers.length === 0 || (isAlliance && selectedAttackers.length !== 2)}
-                      className="px-16 py-4 bg-red-600 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-red-500 transition-all disabled:opacity-30 shadow-xl shadow-red-600/20"
-                    >
-                      确认攻击
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setShowAttackModal(false);
-                        setSelectedAttackers([]);
-                        setIsAlliance(false);
-                      }}
-                      className="px-16 py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all"
-                    >
-                      取消
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Defense Declaration Modal */}
         <AnimatePresence>
           {showDefenseModal && (
@@ -1184,14 +1154,14 @@ export const BattleField: React.FC = () => {
 
                   <div className="flex gap-4">
                     <button 
-                      onClick={() => handleDeclareDefense(true)}
+                      onClick={() => handleDeclareDefense(selectedDefender || undefined)}
                       disabled={!selectedDefender}
                       className="px-16 py-4 bg-blue-600 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-blue-500 transition-all disabled:opacity-30 shadow-xl shadow-blue-600/20"
                     >
                       确认防御
                     </button>
                     <button 
-                      onClick={() => handleDeclareDefense(false)}
+                      onClick={() => handleDeclareDefense(undefined)}
                       className="px-16 py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all"
                     >
                       不防御
@@ -1251,7 +1221,7 @@ export const BattleField: React.FC = () => {
                     进行防御
                   </button>
                   <button 
-                    onClick={() => handleDeclareDefense(false)}
+                    onClick={() => handleDeclareDefense(undefined)}
                     className="px-12 py-4 bg-zinc-800 hover:bg-zinc-700 text-white font-black uppercase italic tracking-widest rounded-xl transition-all hover:scale-105 active:scale-95 shadow-xl border border-white/20"
                   >
                     不防御
@@ -1340,10 +1310,441 @@ export const BattleField: React.FC = () => {
       {/* Rulebook Overlay */}
       <Rulebook isOpen={isRulebookOpen} onClose={() => setIsRulebookOpen(false)} />
 
+      {/* Card Action Menu */}
+      <AnimatePresence>
+        {cardMenu && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed z-[150] bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col min-w-[160px]"
+            style={{ 
+              left: Math.min(cardMenu.x, window.innerWidth - 160), 
+              top: Math.min(cardMenu.y, window.innerHeight - 200) 
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-2 bg-black/50 border-b border-white/10 text-xs font-bold text-zinc-400 uppercase tracking-widest">
+              {cardMenu.card.fullName}
+            </div>
+            
+            {/* Play Action */}
+            {cardMenu.zone === 'hand' && game.phase === 'MAIN' && me.isTurn && (
+              <button
+                className="px-4 py-3 text-left text-sm font-bold text-black bg-yellow-500 hover:bg-yellow-400 transition-colors flex items-center gap-2"
+                onClick={() => {
+                  playCardFromHand(cardMenu.card);
+                  setCardMenu(null);
+                }}
+              >
+                <div className="w-2 h-2 rounded-full bg-black/50" />
+                打出卡牌 (Play)
+              </button>
+            )}
+
+            {/* Activate Action */}
+            {(game.phase === 'MAIN' || game.phase === 'BATTLE_FREE') && me.isTurn && (
+              (() => {
+                const isMyCard = [...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand].some(c => c?.gamecardId === cardMenu.card.gamecardId);
+                if (!isMyCard) return null;
+
+                const activateEffects = cardMenu.card.effects?.map((effect, index) => ({ effect, index }))
+                  .filter(e => e.effect.type === 'ACTIVATE' || e.effect.type === 'ACTIVATED') || [];
+
+                const validEffects = activateEffects.filter(e => {
+                  if (!e.effect.triggerLocation || e.effect.triggerLocation.length === 0) {
+                    return cardMenu.zone === 'unit' || cardMenu.zone === 'item';
+                  }
+                  const zoneMap: Record<string, string> = {
+                    'unit': 'UNIT_ZONE',
+                    'item': 'ITEM_ZONE',
+                    'erosion_front': 'EROSION_FRONT',
+                    'hand': 'HAND'
+                  };
+                  return e.effect.triggerLocation.includes(zoneMap[cardMenu.zone] as any);
+                });
+
+                if (validEffects.length > 0) {
+                  return (
+                    <button
+                      className="px-4 py-3 text-left text-sm font-bold text-white bg-green-600 hover:bg-green-500 transition-colors flex items-center gap-2"
+                      onClick={() => {
+                        const zoneMap: Record<string, string> = {
+                          'unit': 'UNIT',
+                          'item': 'ITEM',
+                          'erosion_front': 'EROSION_FRONT',
+                          'hand': 'HAND'
+                        };
+                        const triggerLocation = zoneMap[cardMenu.zone] as TriggerLocation;
+                        
+                        if (validEffects.length === 1) {
+                          setEffectConfirmation({
+                            card: cardMenu.card,
+                            effect: validEffects[0].effect,
+                            effectIndex: validEffects[0].index,
+                            triggerLocation
+                          });
+                        } else {
+                          setEffectSelection({
+                            card: cardMenu.card,
+                            effects: validEffects,
+                            triggerLocation
+                          });
+                        }
+                        setCardMenu(null);
+                      }}
+                    >
+                      <div className="w-2 h-2 rounded-full bg-white/50" />
+                      发动效果 (Activate)
+                    </button>
+                  );
+                }
+                return null;
+              })()
+            )}
+
+            {/* Attack Actions */}
+            {game.phase === 'BATTLE_DECLARATION' && me.isTurn && cardMenu.zone === 'unit' && (
+              (() => {
+                const isMyCard = me.unitZone.some(c => c?.gamecardId === cardMenu.card.gamecardId);
+                if (isMyCard && canUnitAttack(cardMenu.card)) {
+                  return (
+                    <>
+                      <button
+                        className="px-4 py-3 text-left text-sm font-bold text-white bg-red-600 hover:bg-red-500 transition-colors flex items-center gap-2 border-b border-white/10"
+                        onClick={() => {
+                          handleDeclareAttack([cardMenu.card.gamecardId], false);
+                          setCardMenu(null);
+                        }}
+                      >
+                        <Sword className="w-4 h-4 text-white/70" />
+                        单体攻击 (Attack)
+                      </button>
+                      <button
+                        className="px-4 py-3 text-left text-sm font-bold text-white bg-red-600 hover:bg-red-500 transition-colors flex items-center gap-2"
+                        onClick={() => {
+                          setAllianceTargetSelection(cardMenu.card.gamecardId);
+                          setCardMenu(null);
+                        }}
+                      >
+                        <Sword className="w-4 h-4 text-white/70" />
+                        联军攻击 (Alliance)
+                      </button>
+                    </>
+                  );
+                }
+                return null;
+              })()
+            )}
+
+            {/* Defend Action */}
+            {game.phase === 'DEFENSE_DECLARATION' && opponent?.isTurn && cardMenu.zone === 'unit' && (
+              (() => {
+                const isMyCard = me.unitZone.some(c => c?.gamecardId === cardMenu.card.gamecardId);
+                if (isMyCard && !cardMenu.card.isExhausted) {
+                  return (
+                    <button
+                      className="px-4 py-3 text-left text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors flex items-center gap-2"
+                      onClick={() => {
+                        handleDeclareDefense(cardMenu.card.gamecardId);
+                        setCardMenu(null);
+                      }}
+                    >
+                      <Shield className="w-4 h-4 text-white/70" />
+                      防御 (Defend)
+                    </button>
+                  );
+                }
+                return null;
+              })()
+            )}
+
+            {/* Detail Action */}
+            <button
+              className="px-4 py-3 text-left text-sm font-bold text-black bg-white hover:bg-zinc-200 transition-colors flex items-center gap-2"
+              onClick={() => {
+                setPreviewCard(cardMenu.card);
+                setCardMenu(null);
+              }}
+            >
+              <BookOpen className="w-4 h-4 text-black/70" />
+              查看详情 (Detail)
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Alliance Target Selection Overlay */}
+      <AnimatePresence>
+        {allianceTargetSelection && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[140] bg-black/50 backdrop-blur-sm flex items-center justify-center pointer-events-none"
+          >
+            <div className="bg-zinc-900/90 border border-orange-500/50 px-8 py-4 rounded-full shadow-[0_0_30px_rgba(249,115,22,0.3)]">
+              <p className="text-orange-400 font-bold tracking-widest uppercase flex items-center gap-3">
+                <Sword className="w-5 h-5" />
+                请选择另一个未横置的单位组成联军
+              </p>
+            </div>
+            <button
+              onClick={() => setAllianceTargetSelection(null)}
+              className="absolute top-8 right-8 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-white font-bold tracking-widest pointer-events-auto transition-colors"
+            >
+              取消 (Cancel)
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Effect Selection Modal */}
+      <AnimatePresence>
+        {effectSelection && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[160] bg-black/80 backdrop-blur-md flex items-center justify-center p-8"
+            onClick={() => setEffectSelection(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-white/10 rounded-2xl max-w-2xl w-full p-8 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter">选择要发动的效果</h3>
+              <div className="space-y-4">
+                {effectSelection.effects.map((e, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setEffectConfirmation({
+                        card: effectSelection.card,
+                        effect: e.effect,
+                        effectIndex: e.index,
+                        triggerLocation: effectSelection.triggerLocation
+                      });
+                      setEffectSelection(null);
+                    }}
+                    className="w-full text-left p-4 rounded-xl border border-white/10 bg-black/40 hover:bg-white/5 hover:border-red-500/50 transition-all group"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold text-white bg-red-600">
+                        {e.effect.type}
+                      </span>
+                    </div>
+                    <p className="text-sm text-zinc-300 leading-relaxed group-hover:text-white transition-colors">
+                      {e.effect.description}
+                    </p>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-8 flex justify-end">
+                <button
+                  onClick={() => setEffectSelection(null)}
+                  className="px-6 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+                >
+                  取消
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Effect Confirmation Modal */}
+      <AnimatePresence>
+        {effectConfirmation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[170] bg-black/80 backdrop-blur-md flex items-center justify-center p-8"
+            onClick={() => setEffectConfirmation(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-red-500/30 rounded-2xl max-w-xl w-full p-8 shadow-[0_0_50px_rgba(220,38,38,0.15)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter flex items-center gap-3">
+                <Zap className="w-6 h-6" />
+                确认发动效果
+              </h3>
+              
+              <div className="bg-black/50 p-6 rounded-xl border border-white/5 mb-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold text-white bg-red-600">
+                    {effectConfirmation.effect.type}
+                  </span>
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                    {effectConfirmation.card.fullName}
+                  </span>
+                </div>
+                <p className="text-base text-zinc-200 leading-relaxed">
+                  {effectConfirmation.effect.description}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setEffectConfirmation(null)}
+                  className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    activateAbility(
+                      effectConfirmation.card, 
+                      effectConfirmation.effect, 
+                      effectConfirmation.effectIndex, 
+                      effectConfirmation.triggerLocation
+                    );
+                    setEffectConfirmation(null);
+                  }}
+                  className="px-8 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest shadow-lg shadow-red-600/20 transition-all hover:scale-105"
+                >
+                  确认发动
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_rgba(242,125,38,0.05)_0%,_transparent_50%)]" />
       </div>
+
+      {/* Full Image Overlay */}
+      <AnimatePresence>
+        {previewCard && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 cursor-pointer"
+            onClick={() => setPreviewCard(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative max-w-4xl w-full max-h-full flex flex-col md:flex-row gap-8 items-center md:items-stretch"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Full Image */}
+              <div className="relative aspect-[3/4] h-[60vh] md:h-[80vh] rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl">
+                <img 
+                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`} 
+                  alt={previewCard.fullName}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+                
+                {/* Close Button Mobile */}
+                <button 
+                  onClick={() => setPreviewCard(null)}
+                  className="absolute top-4 right-4 p-2 bg-black/60 rounded-full md:hidden"
+                >
+                  <X className="w-6 h-6 text-white" />
+                </button>
+              </div>
+
+              {/* Card Details Side */}
+              <div className="flex-1 bg-zinc-900/50 backdrop-blur-md p-6 rounded-2xl border border-white/10 overflow-y-auto">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h2 className="text-3xl font-black tracking-tighter text-white">{previewCard.fullName}</h2>
+                    <p className="text-zinc-400 font-bold">{previewCard.faction} • {previewCard.rarity}</p>
+                  </div>
+                  <button 
+                    onClick={() => setPreviewCard(null)}
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors hidden md:block"
+                  >
+                    <X className="w-6 h-6 text-zinc-400" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  <div className="bg-black/40 p-4 rounded-xl border border-white/5 text-center">
+                    <p className="text-[10px] uppercase text-zinc-500 font-bold mb-1">Access Cost</p>
+                    <p className={cn("text-2xl font-black", previewCard.acValue < 0 ? "text-blue-400" : "text-red-500")}>
+                      {previewCard.acValue > 0 ? `+${previewCard.acValue}` : previewCard.acValue}
+                    </p>
+                  </div>
+                  {previewCard.type === 'UNIT' && (
+                    <>
+                      <div className="bg-black/40 p-4 rounded-xl border border-white/5 text-center">
+                        <p className="text-[10px] uppercase text-zinc-500 font-bold mb-1">Damage</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-2xl font-black text-blue-400">{previewCard.damage}</span>
+                          <Sword className="w-5 h-5 text-blue-400" />
+                        </div>
+                      </div>
+                      <div className="bg-black/40 p-4 rounded-xl border border-white/5 text-center">
+                        <p className="text-[10px] uppercase text-zinc-500 font-bold mb-1">Power</p>
+                        <p className="text-2xl font-black text-white">{previewCard.power}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Effects</h4>
+                  {previewCard.effects?.map((effect, idx) => (
+                    <div key={idx} className="bg-black/40 p-4 rounded-xl border border-white/5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-bold text-white",
+                          effect.type === '永' ? "bg-green-600" : 
+                          effect.type === '诱' ? "bg-blue-600" :
+                          effect.type === '启' ? "bg-red-600" : "bg-zinc-600"
+                        )}>
+                          {effect.type}
+                        </span>
+                      </div>
+                      <p className="text-sm text-zinc-300 leading-relaxed">{effect.description}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {previewCard.flavorText && (
+                  <div className="mt-8 pt-8 border-t border-white/5">
+                    <p className="text-xs italic text-zinc-500 leading-relaxed">"{previewCard.flavorText}"</p>
+                  </div>
+                )}
+                
+                {/* Influencing Effects */}
+                {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 && (
+                  <div className="mt-8 pt-8 border-t border-white/5">
+                    <h4 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <Zap className="w-4 h-4" />
+                      当前受到的影响
+                    </h4>
+                    <div className="space-y-2">
+                      {previewCard.influencingEffects.map((effect, idx) => (
+                        <div key={idx} className="bg-blue-900/20 p-3 rounded-lg border border-blue-500/20 text-sm text-blue-200">
+                          <span className="font-bold text-white mr-2">[{effect.sourceCardName}]</span>
+                          {effect.description}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { GameState, PlayerState, Card, GameEvent, CardEffect } from '../types/game';
+import { GameService } from './gameService';
 
 export class EventEngine {
   static dispatchEvent(gameState: GameState, event: GameEvent) {
@@ -11,6 +12,10 @@ export class EventEngine {
         if (card && card.effects) {
           card.effects.forEach(effect => {
             if ((effect.type === 'TRIGGERED' || effect.type === 'TRIGGER') && effect.triggerEvent === event.type) {
+              // Check limits
+              if (!GameService.checkEffectLimitsAndReqs(gameState, player.uid, card, effect)) {
+                return;
+              }
               if (!effect.condition || effect.condition(gameState, player, card, event)) {
                 triggeredEffects.push({ card, effect, playerUid: player.uid });
               }
@@ -30,6 +35,7 @@ export class EventEngine {
       if (effect.isMandatory) {
         if (effect.execute) {
           effect.execute(card, gameState, player, event);
+          GameService.recordEffectUsage(gameState, playerUid, card, effect);
           gameState.logs.push(`[诱发效果] ${player.displayName} 的 ${card.fullName} 触发了效果。`);
         }
       } else {
@@ -37,6 +43,7 @@ export class EventEngine {
         // For now, we auto-execute or we could add to counterStack
         if (effect.execute) {
           effect.execute(card, gameState, player, event);
+          GameService.recordEffectUsage(gameState, playerUid, card, effect);
           gameState.logs.push(`[诱发效果] ${player.displayName} 的 ${card.fullName} 触发了效果。`);
         }
       }

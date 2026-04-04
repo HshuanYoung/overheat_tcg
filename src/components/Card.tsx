@@ -15,8 +15,6 @@ interface CardProps {
 }
 
 export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, count, isBack, disableZoom }) => {
-  const [isZoomed, setIsZoomed] = useState(false);
-
   if (isBack || !card) {
     return (
       <motion.div
@@ -40,9 +38,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
   const isNegativeCost = card.acValue < 0;
 
   const handleCardClick = (e: React.MouseEvent) => {
-    if (disableZoom) return;
-    e.stopPropagation();
-    setIsZoomed(true);
+    // Zoom logic removed
   };
 
   const handleActionClick = (e: React.MouseEvent) => {
@@ -124,111 +120,6 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
           </div>
         )}
       </motion.div>
-
-      {/* Zoom Modal */}
-      <AnimatePresence>
-        {isZoomed && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsZoomed(false)}
-              className="absolute inset-0 bg-black/90 backdrop-blur-sm"
-            />
-            
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative max-w-4xl w-full max-h-full flex flex-col md:flex-row gap-8 items-center md:items-stretch"
-            >
-              {/* Full Image */}
-              <div className="relative aspect-[3/4] h-[60vh] md:h-[80vh] rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl">
-                <img 
-                  src={card.fullImageUrl} 
-                  alt={card.fullName}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-                
-                {/* Close Button Mobile */}
-                <button 
-                  onClick={() => setIsZoomed(false)}
-                  className="absolute top-4 right-4 p-2 bg-black/60 rounded-full md:hidden"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Card Details Side */}
-              <div className="flex-1 bg-zinc-900/50 backdrop-blur-md p-6 rounded-2xl border border-white/10 overflow-y-auto">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-3xl font-black tracking-tighter text-white">{card.fullName}</h2>
-                    <p className="text-zinc-400 font-bold">{card.faction} • {card.rarity}</p>
-                  </div>
-                  <button 
-                    onClick={() => setIsZoomed(false)}
-                    className="p-2 hover:bg-white/10 rounded-full transition-colors hidden md:block"
-                  >
-                    <X className="w-6 h-6 text-zinc-400" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4 mb-8">
-                  <div className="bg-black/40 p-4 rounded-xl border border-white/5 text-center">
-                    <p className="text-[10px] uppercase text-zinc-500 font-bold mb-1">Access Cost</p>
-                    <p className={clsx("text-2xl font-black", isNegativeCost ? "text-blue-400" : "text-red-500")}>
-                      {card.acValue > 0 ? `+${card.acValue}` : card.acValue}
-                    </p>
-                  </div>
-                  {card.type === 'UNIT' && (
-                    <>
-                      <div className="bg-black/40 p-4 rounded-xl border border-white/5 text-center">
-                        <p className="text-[10px] uppercase text-zinc-500 font-bold mb-1">Damage</p>
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="text-2xl font-black text-blue-400">{card.damage}</span>
-                          <Sword className="w-5 h-5 text-blue-400" />
-                        </div>
-                      </div>
-                      <div className="bg-black/40 p-4 rounded-xl border border-white/5 text-center">
-                        <p className="text-[10px] uppercase text-zinc-500 font-bold mb-1">Power</p>
-                        <p className="text-2xl font-black text-white">{card.power}</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Effects</h4>
-                  {card.effects.map((effect, idx) => (
-                    <div key={idx} className="bg-black/40 p-4 rounded-xl border border-white/5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={clsx(
-                          "px-2 py-0.5 rounded text-[10px] font-bold text-white",
-                          effect.type === '永' ? "bg-green-600" : 
-                          effect.type === '诱' ? "bg-blue-600" :
-                          effect.type === '启' ? "bg-red-600" : "bg-zinc-600"
-                        )}>
-                          {effect.type}
-                        </span>
-                      </div>
-                      <p className="text-sm text-zinc-300 leading-relaxed">{effect.description}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {card.flavorText && (
-                  <div className="mt-8 pt-8 border-t border-white/5">
-                    <p className="text-xs italic text-zinc-500 leading-relaxed">"{card.flavorText}"</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </>
   );
 };

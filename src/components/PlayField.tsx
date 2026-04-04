@@ -10,7 +10,7 @@ interface PlayFieldProps {
   player: PlayerState;
   opponent: PlayerState;
   game: GameState;
-  onCardClick?: (card: Card, zone: string, index?: number) => void;
+  onCardClick?: (card: Card, zone: string, index?: number, e?: React.MouseEvent) => void;
   onPreviewCard?: (card: Card) => void;
   onPlayCard?: (card: Card) => void;
   paymentSelection?: { useFeijing: string[], exhaustIds: string[], erosionFrontIds?: string[] };
@@ -24,7 +24,7 @@ interface PlayFieldProps {
 const CardSlot: React.FC<{
   card: Card | null;
   label?: string;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
   onPreview?: (card: Card) => void;
   className?: string;
   isErosion?: boolean;
@@ -130,7 +130,7 @@ const CardListModal: React.FC<{
 const PlayerHalf: React.FC<{
   player: PlayerState;
   isOpponent?: boolean;
-  onCardClick?: (card: Card, zone: string, index?: number) => void;
+  onCardClick?: (card: Card, zone: string, index?: number, e?: React.MouseEvent) => void;
   onPreviewCard?: (card: Card) => void;
   onPlayCard?: (card: Card) => void;
   paymentSelection?: { useFeijing: string[], exhaustIds: string[], erosionFrontIds?: string[] };
@@ -194,7 +194,7 @@ const PlayerHalf: React.FC<{
                   key={i}
                   card={item || null}
                   label={`ITEM ${i+1}`}
-                  onClick={() => item && onCardClick?.(item, 'item', i)}
+                  onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
                   isExhausted={item ? item.isExhausted : false}
                   isSelectedForPayment={item ? paymentSelection?.exhaustIds.includes(item.gamecardId) : false}
                   showCount={false}
@@ -255,7 +255,7 @@ const PlayerHalf: React.FC<{
                             card={displayCard}
                             isFaceUp={displayCard.isFaceUp}
                             onPreview={onPreviewCard}
-                            onClick={() => displayCard.isFaceUp && onCardClick?.(displayCard, 'erosion_front', i)}
+                            onClick={(e) => displayCard.isFaceUp && onCardClick?.(displayCard, 'erosion_front', i, e)}
                             isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             showCount={false}
@@ -283,7 +283,7 @@ const PlayerHalf: React.FC<{
                     card={unit || null}
                     label={`UNIT ${i+1}`}
                     onPreview={onPreviewCard}
-                    onClick={() => unit && onCardClick?.(unit, 'unit', i)}
+                    onClick={(e) => unit && onCardClick?.(unit, 'unit', i, e)}
                     isExhausted={unit ? unit.isExhausted : false}
                     isSelectedForPayment={unit ? paymentSelection?.exhaustIds.includes(unit.gamecardId) : false}
                     isAttacking={unit ? (selectedAttackers?.includes(unit.gamecardId) || game?.battleState?.attackers.includes(unit.gamecardId)) : false}
@@ -307,7 +307,7 @@ const PlayerHalf: React.FC<{
                     card={unit || null}
                     label={`UNIT ${i+1}`}
                     onPreview={onPreviewCard}
-                    onClick={() => unit && onCardClick?.(unit, 'unit', i)}
+                    onClick={(e) => unit && onCardClick?.(unit, 'unit', i, e)}
                     isExhausted={unit ? unit.isExhausted : false}
                     isSelectedForPayment={unit ? paymentSelection?.exhaustIds.includes(unit.gamecardId) : false}
                     isAttacking={unit ? (selectedAttackers?.includes(unit.gamecardId) || game?.battleState?.attackers.includes(unit.gamecardId)) : false}
@@ -338,7 +338,7 @@ const PlayerHalf: React.FC<{
                             card={displayCard}
                             isFaceUp={displayCard.isFaceUp}
                             onPreview={onPreviewCard}
-                            onClick={() => displayCard.isFaceUp && onCardClick?.(displayCard, 'erosion_front', i)}
+                            onClick={(e) => displayCard.isFaceUp && onCardClick?.(displayCard, 'erosion_front', i, e)}
                             isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             showCount={false}
@@ -376,9 +376,9 @@ const PlayerHalf: React.FC<{
                         transform: `translateX(${xPos}px) ${(isSelected || isFeijingSelected) ? 'translateY(-40px) scale(1.5)' : ''}`,
                         zIndex: (isSelected || isFeijingSelected) ? 100 : i
                       }}
-                      onClick={() => {
+                      onClick={(e) => {
                         if (pendingPlayCard) {
-                          onCardClick?.(card, 'hand', i);
+                          onCardClick?.(card, 'hand', i, e);
                           return;
                         }
                         if (isSelected) {
@@ -425,7 +425,7 @@ const PlayerHalf: React.FC<{
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onCardClick?.(card, 'hand', i);
+                                onCardClick?.(card, 'hand', i, e);
                                 setSelectedHandCardId(null);
                               }}
                               className="bg-blue-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(59,130,246,0.6)] hover:scale-110 active:scale-95 transition-all flex items-center gap-2 border-2 border-black/20"
@@ -437,7 +437,7 @@ const PlayerHalf: React.FC<{
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onCardClick?.(card, 'hand', i);
+                                onCardClick?.(card, 'hand', i, e);
                                 setSelectedHandCardId(null);
                               }}
                               className="bg-red-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:scale-110 active:scale-95 transition-all flex items-center gap-2 border-2 border-black/20"
@@ -476,7 +476,7 @@ const PlayerHalf: React.FC<{
                   key={i}
                   card={item || null}
                   label={`ITEM ${i+1}`}
-                  onClick={() => item && onCardClick?.(item, 'item', i)}
+                  onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
                   isExhausted={item ? item.isExhausted : false}
                   isSelectedForPayment={item ? paymentSelection?.exhaustIds.includes(item.gamecardId) : false}
                   showCount={false}

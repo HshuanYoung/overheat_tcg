@@ -1,11 +1,9 @@
 import { getAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Play, LayoutGrid, Users, Heart, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
+import { Swords, Bot, ShoppingBag, Library, Play, Users, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
-import { CARD_LIBRARY } from '../data/cards';
-import { Card } from '../types/game';
 
 const RAY_CARDS = [
   { id: 'fav_card', name: '默认雷亚卡', url: '/assets/fav_card/fav_card.jpg' },
@@ -18,6 +16,8 @@ const RAY_CARDS = [
 export const Home: React.FC = () => {
   const [favoriteCard, setFavoriteCard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showBattleMenu, setShowBattleMenu] = useState(false);
+  const navigate = useNavigate();
   const user = getAuthUser();
 
   useEffect(() => {
@@ -32,10 +32,10 @@ export const Home: React.FC = () => {
         const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }});
         const data = await res.json();
         if (data.favoriteCardId) {
-            const card = RAY_CARDS.find(c => c.id === data.favoriteCardId);
-            setFavoriteCard(card || RAY_CARDS[0]);
+          const card = RAY_CARDS.find(c => c.id === data.favoriteCardId);
+          setFavoriteCard(card || RAY_CARDS[0]);
         } else {
-            setFavoriteCard(RAY_CARDS[0]);
+          setFavoriteCard(RAY_CARDS[0]);
         }
       } catch (e) {
         console.error(e);
@@ -51,55 +51,104 @@ export const Home: React.FC = () => {
     <div className="relative h-screen w-full overflow-hidden bg-black flex items-center">
       {/* Background Image */}
       <div 
-        className="absolute inset-0 z-0 opacity-40 grayscale-[0.2] hover:grayscale-0 transition-all duration-1000"
+        className="absolute inset-0 z-0 opacity-30 transition-all duration-1000"
         style={{
           backgroundImage: `url("${favoriteCard?.url || '/assets/fav_card/fav_card.jpg'}")`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
+          filter: 'blur(2px)',
         }}
       />
       
-      {/* Overlay Gradient */}
-      <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent z-10" />
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-r from-black via-black/70 to-black/40 z-10" />
 
       {/* Content */}
-      <div className="relative z-20 pl-16 flex flex-col gap-12 max-w-2xl">
-        <div className="flex flex-col gap-6">
-          <MenuButton title="联机对战" icon={<Play className="w-6 h-6" />} description="寻找对手进行在线联机对战" to="/battle" color="bg-zinc-900/60" />
-          <MenuButton title="好友约战" icon={<Users className="w-6 h-6" />} description="与你的好友进行私人对战" to="/friend-match" color="bg-zinc-900/60" />
-          <MenuButton title="卡组构筑" icon={<LayoutGrid className="w-6 h-6" />} description="管理和编辑你的战斗卡组" to="/deck-builder" color="bg-zinc-900/60" />
+      <div className="relative z-20 pl-16 flex flex-col gap-6 max-w-2xl">
+        {/* Battle Mode - expandable */}
+        <div>
+          <motion.div
+            whileHover={{ x: 16, scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setShowBattleMenu(!showBattleMenu)}
+            className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
+          >
+            <div className="flex items-center gap-5">
+              <div className="p-3.5 rounded-full bg-black/50 group-hover:bg-red-600 transition-colors">
+                <Swords className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black italic tracking-tighter">对战模式</h2>
+                <p className="text-zinc-400 text-xs uppercase tracking-wider">BATTLE MODE</p>
+              </div>
+            </div>
+          </motion.div>
+
+          <AnimatePresence>
+            {showBattleMenu && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden ml-8"
+              >
+                <div className="pt-3 flex flex-col gap-2">
+                  <SubMenuButton title="匹配模式" desc="随机匹配在线玩家" icon={<Play className="w-4 h-4" />} to="/battle" />
+                  <SubMenuButton title="好友约战" desc="邀请好友进行对战" icon={<Users className="w-4 h-4" />} to="/friend-match" />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+
+        {/* Practice Mode */}
+        <MenuButton title="练习模式" icon={<Bot className="w-6 h-6" />} description="与AI进行练习对战" to="/practice" />
+
+        {/* Store */}
+        <MenuButton title="卡牌商店" icon={<ShoppingBag className="w-6 h-6" />} description="购买卡包扩充收藏" to="/store" />
+
+        {/* My Collection */}
+        <MenuButton title="我的收藏" icon={<Library className="w-6 h-6" />} description="查看拥有的所有卡牌" to="/collection" />
       </div>
 
-      {/* Bottom Right Info */}
+      {/* Bottom quote */}
       <div className="absolute bottom-12 right-12 z-20 text-right">
         <p className="text-zinc-500 text-xs italic uppercase tracking-widest mb-2">"在神蚀的创痕中，寻找最后的希望。"</p>
-        <div className="flex items-center justify-end gap-2 text-red-600">
-          <Heart className={cn("w-4 h-4", favoriteCard ? "fill-red-600" : "")} />
-          <span className="text-xs font-black uppercase tracking-tighter">
-            {loading ? "Loading..." : favoriteCard ? `Ray Card: ${favoriteCard.name}` : "No Ray Card Set"}
-          </span>
-        </div>
       </div>
     </div>
   );
 };
 
-const MenuButton = ({ title, icon, description, to, color }: any) => (
+const MenuButton = ({ title, icon, description, to }: any) => (
   <Link to={to}>
     <motion.div 
-      whileHover={{ x: 20, scale: 1.02 }}
+      whileHover={{ x: 16, scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
-      className={cn(
-        "p-6 rounded-r-full border-l-4 border-red-600 cursor-pointer w-[400px] transition-all hover:bg-red-600/20 group",
-        color
-      )}
+      className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
     >
-      <div className="flex items-center gap-6">
-        <div className="p-4 rounded-full bg-black/50 group-hover:bg-red-600 transition-colors">{icon}</div>
+      <div className="flex items-center gap-5">
+        <div className="p-3.5 rounded-full bg-black/50 group-hover:bg-red-600 transition-colors">{icon}</div>
         <div>
           <h2 className="text-2xl font-black italic tracking-tighter">{title}</h2>
           <p className="text-zinc-400 text-xs uppercase tracking-wider">{description}</p>
+        </div>
+      </div>
+    </motion.div>
+  </Link>
+);
+
+const SubMenuButton = ({ title, desc, icon, to }: any) => (
+  <Link to={to}>
+    <motion.div
+      whileHover={{ x: 10, scale: 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      className="p-3 pl-6 rounded-r-2xl border-l-2 border-red-600/50 cursor-pointer w-[360px] bg-zinc-900/40 hover:bg-red-600/10 group transition-all"
+    >
+      <div className="flex items-center gap-3">
+        <div className="p-2 rounded-full bg-black/40 group-hover:bg-red-600/80 transition-colors">{icon}</div>
+        <div>
+          <p className="text-sm font-bold">{title}</p>
+          <p className="text-zinc-500 text-[10px]">{desc}</p>
         </div>
       </div>
     </motion.div>

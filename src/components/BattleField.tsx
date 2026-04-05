@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+
 import { onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation } from '../types/game';
-import { socket, getAuthUser } from '../socket';
-import { GameService, cleanForFirestore } from '../services/gameService';
+import { socket, getAuthUser, onceAuthenticated, isSocketAuthenticated } from '../socket';
+
+import { GameService } from '../services/gameService';
+
 import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
@@ -14,6 +17,8 @@ import { cn } from '../lib/utils';
 export const BattleField: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
+  const location = useLocation() as any;
+
   const [game, setGame] = useState<GameState | null>(null);
   const [isRulebookOpen, setIsRulebookOpen] = useState(false);
   const [previewCard, setPreviewCard] = useState<Card | null>(null);
@@ -31,7 +36,7 @@ export const BattleField: React.FC = () => {
   const [showDefenseModal, setShowDefenseModal] = useState(false);
   const [selectedErosionCardId, setSelectedErosionCardId] = useState<string | null>(null);
   const [erosionChoice, setErosionChoice] = useState<'A' | 'B' | 'C' | null>(null);
-  
+
   const [cardMenu, setCardMenu] = useState<{
     card: Card;
     zone: string;
@@ -67,8 +72,9 @@ export const BattleField: React.FC = () => {
         // Timeout reached, resolve automatically
         // Only the player who played the card should trigger this to avoid conflicts.
         if (myUid === stackItem.ownerUid) {
-           socket.emit('gameAction', { gameId, action: 'RESOLVE_PLAY' });
+          GameService.resolvePlay(gameId);
         }
+
       }
     };
 
@@ -80,31 +86,59 @@ export const BattleField: React.FC = () => {
     const audio = new Audio('/assets/music_bg.wav');
     audio.loop = true;
     audio.volume = 0.3;
-    
+
     const playAudio = () => {
       audio.play().catch(e => console.log("Audio play blocked by browser", e));
       window.removeEventListener('click', playAudio);
     };
-    
+
     window.addEventListener('click', playAudio);
-    
+
     return () => {
       audio.pause();
       window.removeEventListener('click', playAudio);
     };
   }, []);
 
+  const deckId = location.state?.deckId || localStorage.getItem(`deck_${gameId}`);
+
+  useEffect(() => {
+    if (location.state?.deckId) {
+      localStorage.setItem(`deck_${gameId}`, location.state.deckId);
+    }
+  }, [gameId, location.state?.deckId]);
+
   useEffect(() => {
     if (!gameId) return;
-    socket.emit('joinGame', gameId);
-socket.on('gameStateUpdate', (newState) => { setGame(newState); });
-return () => { socket.off('gameStateUpdate'); };
-  }, [gameId]);
+
+    const joinAndListen = () => {
+      console.log('[BattleField] Joining game:', gameId);
+      socket.off('gameStateUpdate').on('gameStateUpdate', (newState: any) => {
+        setGame(newState);
+      });
+      socket.emit('joinGame', { gameId, deckId });
+    };
+
+    const token = localStorage.getItem('token');
+
+    if (isSocketAuthenticated()) {
+      joinAndListen();
+    } else if (token) {
+      if (!socket.connected) socket.connect();
+      socket.once('authenticated', joinAndListen);
+      socket.emit('authenticate', token);
+    }
+
+    return () => {
+      socket.off('gameStateUpdate');
+    };
+  }, [gameId, deckId]);
+
 
   // Counter Timer Logic
   useEffect(() => {
     if (!game || !gameId || !getAuthUser()) return;
-    
+
     const myUid = getAuthUser().uid;
     const isWaitingForMe = game.counterStack?.length > 0 && game.counterStack[game.counterStack.length - 1]?.ownerUid !== myUid;
 
@@ -148,7 +182,7 @@ return () => { socket.off('gameStateUpdate'); };
   // Effect Selection Keyboard Shortcuts
   useEffect(() => {
     if (!effectSelection) return;
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const num = parseInt(e.key, 10);
       if (!isNaN(num) && num > 0 && num <= effectSelection.effects.length) {
@@ -162,26 +196,29 @@ return () => { socket.off('gameStateUpdate'); };
         setEffectSelection(null);
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [effectSelection]);
 
-  if (!game || !getAuthUser()) return (
-    <div className="h-screen bg-black flex items-center justify-center">
-      <motion.div 
-        animate={{ rotate: 360 }}
-        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-        className="w-12 h-12 border-4 border-[#f27d26] border-t-transparent rounded-full"
-      />
-    </div>
-  );
+  const authUser = getAuthUser();
+  const myUid = authUser?.uid;
+  const me = (game && myUid) ? game.players[myUid] : null;
+  const opponentUid = (game && myUid) ? Object.keys(game.players).find(uid => uid !== myUid) : null;
+  const opponent = (game && opponentUid) ? game.players[opponentUid] : null;
 
-  const myUid = getAuthUser().uid;
-  const opponentUid = Object.keys(game.players).find(uid => uid !== myUid);
-  
-  const me = game.players[myUid];
-  const opponent = opponentUid ? game.players[opponentUid] : null;
+  if (!game || !myUid || !me) {
+    return (
+      <div className="h-screen bg-black flex flex-col items-center justify-center p-8 text-center bg-[radial-gradient(circle_at_center,_#111_0%,_#000_100%)]">
+        <div className="w-12 h-12 border-4 border-[#f27d26] border-t-transparent rounded-full animate-spin mb-6" />
+        <h2 className="text-[#f27d26] font-bold text-xl mb-2 tracking-[0.2em] uppercase">正在同步战场状态</h2>
+        <p className="text-zinc-500 text-sm max-w-md leading-relaxed">
+          正在载入游戏数据并与服务器建立连接，请稍候...
+        </p>
+      </div>
+    );
+  }
+
 
   const canUnitAttack = (card: Card) => {
     if (!card || card.isExhausted || card.canAttack === false) return false;
@@ -201,7 +238,7 @@ return () => { socket.off('gameStateUpdate'); };
   const handleDeclareAttack = async (attackers: string[] = selectedAttackers, alliance: boolean = isAlliance) => {
     if (!gameId || attackers.length === 0) return;
     try {
-      await socket.emit('gameAction', { gameId, action: 'DECLARE_ATTACK', payload: { attackerIds: myUid, isAlliance: attackers, alliance } });
+      await GameService.declareAttack(gameId, myUid, attackers, alliance);
       setSelectedAttackers([]);
       setIsAlliance(false);
       setShowAttackModal(false);
@@ -210,10 +247,11 @@ return () => { socket.off('gameStateUpdate'); };
     }
   };
 
+
   const handleDeclareDefense = async (defenderId?: string) => {
     if (!gameId) return;
     try {
-      await socket.emit('gameAction', { gameId, action: 'DECLARE_DEFENSE', payload: { defenderId: defenderId || myUid } });
+      await GameService.declareDefense(gameId, myUid, defenderId);
       setSelectedDefender(null);
       setShowDefenseModal(false);
     } catch (error: any) {
@@ -221,24 +259,28 @@ return () => { socket.off('gameStateUpdate'); };
     }
   };
 
+
   const handleEndBattleFree = async () => {
     if (!gameId) return;
     try {
       // Transition to damage calculation
-      socket.emit('gameAction', { gameId, action: 'ADVANCE_PHASE', payload: { action: 'PROPOSE_DAMAGE_CALCULATION' } });
+      await GameService.advancePhase(gameId, 'PROPOSE_DAMAGE_CALCULATION');
     } catch (error: any) {
       alert(error.message);
     }
   };
 
+
   const handleResolveDamage = async () => {
     if (!gameId) return;
     try {
-      await socket.emit('gameAction', { gameId, action: 'RESOLVE_DAMAGE' });
+      await GameService.resolveDamage(gameId);
     } catch (error: any) {
       alert(error.message);
     }
   };
+
+
 
   const handleDiscardCard = async (cardId: string) => {
     if (!gameId) return;
@@ -251,9 +293,10 @@ return () => { socket.off('gameStateUpdate'); };
 
   const handleEndTurn = async () => {
     if (gameId) {
-      await socket.emit('gameAction', { gameId, action: 'ADVANCE_PHASE', payload: { action: 'DECLARE_END' } });
+      await GameService.advancePhase(gameId, 'DECLARE_END');
     }
   };
+
 
   const handleCardClick = (card: Card, zone: string, index?: number, e?: React.MouseEvent) => {
     // Handle discarding cards
@@ -359,7 +402,7 @@ return () => { socket.off('gameStateUpdate'); };
         return;
       }
     }
-    
+
     const newStackItem: StackItem = {
       card: card,
       ownerUid: myUid,
@@ -375,15 +418,15 @@ return () => { socket.off('gameStateUpdate'); };
     game.logs.push(`${me.displayName} 发动了 [${card.fullName}] 的 [启] 能力: ${effect.description}`);
 
     try {
-    socket.emit('gameAction', { gameId, action: 'ACTIVATE_EFFECT', payload: { cardId: card.gamecardId, effectIndex: effectIndex } });
-} catch (error) {
-    console.error("Error activating ability:", error);
-}
+      socket.emit('gameAction', { gameId, action: 'ACTIVATE_EFFECT', payload: { cardId: card.gamecardId, effectIndex: effectIndex } });
+    } catch (error) {
+      console.error("Error activating ability:", error);
+    }
   };
 
   const playCardFromHand = async (card: Card) => {
     if (!me.isTurn || !gameId || game.phase !== 'MAIN') return;
-    
+
     const playEffect = card.effects?.find(e => e.type === 'ACTIVATE' || e.type === 'TRIGGER' || e.type === 'ALWAYS');
     const cost = card.acValue;
 
@@ -411,29 +454,33 @@ return () => { socket.off('gameStateUpdate'); };
     }
   };
 
+
+
   const handleResolve = async () => {
     if (!gameId) return;
     try {
-      await socket.emit('gameAction', { gameId, action: 'RESOLVE_PLAY' });
+      await GameService.resolvePlay(gameId);
     } catch (error: any) {
       alert(error.message);
     }
   };
 
+
   const handleConfirmPlay = async () => {
     if (!gameId || !pendingPlayCard) return;
     try {
-      await socket.emit('gameAction', { gameId, action: 'PLAY_CARD', payload: { cardId: pendingPlayCard.gamecardId, paymentSelection: {
-        feijingCardId: paymentSelection.useFeijing[0], // Assuming only one feijing card can be used
+      await GameService.playCard(gameId, myUid, pendingPlayCard.gamecardId, {
+        feijingCardId: paymentSelection.useFeijing[0],
         exhaustUnitIds: paymentSelection.exhaustIds,
         erosionFrontIds: paymentSelection.erosionFrontIds
-      } } });
+      });
       setPendingPlayCard(null);
       setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
     } catch (error: any) {
       alert(error.message);
     }
   };
+
 
   const handleConfirmErosion = async () => {
     if (!gameId || !erosionChoice) return;
@@ -455,8 +502,8 @@ return () => { socket.off('gameStateUpdate'); };
       const isExhausted = prev.exhaustIds.includes(gamecardId);
       return {
         ...prev,
-        exhaustIds: isExhausted 
-          ? prev.exhaustIds.filter(id => id !== gamecardId) 
+        exhaustIds: isExhausted
+          ? prev.exhaustIds.filter(id => id !== gamecardId)
           : [...prev.exhaustIds, gamecardId]
       };
     });
@@ -467,7 +514,7 @@ return () => { socket.off('gameStateUpdate'); };
       const isUsed = prev.useFeijing.includes(gamecardId);
       return {
         ...prev,
-        useFeijing: isUsed 
+        useFeijing: isUsed
           ? [] // Only allow one feijing card
           : [gamecardId]
       };
@@ -479,8 +526,8 @@ return () => { socket.off('gameStateUpdate'); };
       const isUsed = prev.erosionFrontIds.includes(gamecardId);
       return {
         ...prev,
-        erosionFrontIds: isUsed 
-          ? prev.erosionFrontIds.filter(id => id !== gamecardId) 
+        erosionFrontIds: isUsed
+          ? prev.erosionFrontIds.filter(id => id !== gamecardId)
           : [...prev.erosionFrontIds, gamecardId]
       };
     });
@@ -491,7 +538,7 @@ return () => { socket.off('gameStateUpdate'); };
       <div className="h-screen bg-black flex flex-col items-center justify-center p-8">
         <h2 className="text-4xl font-black italic text-[#f27d26] mb-4 uppercase tracking-tighter">调度阶段 (Mulligan)</h2>
         <p className="text-zinc-400 mb-12 uppercase tracking-[0.3em] text-sm">点击卡牌查看大图，点击下方按钮选择是否更换</p>
-        
+
         <div className="flex gap-6 mb-12">
           {me.hand.map((card, i) => {
             const isSelected = selectedMulligan.includes(card.gamecardId);
@@ -512,7 +559,7 @@ return () => { socket.off('gameStateUpdate'); };
                 </motion.div>
                 <button
                   onClick={() => {
-                    setSelectedMulligan(prev => 
+                    setSelectedMulligan(prev =>
                       prev.includes(card.gamecardId) ? prev.filter(id => id !== card.gamecardId) : [...prev, card.gamecardId]
                     );
                   }}
@@ -539,7 +586,7 @@ return () => { socket.off('gameStateUpdate'); };
         {/* Full Image Overlay for Mulligan */}
         <AnimatePresence>
           {previewCard && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -547,8 +594,8 @@ return () => { socket.off('gameStateUpdate'); };
               onClick={() => setPreviewCard(null)}
             >
               <div className="relative max-h-[90vh] aspect-[3/4]">
-                <img 
-                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`} 
+                <img
+                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`}
                   alt={previewCard.fullName}
                   className="w-full h-full object-contain rounded-2xl shadow-2xl"
                   referrerPolicy="no-referrer"
@@ -571,14 +618,14 @@ return () => { socket.off('gameStateUpdate'); };
   }
 
   return (
-    <div 
+    <div
       className="h-screen bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative"
       onClick={() => setCardMenu(null)}
     >
       {/* Erosion Phase Overlay */}
       <AnimatePresence>
-        {game.phase === 'EROSION' && me.isTurn && (
-          <motion.div 
+        {game.phase === 'EROSION' && me.isTurn && me.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT') && (
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -591,7 +638,7 @@ return () => { socket.off('gameStateUpdate'); };
               </div>
 
               <div className="grid grid-cols-3 gap-6 w-full">
-                <button 
+                <button
                   onClick={() => setErosionChoice('A')}
                   className={cn(
                     "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 text-center",
@@ -603,7 +650,7 @@ return () => { socket.off('gameStateUpdate'); };
                   <div className="text-xs text-zinc-500">将侵蚀区的所有正面卡移动到墓地区</div>
                 </button>
 
-                <button 
+                <button
                   onClick={() => setErosionChoice('B')}
                   className={cn(
                     "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 text-center",
@@ -615,7 +662,7 @@ return () => { socket.off('gameStateUpdate'); };
                   <div className="text-xs text-zinc-500">选择一张保留，其余移动到墓地区</div>
                 </button>
 
-                <button 
+                <button
                   onClick={() => setErosionChoice('C')}
                   className={cn(
                     "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 text-center",
@@ -649,7 +696,7 @@ return () => { socket.off('gameStateUpdate'); };
                 </div>
               )}
 
-              <button 
+              <button
                 onClick={handleConfirmErosion}
                 disabled={!erosionChoice || ((erosionChoice === 'B' || erosionChoice === 'C') && !selectedErosionCardId)}
                 className="px-16 py-4 bg-[#f27d26] text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-xl shadow-[#f27d26]/20"
@@ -664,7 +711,7 @@ return () => { socket.off('gameStateUpdate'); };
       {/* Payment Selection Overlay */}
       <AnimatePresence>
         {pendingPlayCard && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -687,8 +734,8 @@ return () => { socket.off('gameStateUpdate'); };
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Selected:</span>
                     <span className="text-3xl font-black text-white">
-                      {pendingPlayCard.acValue > 0 
-                        ? (paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length 
+                      {pendingPlayCard.acValue > 0
+                        ? (paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length
                         : paymentSelection.erosionFrontIds.length}
                     </span>
                   </div>
@@ -801,13 +848,13 @@ return () => { socket.off('gameStateUpdate'); };
               </div>
 
               <div className="flex gap-6 mt-8">
-                <button 
+                <button
                   onClick={handleConfirmPlay}
                   className="px-20 py-4 bg-[#f27d26] text-black font-black italic uppercase tracking-widest rounded-xl hover:bg-[#f27d26]/80 transition-all shadow-2xl shadow-[#f27d26]/20"
                 >
                   确认支付并打出
                 </button>
-                <button 
+                <button
                   onClick={() => setPendingPlayCard(null)}
                   className="px-20 py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all border border-white/5"
                 >
@@ -822,7 +869,7 @@ return () => { socket.off('gameStateUpdate'); };
       {/* Stack / Countering Overlay */}
       <AnimatePresence>
         {game.counterStack?.length > 0 && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -834,7 +881,7 @@ return () => { socket.off('gameStateUpdate'); };
               </h3>
               <div className="flex gap-8 items-center">
                 {game.counterStack.map((item, i) => (
-                  <motion.div 
+                  <motion.div
                     key={i}
                     initial={{ scale: 0.5, y: 100 }}
                     animate={{ scale: 1, y: 0 }}
@@ -855,13 +902,13 @@ return () => { socket.off('gameStateUpdate'); };
                       响应倒计时: <span className={cn("text-lg", counterTimer <= 10 ? "text-red-500 animate-pulse" : "text-[#f27d26]")}>{counterTimer}s</span>
                     </div>
                     <div className="flex gap-4">
-                      <button 
+                      <button
                         className="px-12 py-3 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all"
-                        onClick={() => {/* Counter logic */}}
+                        onClick={() => {/* Counter logic */ }}
                       >
                         进行对抗
                       </button>
-                      <button 
+                      <button
                         className="px-12 py-3 bg-white text-black font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-200 transition-all"
                         onClick={handleResolve}
                       >
@@ -891,16 +938,16 @@ return () => { socket.off('gameStateUpdate'); };
 
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <button 
+            <button
               onClick={() => setIsRulebookOpen(true)}
               className="p-2 text-white/40 hover:text-[#f27d26] transition-colors"
               title="查看规则"
             >
               <BookOpen className="w-5 h-5" />
             </button>
-            
+
             {me.isTurn && game.phase === 'MAIN' && (
-              <motion.button 
+              <motion.button
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
                 whileHover={{ scale: 1.05 }}
@@ -914,7 +961,7 @@ return () => { socket.off('gameStateUpdate'); };
 
             {me.isTurn && game.phase === 'BATTLE' && (
               <div className="flex gap-2">
-                <motion.button 
+                <motion.button
                   initial={{ scale: 0.9 }}
                   animate={{ scale: 1 }}
                   whileHover={{ scale: 1.05 }}
@@ -925,7 +972,7 @@ return () => { socket.off('gameStateUpdate'); };
                 >
                   {selectedAttackers.length === 2 ? '联军攻击' : '攻击'}
                 </motion.button>
-                <motion.button 
+                <motion.button
                   initial={{ scale: 0.9 }}
                   animate={{ scale: 1 }}
                   whileHover={{ scale: 1.05 }}
@@ -939,7 +986,7 @@ return () => { socket.off('gameStateUpdate'); };
             )}
 
             {me.isTurn && (
-              <motion.button 
+              <motion.button
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
                 whileHover={{ scale: 1.05 }}
@@ -951,8 +998,8 @@ return () => { socket.off('gameStateUpdate'); };
               </motion.button>
             )}
 
-            <button 
-              onClick={() => navigate('/')} 
+            <button
+              onClick={() => navigate('/')}
               className="p-2 text-white/20 hover:text-white transition-colors"
             >
               <LogOut className="w-5 h-5" />
@@ -971,7 +1018,7 @@ return () => { socket.off('gameStateUpdate'); };
               <span className="text-2xl font-black italic text-[#f27d26]">ROUND {game.turnCount}</span>
             </div>
             <div className="h-8 w-px bg-white/10" />
-            <div 
+            <div
               className={cn(
                 "flex flex-col cursor-pointer hover:bg-white/5 px-2 py-1 rounded transition-colors",
                 "hover:bg-white/10"
@@ -994,12 +1041,12 @@ return () => { socket.off('gameStateUpdate'); };
           </div>
 
           <div className={cn(
-             "px-6 py-2 rounded-xl text-sm font-black uppercase italic tracking-[0.2em] shadow-2xl border border-white/10",
-             game.playerIds[game.currentTurnPlayer] === myUid 
-               ? "bg-[#f27d26] text-black animate-pulse" 
-               : "bg-zinc-800 text-white/50"
-           )}>
-             {game.playerIds[game.currentTurnPlayer] === myUid ? "YOUR ACTION" : "OPPONENT ACTION"}
+            "px-6 py-2 rounded-xl text-sm font-black uppercase italic tracking-[0.2em] shadow-2xl border border-white/10",
+            game.playerIds[game.currentTurnPlayer] === myUid
+              ? "bg-[#f27d26] text-black animate-pulse"
+              : "bg-zinc-800 text-white/50"
+          )}>
+            {game.playerIds[game.currentTurnPlayer] === myUid ? "YOUR ACTION" : "OPPONENT ACTION"}
           </div>
         </div>
 
@@ -1013,7 +1060,7 @@ return () => { socket.off('gameStateUpdate'); };
                   {game.phase === 'MAIN' && (
                     <>
                       {game.turnCount !== 1 && (
-                        <button 
+                        <button
                           className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
                           onClick={() => {
                             GameService.advancePhase(gameId!, 'DECLARE_BATTLE');
@@ -1023,7 +1070,7 @@ return () => { socket.off('gameStateUpdate'); };
                           进入战斗阶段 (Enter Battle)
                         </button>
                       )}
-                      <button 
+                      <button
                         className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
                         onClick={() => {
                           GameService.advancePhase(gameId!, 'DECLARE_END');
@@ -1036,7 +1083,7 @@ return () => { socket.off('gameStateUpdate'); };
                   )}
                   {game.phase === 'BATTLE_DECLARATION' && (
                     <>
-                      <button 
+                      <button
                         className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
                         onClick={() => {
                           GameService.advancePhase(gameId!, 'RETURN_MAIN');
@@ -1049,7 +1096,7 @@ return () => { socket.off('gameStateUpdate'); };
                   )}
                   {game.phase === 'DEFENSE_DECLARATION' && (
                     <>
-                      <button 
+                      <button
                         className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
                         onClick={() => {
                           handleDeclareDefense(undefined);
@@ -1062,7 +1109,7 @@ return () => { socket.off('gameStateUpdate'); };
                   )}
                   {game.phase === 'BATTLE_FREE' && (
                     <>
-                      <button 
+                      <button
                         className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest transition-all"
                         onClick={() => {
                           GameService.advancePhase(gameId!, 'PROPOSE_DAMAGE_CALCULATION');
@@ -1073,7 +1120,7 @@ return () => { socket.off('gameStateUpdate'); };
                       </button>
                     </>
                   )}
-                  <button 
+                  <button
                     className="w-full py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-xl font-bold uppercase tracking-widest transition-all text-red-400 mt-4"
                     onClick={() => setShowPhaseMenu(false)}
                   >
@@ -1103,9 +1150,9 @@ return () => { socket.off('gameStateUpdate'); };
           <div className="flex-1 flex items-center justify-center p-4 bg-[radial-gradient(circle_at_center,_rgba(242,125,38,0.03)_0%,_transparent_70%)]">
             <div className="w-[1920px] h-[1080px] shrink-0 shadow-[0_0_80px_rgba(0,0,0,0.9)] rounded-2xl overflow-hidden border-2 border-white/10 relative bg-black">
               {opponent && (
-                <PlayField 
-                  player={me} 
-                  opponent={opponent} 
+                <PlayField
+                  player={me}
+                  opponent={opponent}
                   game={game}
                   onCardClick={handleCardClick}
                   onPreviewCard={setPreviewCard}
@@ -1125,7 +1172,7 @@ return () => { socket.off('gameStateUpdate'); };
         {/* Defense Declaration Modal */}
         <AnimatePresence>
           {showDefenseModal && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1161,20 +1208,20 @@ return () => { socket.off('gameStateUpdate'); };
                   </div>
 
                   <div className="flex gap-4">
-                    <button 
+                    <button
                       onClick={() => handleDeclareDefense(selectedDefender || undefined)}
                       disabled={!selectedDefender}
                       className="px-16 py-4 bg-blue-600 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-blue-500 transition-all disabled:opacity-30 shadow-xl shadow-blue-600/20"
                     >
                       确认防御
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleDeclareDefense(undefined)}
                       className="px-16 py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all"
                     >
                       不防御
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
                         setShowDefenseModal(false);
                         setSelectedDefender(null);
@@ -1195,14 +1242,14 @@ return () => { socket.off('gameStateUpdate'); };
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-50">
             <div className="flex gap-4">
               {getAvailableAttackers().length > 0 && (
-                <button 
+                <button
                   onClick={() => setShowAttackModal(true)}
                   className="px-12 py-3 bg-red-600 hover:bg-red-500 text-white font-black uppercase italic tracking-widest rounded-xl shadow-[0_0_30px_rgba(220,38,38,0.5)] border border-red-400/50"
                 >
                   宣告攻击
                 </button>
               )}
-              <button 
+              <button
                 onClick={() => GameService.advancePhase(gameId!, 'RETURN_MAIN')}
                 className="px-12 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-black uppercase italic tracking-widest rounded-xl shadow-xl border border-white/20"
               >
@@ -1215,20 +1262,20 @@ return () => { socket.off('gameStateUpdate'); };
         {game.phase === 'DEFENSE_DECLARATION' && !me.isTurn && (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
             <div className="flex flex-col items-center gap-8 pointer-events-auto">
-              <motion.div 
+              <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 className="bg-zinc-900 border-2 border-blue-600/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(37,99,235,0.3)]"
               >
                 <h2 className="text-4xl font-black italic text-blue-500 uppercase tracking-widest">防御宣告 (DEFENSE)</h2>
                 <div className="flex gap-6">
-                  <button 
+                  <button
                     onClick={() => setShowDefenseModal(true)}
                     className="px-12 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black uppercase italic tracking-widest rounded-xl shadow-[0_0_30px_rgba(37,99,235,0.5)] border border-blue-400/50 transition-all hover:scale-105 active:scale-95"
                   >
                     进行防御
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleDeclareDefense(undefined)}
                     className="px-12 py-4 bg-zinc-800 hover:bg-zinc-700 text-white font-black uppercase italic tracking-widest rounded-xl transition-all hover:scale-105 active:scale-95 shadow-xl border border-white/20"
                   >
@@ -1243,7 +1290,7 @@ return () => { socket.off('gameStateUpdate'); };
 
         {game.phase === 'BATTLE_FREE' && me.isTurn && (
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-50">
-            <button 
+            <button
               onClick={handleEndBattleFree}
               className="px-16 py-4 bg-red-600/90 hover:bg-red-500 text-white font-black uppercase italic tracking-widest rounded-xl shadow-[0_0_30px_rgba(220,38,38,0.5)] border border-red-400/50 backdrop-blur-md"
             >
@@ -1256,7 +1303,7 @@ return () => { socket.off('gameStateUpdate'); };
         {/* Main Phase Buttons */}
         {game.phase === 'MAIN' && me.isTurn && (
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-50 pointer-events-none">
-            <motion.button 
+            <motion.button
               initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={() => GameService.advancePhase(gameId!, 'DECLARE_BATTLE')}
@@ -1264,7 +1311,7 @@ return () => { socket.off('gameStateUpdate'); };
             >
               进入战斗阶段
             </motion.button>
-            <motion.button 
+            <motion.button
               initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={() => GameService.advancePhase(gameId!, 'DECLARE_END')}
@@ -1277,13 +1324,13 @@ return () => { socket.off('gameStateUpdate'); };
 
         {game.phase === 'DAMAGE_CALCULATION' && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               className="bg-zinc-900 border-2 border-red-600/30 p-12 rounded-3xl flex flex-col items-center gap-8 shadow-2xl"
             >
               <h2 className="text-5xl font-black italic text-red-500 uppercase tracking-tighter">伤害判定 (DAMAGE)</h2>
-              <button 
+              <button
                 onClick={handleResolveDamage}
                 className="px-20 py-5 bg-red-600 hover:bg-red-500 text-white font-black uppercase italic tracking-widest rounded-2xl shadow-xl shadow-red-600/40 transition-all hover:scale-105"
               >
@@ -1300,7 +1347,7 @@ return () => { socket.off('gameStateUpdate'); };
               <p className="text-white/60 text-lg">你的手牌超过 6 张，请选择卡牌弃置 (当前: {me.hand.length})</p>
               <div className="flex gap-4 overflow-x-auto max-w-5xl p-8 custom-scrollbar">
                 {me.hand.map(card => (
-                  <motion.div 
+                  <motion.div
                     key={card.gamecardId}
                     whileHover={{ y: -20, scale: 1.1 }}
                     onClick={() => handleDiscardCard(card.gamecardId)}
@@ -1326,16 +1373,16 @@ return () => { socket.off('gameStateUpdate'); };
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             className="fixed z-[150] bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col min-w-[160px]"
-            style={{ 
-              left: Math.min(cardMenu.x, window.innerWidth - 160), 
-              top: Math.min(cardMenu.y, window.innerHeight - 200) 
+            style={{
+              left: Math.min(cardMenu.x, window.innerWidth - 160),
+              top: Math.min(cardMenu.y, window.innerHeight - 200)
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-4 py-2 bg-black/50 border-b border-white/10 text-xs font-bold text-zinc-400 uppercase tracking-widest">
               {cardMenu.card.fullName}
             </div>
-            
+
             {/* Play Action */}
             {(() => {
               const canPlay = cardMenu.zone === 'hand' && game.phase === 'MAIN' && me.isTurn && GameService.canPlayCard(me, cardMenu.card).canPlay;
@@ -1388,7 +1435,7 @@ return () => { socket.off('gameStateUpdate'); };
                           'hand': 'HAND'
                         };
                         const triggerLocation = zoneMap[cardMenu.zone] as TriggerLocation;
-                        
+
                         if (validEffects.length === 1) {
                           setEffectConfirmation({
                             card: cardMenu.card,
@@ -1594,7 +1641,7 @@ return () => { socket.off('gameStateUpdate'); };
                 <Zap className="w-6 h-6" />
                 确认发动效果
               </h3>
-              
+
               <div className="bg-black/50 p-6 rounded-xl border border-white/5 mb-8">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold text-white bg-red-600">
@@ -1619,9 +1666,9 @@ return () => { socket.off('gameStateUpdate'); };
                 <button
                   onClick={() => {
                     activateAbility(
-                      effectConfirmation.card, 
-                      effectConfirmation.effect, 
-                      effectConfirmation.effectIndex, 
+                      effectConfirmation.card,
+                      effectConfirmation.effect,
+                      effectConfirmation.effectIndex,
                       effectConfirmation.triggerLocation
                     );
                     setEffectConfirmation(null);
@@ -1644,28 +1691,28 @@ return () => { socket.off('gameStateUpdate'); };
             className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-md flex items-center justify-center p-8"
           >
             <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)]">
-               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">确认对抗</h2>
-               <p className="text-white/80">对手准备进入伤害判定阶段。你是否要在这之前进行对抗？</p>
-               <div className="flex gap-4">
-                 <button onClick={() => GameService.advancePhase(gameId!, 'CONFIRM_CONFRONTATION')} className="px-8 py-3 bg-[#f27d26] text-black font-black uppercase rounded-lg hover:bg-orange-400">进行对抗</button>
-                 <button onClick={() => GameService.advancePhase(gameId!, 'DECLINE_CONFRONTATION')} className="px-8 py-3 bg-zinc-700 text-white font-black uppercase rounded-lg hover:bg-zinc-600">不进行对抗</button>
-               </div>
+              <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">确认对抗</h2>
+              <p className="text-white/80">对手准备进入伤害判定阶段。你是否要在这之前进行对抗？</p>
+              <div className="flex gap-4">
+                <button onClick={() => GameService.advancePhase(gameId!, 'CONFIRM_CONFRONTATION')} className="px-8 py-3 bg-[#f27d26] text-black font-black uppercase rounded-lg hover:bg-orange-400">进行对抗</button>
+                <button onClick={() => GameService.advancePhase(gameId!, 'DECLINE_CONFRONTATION')} className="px-8 py-3 bg-zinc-700 text-white font-black uppercase rounded-lg hover:bg-zinc-600">不进行对抗</button>
+              </div>
             </div>
           </motion.div>
         )}
-        
+
         {game.phase === 'BATTLE_FREE' && game.battleState?.askConfront === 'ASKING_TURN_PLAYER' && me.isTurn && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-md flex items-center justify-center p-8"
           >
             <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)]">
-               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">确认对抗</h2>
-               <p className="text-white/80">对手拒绝了对抗。你是否要进行对抗？(选择否则直接进入伤害判定)</p>
-               <div className="flex gap-4">
-                 <button onClick={() => GameService.advancePhase(gameId!, 'CONFIRM_CONFRONTATION')} className="px-8 py-3 bg-[#f27d26] text-black font-black uppercase rounded-lg hover:bg-orange-400">进行对抗</button>
-                 <button onClick={() => GameService.advancePhase(gameId!, 'DECLINE_CONFRONTATION')} className="px-8 py-3 bg-zinc-700 text-white font-black uppercase rounded-lg hover:bg-zinc-600">不对抗，进入伤害判定</button>
-               </div>
+              <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">确认对抗</h2>
+              <p className="text-white/80">对手拒绝了对抗。你是否要进行对抗？(选择否则直接进入伤害判定)</p>
+              <div className="flex gap-4">
+                <button onClick={() => GameService.advancePhase(gameId!, 'CONFIRM_CONFRONTATION')} className="px-8 py-3 bg-[#f27d26] text-black font-black uppercase rounded-lg hover:bg-orange-400">进行对抗</button>
+                <button onClick={() => GameService.advancePhase(gameId!, 'DECLINE_CONFRONTATION')} className="px-8 py-3 bg-zinc-700 text-white font-black uppercase rounded-lg hover:bg-zinc-600">不对抗，进入伤害判定</button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -1674,7 +1721,7 @@ return () => { socket.off('gameStateUpdate'); };
       {/* Details Window / Preview Card Modal */}
       <AnimatePresence>
         {previewCard && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1683,8 +1730,8 @@ return () => { socket.off('gameStateUpdate'); };
           >
             <div className="flex gap-16 max-w-7xl max-h-screen items-center" onClick={e => e.stopPropagation()}>
               <div className="w-[400px] shrink-0 h-auto">
-                <img 
-                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`} 
+                <img
+                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`}
                   alt={previewCard.fullName}
                   className="w-full object-contain rounded-2xl shadow-[0_0_50px_rgba(255,255,255,0.1)] border-2 border-white/10"
                   referrerPolicy="no-referrer"
@@ -1697,10 +1744,10 @@ return () => { socket.off('gameStateUpdate'); };
                     <span className="text-sm font-bold tracking-widest text-zinc-500 uppercase">{previewCard.type} | {previewCard.color} | {previewCard.rarity}</span>
                   </div>
                   <button onClick={() => setPreviewCard(null)} className="p-3 bg-white/5 hover:bg-red-500 rounded-full transition-colors group">
-                     <X className="w-6 h-6 text-white group-hover:text-black" />
+                    <X className="w-6 h-6 text-white group-hover:text-black" />
                   </button>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto">
                   <h3 className="text-white/60 text-xs font-bold uppercase tracking-widest mb-4">Affected By Effects:</h3>
                   {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 ? (
@@ -1733,7 +1780,7 @@ return () => { socket.off('gameStateUpdate'); };
       {/* Full Image Overlay */}
       <AnimatePresence>
         {previewCard && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1749,15 +1796,15 @@ return () => { socket.off('gameStateUpdate'); };
             >
               {/* Full Image */}
               <div className="relative aspect-[3/4] h-[60vh] md:h-[80vh] rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl">
-                <img 
-                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`} 
+                <img
+                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`}
                   alt={previewCard.fullName}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
                 />
-                
+
                 {/* Close Button Mobile */}
-                <button 
+                <button
                   onClick={() => setPreviewCard(null)}
                   className="absolute top-4 right-4 p-2 bg-black/60 rounded-full md:hidden"
                 >
@@ -1772,7 +1819,7 @@ return () => { socket.off('gameStateUpdate'); };
                     <h2 className="text-3xl font-black tracking-tighter text-white">{previewCard.fullName}</h2>
                     <p className="text-zinc-400 font-bold">{previewCard.faction} • {previewCard.rarity}</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setPreviewCard(null)}
                     className="p-2 hover:bg-white/10 rounded-full transition-colors hidden md:block"
                   >
@@ -1811,9 +1858,9 @@ return () => { socket.off('gameStateUpdate'); };
                       <div className="flex items-center gap-2 mb-2">
                         <span className={cn(
                           "px-2 py-0.5 rounded text-[10px] font-bold text-white",
-                          effect.type === '永' ? "bg-green-600" : 
-                          effect.type === '诱' ? "bg-blue-600" :
-                          effect.type === '启' ? "bg-red-600" : "bg-zinc-600"
+                          effect.type === '永' ? "bg-green-600" :
+                            effect.type === '诱' ? "bg-blue-600" :
+                              effect.type === '启' ? "bg-red-600" : "bg-zinc-600"
                         )}>
                           {effect.type}
                         </span>
@@ -1828,7 +1875,7 @@ return () => { socket.off('gameStateUpdate'); };
                     <p className="text-xs italic text-zinc-500 leading-relaxed">"{previewCard.flavorText}"</p>
                   </div>
                 )}
-                
+
                 {/* Influencing Effects */}
                 {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 && (
                   <div className="mt-8 pt-8 border-t border-white/5">

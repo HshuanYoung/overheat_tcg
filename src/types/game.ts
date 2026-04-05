@@ -85,7 +85,7 @@ export interface Card {
   influencingEffects?: { sourceCardName: string; description: string }[];
   imageUrl: string;
   fullImageUrl: string;
-  rarity: 'C' | 'U' | 'R' | 'SR' | 'UR' | 'PR';
+  rarity: 'C' | 'U' | 'R' | 'SR' | 'UR' | 'SER' | 'PR';
   faction: string;
 }
 

@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LayoutGrid, Play, History, Heart, Plus, Trash2, Home as HomeIcon, Settings, User } from 'lucide-react';
 import { cn } from './lib/utils';
 
-import { getAuthUser, setAuthUser, setAuthToken } from './socket';
+import { socket, getAuthUser, setAuthUser, setAuthToken, getAuthToken } from './socket';
 import { Matchmaking } from './components/Matchmaking';
 import { BattleField } from './components/BattleField';
 import { DeckBuilder } from './components/DeckBuilder';
@@ -17,6 +17,10 @@ import { Rulebook } from './components/Rulebook';
 import { TopBar } from './components/TopBar';
 import { Home } from './components/Home';
 import { Profile } from './components/Profile';
+import { Store } from './components/Store';
+import { Collection } from './components/Collection';
+import { PracticeSetup } from './components/PracticeSetup';
+import { FriendMatch } from './components/FriendMatch';
 
 export default function App() {
   const [user, setUser] = useState<any | null>(null);
@@ -30,6 +34,19 @@ export default function App() {
     const savedUser = getAuthUser();
     if (savedUser) {
       setUser(savedUser);
+      // Ensure socket is connected and authenticates on every connect (including reconnects)
+      const token = getAuthToken();
+      if (token) {
+        const authHandler = () => {
+          socket.emit('authenticate', token);
+        };
+        socket.on('connect', authHandler);
+        if (!socket.connected) {
+          socket.connect();
+        } else {
+          authHandler();
+        }
+      }
     }
     setLoading(false);
   }, []);
@@ -51,6 +68,9 @@ export default function App() {
         setAuthToken(data.token);
         setAuthUser(data.user);
         setUser(data.user);
+        // Connect socket and authenticate after login
+        socket.connect();
+        socket.once('connect', () => socket.emit('authenticate', data.token));
       } else {
         setLoginError(data.error || 'Login failed');
       }
@@ -123,9 +143,11 @@ export default function App() {
             <Route path="/battle" element={<Matchmaking />} />
             <Route path="/battle/:gameId" element={<BattleField />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/friend-match" element={<div className="pt-24 px-12">好友约战即将上线</div>} />
-            <Route path="/history" element={<div className="pt-24 px-12">对战历史即将上线</div>} />
-            <Route path="/favorites" element={<div className="pt-24 px-12">收藏夹即将上线</div>} />
+            <Route path="/store" element={<Store />} />
+            <Route path="/collection" element={<Collection />} />
+            <Route path="/practice" element={<PracticeSetup />} />
+            <Route path="/friend-match" element={<FriendMatch />} />
+            <Route path="/history" element={<div className="pt-24 px-12 text-zinc-500 uppercase tracking-widest text-center">对战历史即将上线</div>} />
           </Routes>
         </main>
 

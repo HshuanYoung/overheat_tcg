@@ -40,23 +40,23 @@ const CardSlot: React.FC<{
 }> = ({ card, label, onClick, onPreview, className, isErosion, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent }) => {
   // Calculate thickness layers (max 8 for visual performance)
   const layers = Math.min(Math.floor(count / 3), 8);
-  
+
   return (
     <div className="relative w-full aspect-[3/4]">
       {/* Thickness Layers */}
       {Array.from({ length: layers }).map((_, i) => (
-        <div 
+        <div
           key={i}
           className="absolute inset-0 rounded-md border border-white/10 bg-zinc-900"
           style={{ transform: `translate(${(i + 1) * 1.5}px, -${(i + 1) * 1.5}px)`, zIndex: -i - 1 }}
         />
       ))}
-      
+
       <div
         className={cn(
-          "relative h-full w-full rounded-md border-2 border-dashed transition-all flex items-center justify-center group overflow-hidden cursor-pointer",
-          (card || isDeck || count > 0) ? "border-[#f27d26]/50 bg-black/40 shadow-lg" : "border-white/10 bg-white/5",
-          isSelectedForPayment ? "ring-2 ring-[#f27d26] ring-offset-2 ring-offset-black z-10" : "",
+          "relative h-full w-full rounded-md border border-white/10 transition-all flex items-center justify-center group overflow-hidden cursor-pointer",
+          (card || isDeck || count > 0) ? "bg-black/40 shadow-lg" : "bg-white/5",
+          isSelectedForPayment ? "z-10 shadow-[0_0_20px_rgba(168,85,247,0.8)] ring-1 ring-purple-400" : "",
           (isAttacking || isDefending) ? "z-10" : "",
           className
         )}
@@ -77,7 +77,7 @@ const CardSlot: React.FC<{
             )}
           </div>
         ) : count > 0 ? (
-           <CardComponent isBack />
+          <CardComponent isBack />
         ) : (
           <span className="text-[8px] uppercase font-bold opacity-20 tracking-widest text-center px-1">
             {label}
@@ -139,16 +139,15 @@ const PlayerHalf: React.FC<{
 }> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game }) => {
   const romanNumerals = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ'];
   const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[] } | null>(null);
-  const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
-  
   if (!player) return null;
+
 
   return (
     <div className={cn(
       "flex-1 grid grid-cols-[100px_1fr_100px] gap-2 p-2 relative h-full min-h-0",
       isOpponent ? "bg-red-500/5" : "bg-blue-500/5"
     )}>
-      <CardListModal 
+      <CardListModal
         isOpen={!!viewingZone}
         onClose={() => setViewingZone(null)}
         title={viewingZone?.title || ''}
@@ -161,21 +160,21 @@ const PlayerHalf: React.FC<{
         {isOpponent ? (
           // Opponent Left: Deck, Grave, Exile
           <div className="flex flex-col gap-2">
-            <CardSlot 
-              card={null} isDeck label="DECK" count={player.deck?.length || 0} 
+            <CardSlot
+              card={null} isDeck label="DECK" count={player.deck?.length || 0}
               className="border-white/20"
             />
-            <CardSlot 
-              card={null} 
-              label="GRAVE" count={player.grave?.length || 0} 
+            <CardSlot
+              card={null}
+              label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30"
               onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
               isFaceUp={false}
               isOpponent={isOpponent}
             />
-            <CardSlot 
-              card={null} 
-              label="EXILE" count={player.exile?.length || 0} 
+            <CardSlot
+              card={null}
+              label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30"
               onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
               isFaceUp={false}
@@ -188,10 +187,10 @@ const PlayerHalf: React.FC<{
             {Array.from({ length: 10 }).map((_, i) => {
               const item = player.itemZone?.[i];
               return (
-                <CardSlot 
+                <CardSlot
                   key={i}
                   card={item || null}
-                  label={`ITEM ${i+1}`}
+                  label={`ITEM ${i + 1}`}
                   onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
                   isExhausted={item ? item.isExhausted : false}
                   isSelectedForPayment={item ? paymentSelection?.exhaustIds.includes(item.gamecardId) : false}
@@ -210,7 +209,7 @@ const PlayerHalf: React.FC<{
             {/* Opponent Hand Area */}
             <div className="flex items-center gap-4">
               <div className="w-20 shrink-0">
-                <CardSlot 
+                <CardSlot
                   card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
                   label="PLAY" count={player.playZone?.length || 0}
                   className="border-yellow-500/30"
@@ -241,7 +240,7 @@ const PlayerHalf: React.FC<{
                   ...backCards.map(c => ({ ...c, isFaceUp: false })),
                   ...frontCards.map(c => ({ ...c, isFaceUp: true }))
                 ];
-                
+
                 return romanNumerals.map((num, i) => {
                   const displayCard = allCards[i];
                   return (
@@ -249,7 +248,7 @@ const PlayerHalf: React.FC<{
                       <span className="text-[10px] font-black text-white/30">{num}</span>
                       <div className="relative aspect-[3/4] w-full">
                         {displayCard ? (
-                          <CardSlot 
+                          <CardSlot
                             card={displayCard}
                             isFaceUp={displayCard.isFaceUp}
                             onPreview={onPreviewCard}
@@ -276,10 +275,10 @@ const PlayerHalf: React.FC<{
               {Array.from({ length: 6 }).map((_, i) => {
                 const unit = player.unitZone?.[i];
                 return (
-                  <CardSlot 
+                  <CardSlot
                     key={i}
                     card={unit || null}
-                    label={`UNIT ${i+1}`}
+                    label={`UNIT ${i + 1}`}
                     onPreview={onPreviewCard}
                     onClick={(e) => unit && onCardClick?.(unit, 'unit', i, e)}
                     isExhausted={unit ? unit.isExhausted : false}
@@ -300,10 +299,10 @@ const PlayerHalf: React.FC<{
               {Array.from({ length: 6 }).map((_, i) => {
                 const unit = player.unitZone?.[i];
                 return (
-                  <CardSlot 
+                  <CardSlot
                     key={i}
                     card={unit || null}
-                    label={`UNIT ${i+1}`}
+                    label={`UNIT ${i + 1}`}
                     onPreview={onPreviewCard}
                     onClick={(e) => unit && onCardClick?.(unit, 'unit', i, e)}
                     isExhausted={unit ? unit.isExhausted : false}
@@ -325,14 +324,14 @@ const PlayerHalf: React.FC<{
                   ...backCards.map(c => ({ ...c, isFaceUp: false })),
                   ...frontCards.map(c => ({ ...c, isFaceUp: true }))
                 ];
-                
+
                 return romanNumerals.map((num, i) => {
                   const displayCard = allCards[i];
                   return (
                     <div key={i} className="flex flex-col gap-1 items-center">
                       <div className="relative aspect-[3/4] w-full">
                         {displayCard ? (
-                          <CardSlot 
+                          <CardSlot
                             card={displayCard}
                             isFaceUp={displayCard.isFaceUp}
                             onPreview={onPreviewCard}
@@ -361,97 +360,37 @@ const PlayerHalf: React.FC<{
                   const total = player.hand.length;
                   const middle = (total - 1) / 2;
                   const offset = i - middle;
-                  const canPlayCheck = GameService.canPlayCard(player, card);
-                  const isSelected = selectedHandCardId === card.gamecardId;
-                  const isFeijingSelected = paymentSelection?.useFeijing?.includes(card.gamecardId);
                   const xPos = offset * 80;
+                  const isFeijingSelected = paymentSelection?.useFeijing?.includes(card.gamecardId);
 
                   return (
-                    <div 
-                      key={card.gamecardId || i} 
+                    <div
+                      key={card.gamecardId || i}
                       className="absolute w-16 transition-all duration-300 cursor-pointer"
                       style={{
-                        transform: `translateX(${xPos}px) ${(isSelected || isFeijingSelected) ? 'translateY(-40px) scale(1.5)' : ''}`,
-                        zIndex: (isSelected || isFeijingSelected) ? 100 : i
+                        transform: `translateX(${xPos}px) ${isFeijingSelected ? 'translateY(-40px) scale(1.5)' : ''}`,
+                        zIndex: isFeijingSelected ? 100 : i
                       }}
                       onClick={(e) => {
-                        if (pendingPlayCard) {
-                          onCardClick?.(card, 'hand', i, e);
-                          return;
-                        }
-                        if (isSelected) {
-                          setSelectedHandCardId(null);
-                        } else {
-                          setSelectedHandCardId(card.gamecardId || null);
-                        }
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        onPreviewCard?.(card);
+                        onCardClick?.(card, 'hand', i, e);
                       }}
                     >
-                      <CardComponent 
-                        card={card} 
-                        disableZoom 
+                      <CardComponent
+                        card={card}
+                        disableZoom
                         className={cn(
-                          "shadow-2xl transition-all duration-300",
-                          isSelected ? "shadow-[#f27d26]/60 ring-2 ring-[#f27d26]" : "shadow-black/50"
-                        )} 
+                          "shadow-2xl transition-all duration-300 shadow-black/50",
+                          isFeijingSelected && "shadow-[#f27d26]/60 ring-2 ring-[#f27d26]"
+                        )}
                       />
-                      
-                      {/* Play Button Overlay */}
-                      {isSelected && (
-                        <div className="absolute -top-14 left-1/2 -translate-x-1/2 z-[110] flex flex-col items-center animate-in fade-in zoom-in duration-200 gap-1">
-                          {canPlayCheck.canPlay ? (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onPlayCard?.(card);
-                                setSelectedHandCardId(null);
-                              }}
-                              className="bg-[#f27d26] text-black text-[10px] font-black px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(242,125,38,0.6)] hover:scale-110 active:scale-95 transition-all flex items-center gap-2 border-2 border-black/20"
-                            >
-                              <Play className="w-3 h-3 fill-current" />
-                              PLAY
-                            </button>
-                          ) : (
-                            <div className="bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded-lg shadow-xl whitespace-nowrap border-2 border-red-400/50 animate-bounce">
-                              {canPlayCheck.reason}
-                            </div>
-                          )}
-                          {card.effects?.some(e => e.type === 'ACTIVATE' || e.type === 'ACTIVATED') && (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onCardClick?.(card, 'hand', i, e);
-                                setSelectedHandCardId(null);
-                              }}
-                              className="bg-blue-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(59,130,246,0.6)] hover:scale-110 active:scale-95 transition-all flex items-center gap-2 border-2 border-black/20"
-                            >
-                              ACTIVATE
-                            </button>
-                          )}
-                          {game.phase === 'DISCARD' && (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onCardClick?.(card, 'hand', i, e);
-                                setSelectedHandCardId(null);
-                              }}
-                              className="bg-red-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:scale-110 active:scale-95 transition-all flex items-center gap-2 border-2 border-black/20"
-                            >
-                              DISCARD
-                            </button>
-                          )}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
+
                 {(player.hand?.length || 0) === 0 && <span className="text-[10px] text-white/20 uppercase font-bold italic absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">Empty Hand</span>}
               </div>
               <div className="w-16 shrink-0">
-                <CardSlot 
+                <CardSlot
                   card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
                   label="PLAY" count={player.playZone?.length || 0}
                   className="border-yellow-500/30"
@@ -470,10 +409,10 @@ const PlayerHalf: React.FC<{
             {Array.from({ length: 10 }).map((_, i) => {
               const item = player.itemZone?.[i];
               return (
-                <CardSlot 
+                <CardSlot
                   key={i}
                   card={item || null}
-                  label={`ITEM ${i+1}`}
+                  label={`ITEM ${i + 1}`}
                   onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
                   isExhausted={item ? item.isExhausted : false}
                   isSelectedForPayment={item ? paymentSelection?.exhaustIds.includes(item.gamecardId) : false}
@@ -485,22 +424,22 @@ const PlayerHalf: React.FC<{
         ) : (
           // Player Right: Exile, Grave, Deck
           <div className="flex flex-col gap-2">
-            <CardSlot 
-              card={null} 
-              label="EXILE" count={player.exile?.length || 0} 
+            <CardSlot
+              card={null}
+              label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30"
               onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
               isFaceUp={false}
             />
-            <CardSlot 
-              card={null} 
-              label="GRAVE" count={player.grave?.length || 0} 
+            <CardSlot
+              card={null}
+              label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30"
               onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
               isFaceUp={false}
             />
-            <CardSlot 
-              card={null} isDeck label="DECK" count={player.deck?.length || 0} 
+            <CardSlot
+              card={null} isDeck label="DECK" count={player.deck?.length || 0}
               className="border-white/20"
             />
           </div>
@@ -514,17 +453,17 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
   return (
     <div className="relative w-full h-full max-w-7xl mx-auto bg-[#0a0a0a] border-2 border-[#1a1a1a] rounded-xl shadow-2xl font-mono text-white select-none flex flex-col">
       {/* Grid Pattern Background */}
-      <div className="absolute inset-0 opacity-10 pointer-events-none" 
-           style={{ backgroundImage: 'radial-gradient(circle, #f27d26 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
-      
+      <div className="absolute inset-0 opacity-10 pointer-events-none"
+        style={{ backgroundImage: 'radial-gradient(circle, #f27d26 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+
       {/* Background Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
- 
+
       {/* Opponent Half */}
       <div className="flex-1 min-h-0">
-        <PlayerHalf 
-          player={opponent} 
-          isOpponent 
+        <PlayerHalf
+          player={opponent}
+          isOpponent
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
           game={game}
@@ -534,13 +473,13 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
           pendingPlayCard={pendingPlayCard}
         />
       </div>
- 
+
       {/* STACK AREA */}
       <div className="h-10 shrink-0 border-y border-white/10 bg-white/5 flex items-center justify-center px-6 relative z-10">
         <div className="flex items-center gap-3">
           {stack.length === 0 && <span className="text-[8px] text-white/10 uppercase font-bold italic tracking-widest">Stack Empty</span>}
           {stack.map((item, i) => (
-            <motion.div 
+            <motion.div
               key={i}
               initial={{ scale: 0.8, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -561,11 +500,11 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
           ))}
         </div>
       </div>
- 
+
       {/* Player Half */}
       <div className="flex-1 min-h-0">
-        <PlayerHalf 
-          player={player} 
+        <PlayerHalf
+          player={player}
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
           onPlayCard={onPlayCard}

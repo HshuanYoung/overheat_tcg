@@ -54,11 +54,58 @@ export const GameService = {
   },
 
   // --- Local UI Utilities ---
-  canPlayCard(player: any, card: Card) {
+  canPlayCard(player: any, card: Card): { canPlay: boolean; reason?: string } {
     if (!player || !card) return { canPlay: false };
+
+    // 1. Zone Checks
+    if (card.type === 'UNIT') {
+      if (!player.unitZone.some((c: any) => c === null)) {
+        return { canPlay: false, reason: 'UNIT ZONE IS FULL' };
+      }
+      if (card.specialName && player.unitZone.some((c: any) => c?.specialName === card.specialName)) {
+        return { canPlay: false, reason: 'ALREADY HAS UNIQUE UNIT' };
+      }
+    } else if (card.type === 'ITEM') {
+      if (card.specialName && player.itemZone.some((c: any) => c?.specialName === card.specialName)) {
+        return { canPlay: false, reason: 'ALREADY HAS UNIQUE ITEM' };
+      }
+    }
+
+    // 2. Color Requirements
+    const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
+    const countColors = (c: any) => {
+      if (c && c.color !== 'NONE') availableColors[c.color] = (availableColors[c.color] || 0) + 1;
+    };
+    player.unitZone.forEach(countColors);
+    player.itemZone.forEach(countColors);
+    player.erosionFront.forEach(countColors);
+
+    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
+      if ((availableColors[color] || 0) < (reqCount as number)) {
+        return { canPlay: false, reason: `MISSING COLOR: ${color}` };
+      }
+    }
+
+    // 3. Erosion Space Check (Costs)
     const cost = card.acValue || 0;
-    const currentErosion = (player.erosionFront?.filter((c: any) => c !== null).length || 0);
-    return { canPlay: currentErosion >= cost };
+    if (cost > 0) {
+      const currentTotalErosion = (player.erosionFront?.filter((c: any) => c !== null).length || 0) + 
+                                  (player.erosionBack?.filter((c: any) => c !== null).length || 0);
+      if (cost >= 10 - currentTotalErosion) {
+        return { canPlay: false, reason: 'NOT ENOUGH EROSION SPACE' };
+      }
+    }
+
+    // 4. Special Effect Limits (Erosion Back)
+    const playEffect = card.effects.find(e => e.type === 'ACTIVATE' || e.type === 'TRIGGER' || e.type === 'ALWAYS');
+    if (playEffect?.erosionBackLimit) {
+      const backCount = player.erosionBack.filter((c: any) => c !== null).length;
+      if (backCount < playEffect.erosionBackLimit[0] || backCount > playEffect.erosionBackLimit[1]) {
+        return { canPlay: false, reason: 'INVALID EROSION BACK COUNT' };
+      }
+    }
+
+    return { canPlay: true };
   },
 
 

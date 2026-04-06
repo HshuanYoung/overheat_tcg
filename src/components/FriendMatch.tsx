@@ -85,7 +85,7 @@ export const FriendMatch: React.FC = () => {
       const res = await fetch(`${BACKEND_URL}/api/games/friend/join`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode }),
+        body: JSON.stringify({ roomCode, deckId: selectedDeckId }),
       });
       const data = await res.json();
       if (data.error) { setError(data.error); setJoining(false); return; }

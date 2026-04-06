@@ -18,6 +18,20 @@ export const dbInit = async () => {
     try {
         conn = await pool.getConnection();
         console.log("Connected to MariaDB successfully");
+        
+        // Initialize tables
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS decks (
+                id VARCHAR(255) PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                cards LONGTEXT NOT NULL,
+                created_at BIGINT,
+                updated_at BIGINT,
+                INDEX (user_id)
+            )
+        `);
+        console.log("Database tables initialized.");
     } catch (err) {
         console.error("Failed to connect to MariaDB:", err);
     } finally {

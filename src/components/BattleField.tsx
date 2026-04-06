@@ -37,6 +37,7 @@ export const BattleField: React.FC = () => {
   const [selectedErosionCardId, setSelectedErosionCardId] = useState<string | null>(null);
   const [erosionChoice, setErosionChoice] = useState<'A' | 'B' | 'C' | null>(null);
 
+  const [timer, setTimer] = useState<number>(30);
   const [cardMenu, setCardMenu] = useState<{
     card: Card;
     zone: string;
@@ -59,28 +60,20 @@ export const BattleField: React.FC = () => {
 
   // Handle 30s response timeout
   useEffect(() => {
-    if (!gameId || !game || !getAuthUser() || game.isCountering === 0 || game.counterStack.length === 0) return;
-
-    const myUid = getAuthUser().uid;
-    const stackItem = game.counterStack[game.counterStack.length - 1];
-    if (!stackItem || !stackItem.timestamp) return;
-
-    const checkTimeout = () => {
+    if (!game || !game.phaseTimerStart) return;
+    
+    const interval = setInterval(() => {
       const now = Date.now();
-      const elapsed = now - stackItem.timestamp;
-      if (elapsed >= 30000) {
-        // Timeout reached, resolve automatically
-        // Only the player who played the card should trigger this to avoid conflicts.
-        if (myUid === stackItem.ownerUid) {
-          GameService.resolvePlay(gameId);
-        }
-
-      }
-    };
-
-    const interval = setInterval(checkTimeout, 1000);
+      const elapsed = now - (game.phaseTimerStart || now);
+      const remaining = Math.max(0, 30 - Math.floor(elapsed / 1000));
+      setTimer(remaining);
+      
+      // Auto-advance logic for critical phases (Defense, Mulligan, Confrontation)
+      // This will be handled server-side as well, but UI can show it.
+    }, 500);
+    
     return () => clearInterval(interval);
-  }, [game, gameId]);
+  }, [game?.phase, game?.phaseTimerStart]);
 
   useEffect(() => {
     const audio = new Audio('/assets/music_bg.wav');
@@ -109,7 +102,11 @@ export const BattleField: React.FC = () => {
   }, [gameId, location.state?.deckId]);
 
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId || gameId === 'undefined') {
+      console.error('[BattleField] Invalid gameId:', gameId);
+      navigate('/');
+      return;
+    }
 
     const joinAndListen = () => {
       console.log('[BattleField] Joining game:', gameId);
@@ -342,8 +339,8 @@ export const BattleField: React.FC = () => {
         card,
         zone,
         index,
-        x: rect.left - 10, // Position it slightly to the left of the card slot
-        y: rect.top + rect.height / 2
+        x: rect.left + rect.width / 2,
+        y: rect.top - 10
       });
     }
   };
@@ -1007,6 +1004,20 @@ export const BattleField: React.FC = () => {
                 </div>
                 <span className="text-xl font-black italic text-white uppercase tracking-wider flex items-center gap-2">
                   {game.phase}
+                  {timer <= 10 && (
+                    <motion.span 
+                      animate={{ scale: [1, 1.2, 1], opacity: [1, 0.5, 1] }} 
+                      transition={{ duration: 1, repeat: Infinity }}
+                      className={cn("ml-4 text-2xl font-mono", timer <= 5 ? "text-red-500" : "text-yellow-500")}
+                    >
+                      {timer}s
+                    </motion.span>
+                  )}
+                  {timer > 10 && (
+                    <span className="ml-4 text-xl font-mono text-white/40">
+                      {timer}s
+                    </span>
+                  )}
                 </span>
               </div>
 
@@ -1134,9 +1145,9 @@ export const BattleField: React.FC = () => {
               exit={{ opacity: 0, scale: 0.9, x: 20 }}
               className="fixed z-[200] flex flex-col items-center gap-1.5"
               style={{
-                left: cardMenu.x - 5,
+                left: cardMenu.x,
                 top: cardMenu.y,
-                transform: 'translate(-100%, -50%)'
+                transform: 'translate(-50%, -100%)'
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1227,17 +1238,19 @@ export const BattleField: React.FC = () => {
                   if (isMyCard && canUnitAttack(cardMenu.card)) {
                     return (
                       <div className="flex flex-col gap-1.5 items-center">
-                        <motion.button
-                          whileHover={{ scale: 1.1, x: -3 }}
-                          className="px-3 py-1 text-[9px] font-black tracking-tighter text-red-50 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.4)] flex items-center gap-2 border border-red-400/50"
-                          onClick={() => {
-                            handleDeclareAttack([cardMenu.card.gamecardId], false);
-                            setCardMenu(null);
-                          }}
-                        >
-                          <Sword className="w-2.5 h-2.5 fill-current" />
-                          ATTACK
-                        </motion.button>
+                          {!cardMenu.card.inAllianceGroup && (
+                            <motion.button
+                              whileHover={{ scale: 1.1, x: -3 }}
+                              className="px-3 py-1 text-[9px] font-black tracking-tighter text-red-50 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.4)] flex items-center gap-2 border border-red-400/50"
+                              onClick={() => {
+                                handleDeclareAttack([cardMenu.card.gamecardId], false);
+                                setCardMenu(null);
+                              }}
+                            >
+                              <Sword className="w-2.5 h-2.5 fill-current" />
+                              ATTACK
+                            </motion.button>
+                          )}
                         <motion.button
                           whileHover={{ scale: 1.1, x: -3 }}
                           className="px-3 py-1 text-[9px] font-black tracking-tighter text-red-50 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.4)] flex items-center gap-2 border border-red-400/50"

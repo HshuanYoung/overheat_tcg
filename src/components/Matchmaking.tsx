@@ -71,7 +71,11 @@ export const Matchmaking: React.FC = () => {
         try {
           const pollRes = await fetch(`${BACKEND_URL}/api/games/matchmaking`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ deckId: selectedDeckId })
           });
           const pollData = await pollRes.json();
           if (pollData.matched && pollData.gameId) {

@@ -24,12 +24,78 @@ const io = new Server(httpServer, {
     }
 });
 
+// Helper: Validate User Deck
+async function validateUserDeck(uId: string, dId: string): Promise<{ valid: boolean; cards?: Card[]; error?: string }> {
+    try {
+        const dRows = await pool.query('SELECT cards FROM decks WHERE id = ? AND user_id = ?', [dId, uId]);
+        if (dRows.length === 0) return { valid: false, error: '未找到卡组' };
+        
+        let cIds = typeof dRows[0].cards === 'string' ? JSON.parse(dRows[0].cards) : dRows[0].cards;
+        if (!Array.isArray(cIds)) cIds = [];
+
+        const cObjs = cIds.map((idVal: string) => {
+            return (SERVER_CARD_LIBRARY as any)[idVal];
+        }).filter(Boolean);
+        
+        if (cObjs.length !== cIds.length) {
+            return { valid: false, error: '部分卡牌在服务器库中未找到' };
+        }
+
+        const vRes = ServerGameService.validateDeck(cObjs as any);
+        if (!vRes.valid) return { valid: false, error: vRes.error };
+        
+        return { valid: true, cards: cObjs as any };
+    } catch (err) {
+        console.error('Validate deck error:', err);
+        return { valid: false, error: '数据库错误' };
+    }
+}
+
+async function handleBotMove(gameState: any, gameId: string) {
+    const bot = gameState.players['BOT_PLAYER'];
+    if (!bot || !bot.isTurn) return;
+
+    setTimeout(async () => {
+        try {
+            await ServerGameService.botMove(gameState);
+            await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
+            io.to(gameId).emit('gameStateUpdate', gameState);
+
+            // If bot is still on turn (e.g. played a card and need to move again)
+            if (gameState.players['BOT_PLAYER']?.isTurn) {
+                handleBotMove(gameState, gameId);
+            }
+        } catch (err) {
+            console.error('[Bot] handleBotMove error:', err);
+        }
+    }, 1000);
+}
+
+async function advancePhase(gameState: any, gameId: string, socket?: any, action?: any) {
+    try {
+        console.log(`[Socket] advancePhase for game ${gameId}, action: ${action}`);
+        await ServerGameService.advancePhase(gameState, action);
+
+        await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
+        io.to(gameId).emit('gameStateUpdate', gameState);
+
+        // Trigger Bot behavior if it's the bot's turn
+        const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+        if (currentPlayerId === 'BOT_PLAYER') {
+            handleBotMove(gameState, gameId);
+        }
+    } catch (err: any) {
+        console.error('[Socket] advancePhase error:', err);
+        if (socket) socket.emit('error', err.message || '阶段切换失败');
+    }
+}
+
 app.use(cors());
 app.use(express.json());
 
 // Initialize MariaDB Connection
 // Initialize MariaDB Connection and then start server
-dbInit();
+// dbInit() was moved to start() below
 
 
 // Login Endpoint
@@ -71,24 +137,18 @@ app.post('/api/games/practice', async (req, res): Promise<void> => {
     const user = verifyToken(authHeader.split(' ')[1]);
     if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
 
-    try {
-        const gameId = 'practice_' + Math.random().toString(36).substring(2, 9);
-        const userIdStr = user.userId.toString();
-        const initialState = {
-            playerIds: [userIdStr, 'BOT_PLAYER'],
-            players: {},
-            status: 'READY',
-            phase: 'INIT',
-            turnCount: 0,
-            currentTurnPlayer: 0,
-            logs: [],
-            mode: 'practice',
-            counterStack: [],
-            isCountering: 0,
-            effectUsage: {}
-        };
+    const { deckId } = req.body;
+    if (!deckId) { res.status(400).json({ error: '请选择卡组' }); return; }
 
-        await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(initialState)]);
+    try {
+        const validation = await validateUserDeck(user.userId, deckId);
+        if (!validation.valid) { res.status(400).json({ error: validation.error }); return; }
+
+        const gameId = 'practice_' + Math.random().toString(36).substring(2, 9);
+        const gameState = await ServerGameService.createPracticeGameState(validation.cards!, user.userId, user.displayName);
+        gameState.gameId = gameId;
+
+        await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
         res.json({ gameId });
     } catch (err) {
         console.error('Create practice game error:', err);
@@ -169,7 +229,7 @@ app.post('/api/games/friend/join', async (req, res): Promise<void> => {
 });
 
 // Matchmaking Queue
-const matchmakingQueue: { userId: string; socketId?: string; timestamp: number }[] = [];
+const matchmakingQueue: { userId: string; socketId?: string; timestamp: number; deck?: Card[] }[] = [];
 
 app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
     const authHeader = req.headers.authorization;
@@ -178,6 +238,12 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
     if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
 
     try {
+        const { deckId } = req.body;
+        if (!deckId) { res.status(400).json({ error: '请选择卡组' }); return; }
+
+        const validation = await validateUserDeck(user.userId, deckId);
+        if (!validation.valid) { res.status(400).json({ error: validation.error }); return; }
+
         // Remove self if already in queue
         const existingIdx = matchmakingQueue.findIndex(q => q.userId === user.userId);
         if (existingIdx !== -1) matchmakingQueue.splice(existingIdx, 1);
@@ -187,20 +253,10 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
         if (opponent && opponent.userId !== user.userId) {
             // Create a match
             const gameId = 'match_' + Math.random().toString(36).substring(2, 9);
-            const initialState = {
-                playerIds: [opponent.userId, user.userId],
-                players: {},
-                status: 'READY',
-                phase: 'INIT',
-                turnCount: 0,
-                currentTurnPlayer: 0,
-                logs: [],
-                mode: 'match',
-                counterStack: [],
-                isCountering: 0,
-                effectUsage: {}
-            };
-            await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(initialState)]);
+            const gameState = await ServerGameService.createMatchGameState(opponent.userId, opponent.deck!, user.userId, validation.cards!);
+            gameState.gameId = gameId;
+
+            await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
 
             // Notify the opponent via socket
             if (opponent.socketId) {
@@ -210,7 +266,7 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
             res.json({ gameId, matched: true });
         } else {
             // Add to queue
-            matchmakingQueue.push({ userId: user.userId, timestamp: Date.now() });
+            matchmakingQueue.push({ userId: user.userId, deck: validation.cards, timestamp: Date.now() });
             res.json({ matched: false, position: matchmakingQueue.length });
         }
     } catch (err) {
@@ -325,9 +381,16 @@ app.post('/api/user/decks', async (req, res): Promise<void> => {
     try {
         const deckData = req.body;
         const deckId = Math.random().toString(36).substring(2, 10);
+        
+        // Ensure we only store IDs
+        let cardIds = deckData.cards || [];
+        if (cardIds.length > 0 && typeof cardIds[0] === 'object') {
+            cardIds = cardIds.map((c: any) => c.id);
+        }
+
         await pool.query(
             'INSERT INTO decks (id, user_id, name, cards, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [deckId, user.userId, deckData.name, JSON.stringify(deckData.cards || []), Date.now(), Date.now()]
+            [deckId, user.userId, deckData.name, JSON.stringify(cardIds), Date.now(), Date.now()]
         );
         res.json({ id: deckId });
     } catch (err) {
@@ -344,9 +407,14 @@ app.put('/api/user/decks/:id', async (req, res): Promise<void> => {
     try {
         const deckId = req.params.id;
         const deckData = req.body;
+        
         if (deckData.cards) {
+            let cardIds = deckData.cards;
+            if (cardIds.length > 0 && typeof cardIds[0] === 'object') {
+                cardIds = cardIds.map((c: any) => c.id);
+            }
             await pool.query('UPDATE decks SET name = ?, cards = ?, updated_at = ? WHERE id = ? AND user_id = ?',
-                [deckData.name, JSON.stringify(deckData.cards), Date.now(), deckId, user.userId]);
+                [deckData.name, JSON.stringify(cardIds), Date.now(), deckId, user.userId]);
         } else {
             await pool.query('UPDATE decks SET name = ?, updated_at = ? WHERE id = ? AND user_id = ?',
                 [deckData.name, Date.now(), deckId, user.userId]);
@@ -624,9 +692,9 @@ io.on('connection', (socket) => {
         const gameId = typeof data === 'string' ? data : data.gameId;
         const deckId = typeof data === 'object' ? data.deckId : undefined;
 
-        console.log(gameId);
-        if (!gameId) {
-            console.log('[Socket] joinGame failed: Missing gameId');
+        console.log(`[Socket] Request gameId: ${gameId}`);
+        if (!gameId || gameId === 'undefined') {
+            console.log('[Socket] joinGame failed: Missing or invalid gameId');
             socket.emit('error', '无效的房间ID');
             return;
         }
@@ -696,62 +764,8 @@ io.on('connection', (socket) => {
             console.error('[Socket] joinGame exception:', err);
             socket.emit('error', '战场同步过程中发生错误');
         }
+// End of socket.on('joinGame')
     });
-
-
-    async function advancePhase(gameState: any, gameId: string, action?: any) {
-        try {
-            console.log(`[Socket] advancePhase for game ${gameId}, action: ${action}`);
-            console.log(`[Socket] Calling ServerGameService.advancePhase with action: ${action}`);
-            await ServerGameService.advancePhase(gameState, action);
-
-
-            await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
-            io.to(gameId).emit('gameStateUpdate', gameState);
-
-            // Trigger Bot behavior if it's the bot's turn
-            const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-            if (currentPlayerId === 'BOT_PLAYER') {
-                handleBotMove(gameState, gameId);
-            }
-        } catch (err: any) {
-            console.error('[Socket] advancePhase error:', err);
-            socket.emit('error', err.message || '阶段切换失败');
-        }
-    }
-
-
-    async function handleBotMove(gameState: any, gameId: string) {
-        const bot = gameState.players['BOT_PLAYER'];
-        if (!bot || !bot.isTurn) return;
-
-        setTimeout(async () => {
-            if (gameState.phase === 'MAIN') {
-                gameState.logs.push(`机器人正在思考...`);
-                await advancePhase(gameState, gameId, 'DECLARE_END');
-            } else if (gameState.phase === 'BATTLE_DECLARATION') {
-                const canAttack = bot.unitZone.some((c: any) => c && !c.isExhausted);
-                if (canAttack) {
-                    gameState.logs.push(`机器人正在思考攻击...`);
-                    await advancePhase(gameState, gameId, 'DECLARE_END');
-                } else {
-                    await advancePhase(gameState, gameId, 'DECLARE_END');
-                }
-            } else if (gameState.phase === 'EROSION') {
-                gameState.logs.push(`机器人选择了侵蚀选项 A。`);
-                await ServerGameService.handleErosionChoice(gameState, 'BOT_PLAYER', 'A');
-                await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
-                io.to(gameId).emit('gameStateUpdate', gameState);
-                
-                // If it moved to MAIN, trigger bot again
-                if (gameState.phase === 'MAIN') {
-                    handleBotMove(gameState, gameId);
-                }
-            } else if (gameState.phase === 'END' || gameState.phase === 'DISCARD') {
-                await advancePhase(gameState, gameId);
-            }
-        }, 1000);
-    }
 
 
 
@@ -819,7 +833,7 @@ io.on('connection', (socket) => {
                     });
 
                     gameState.logs.push(`调度结束。第 1 回合开始，由 ${gameState.players[firstUid].displayName} 先行。`);
-                    await advancePhase(gameState, gameId);
+                    await advancePhase(gameState, gameId, socket);
                     return;
                 }
 
@@ -883,6 +897,54 @@ const start = async () => {
         await initServerCardLibrary();
         console.log('[Server] Connecting to database...');
         await dbInit();
+
+        // Background Game Timeout Checker (30s)
+        setInterval(async () => {
+            try {
+                const activeGames = await pool.query('SELECT id, state FROM games WHERE status = 0');
+                for (const g of activeGames) {
+                    let gameState = typeof g.state === 'string' ? JSON.parse(g.state) : g.state;
+                    if (!gameState || !gameState.phaseTimerStart) continue;
+
+                    const now = Date.now();
+                    const elapsed = now - gameState.phaseTimerStart;
+                    if (elapsed > 30000) {
+                        console.log(`[Timer] Auto-advancing game ${g.id} due to timeout (phase: ${gameState.phase})`);
+
+                        if (['MULLIGAN', 'DEFENSE_DECLARATION', 'COUNTERING', 'EROSION', 'DISCARD', 'DRAW'].includes(gameState.phase)) {
+                            try {
+                                if (gameState.phase === 'COUNTERING') {
+                                    await ServerGameService.resolvePlay(gameState);
+                                } else if (gameState.phase === 'DEFENSE_DECLARATION') {
+                                    const defenderUid = gameState.playerIds[gameState.currentTurnPlayer === 0 ? 1 : 0];
+                                    await ServerGameService.declareDefense(gameState, defenderUid, undefined);
+                                } else if (gameState.phase === 'MULLIGAN') {
+                                    Object.values(gameState.players).forEach((p: any) => {
+                                        (p as any).mulliganDone = true;
+                                    });
+                                    await ServerGameService.advancePhase(gameState);
+                                } else {
+                                    await ServerGameService.advancePhase(gameState);
+                                }
+
+                                await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), g.id]);
+                                io.to(g.id).emit('gameStateUpdate', gameState);
+
+                                // Trigger Bot move if it's the bot's turn in the new phase
+                                const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+                                if (currentPlayerId === 'BOT_PLAYER') {
+                                    handleBotMove(gameState, g.id);
+                                }
+                            } catch (e) {
+                                console.error('[Timer] Error during auto-advance:', e);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('[Timer] Error:', err);
+            }
+        }, 5000);
 
         const PORT = process.env.PORT || 3001;
         httpServer.listen(PORT, () => {

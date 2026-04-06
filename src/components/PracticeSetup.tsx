@@ -36,7 +36,11 @@ export const PracticeSetup: React.FC = () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/games/practice`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ deckId: selectedDeckId })
       });
       const data = await res.json();
       navigate(`/battle/${data.gameId}`, { state: { deckId: selectedDeckId } });

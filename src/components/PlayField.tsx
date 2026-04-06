@@ -19,6 +19,7 @@ interface PlayFieldProps {
   myUid: string;
   selectedAttackers?: string[];
   selectedDefender?: string;
+  allianceInitiator?: string;
 }
 
 const CardSlot: React.FC<{
@@ -37,7 +38,8 @@ const CardSlot: React.FC<{
   isAttacking?: boolean;
   isDefending?: boolean;
   isOpponent?: boolean;
-}> = ({ card, label, onClick, onPreview, className, isErosion, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent }) => {
+  isAllianceInitiator?: boolean;
+}> = ({ card, label, onClick, onPreview, className, isErosion, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent, isAllianceInitiator }) => {
   // Calculate thickness layers (max 8 for visual performance)
   const layers = Math.min(Math.floor(count / 3), 8);
 
@@ -57,6 +59,7 @@ const CardSlot: React.FC<{
           "relative h-full w-full rounded-md border border-white/10 transition-all flex items-center justify-center group overflow-hidden cursor-pointer",
           (card || isDeck || count > 0) ? "bg-black/40 shadow-lg" : "bg-white/5",
           isSelectedForPayment ? "z-10 shadow-[0_0_20px_rgba(168,85,247,0.8)] ring-1 ring-purple-400" : "",
+          isAllianceInitiator ? "z-10 shadow-[0_0_20px_rgba(220,38,38,0.8)] ring-2 ring-red-600" : "",
           (isAttacking || isDefending) ? "z-10" : "",
           className
         )}
@@ -136,7 +139,8 @@ const PlayerHalf: React.FC<{
   selectedAttackers?: string[];
   selectedDefender?: string;
   game?: GameState;
-}> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game }) => {
+  allianceInitiator?: string;
+}> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator }) => {
   const romanNumerals = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ'];
   const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[] } | null>(null);
   if (!player) return null;
@@ -309,6 +313,7 @@ const PlayerHalf: React.FC<{
                     isSelectedForPayment={unit ? paymentSelection?.exhaustIds.includes(unit.gamecardId) : false}
                     isAttacking={unit ? (selectedAttackers?.includes(unit.gamecardId) || game?.battleState?.attackers.includes(unit.gamecardId)) : false}
                     isDefending={unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId) : false}
+                    isAllianceInitiator={unit && allianceInitiator === unit.gamecardId}
                     showCount={false}
                   />
                 );
@@ -449,7 +454,7 @@ const PlayerHalf: React.FC<{
   );
 };
 
-export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers, selectedDefender }) => {
+export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers, selectedDefender, allianceInitiator }) => {
   return (
     <div className="relative w-full h-full max-w-7xl mx-auto bg-[#0a0a0a] border-2 border-[#1a1a1a] rounded-xl shadow-2xl font-mono text-white select-none flex flex-col">
       {/* Grid Pattern Background */}
@@ -471,6 +476,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
           selectedDefender={selectedDefender}
           paymentSelection={paymentSelection}
           pendingPlayCard={pendingPlayCard}
+          allianceInitiator={allianceInitiator}
         />
       </div>
 
@@ -510,9 +516,9 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
           onPlayCard={onPlayCard}
           paymentSelection={paymentSelection}
           pendingPlayCard={pendingPlayCard}
-          selectedAttackers={selectedAttackers}
           selectedDefender={selectedDefender}
           game={game}
+          allianceInitiator={allianceInitiator}
         />
       </div>
 

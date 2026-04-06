@@ -1,23 +1,13 @@
 // @ts-nocheck
 let db: any;
 let auth: any;
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  onSnapshot,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-  getDoc
-} from 'firebase/firestore';
+// Firebase imports removed - logic is now database-agnostic
+import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect } from '../src/types/game';
 import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect } from '../src/types/game';
 import { CARD_LIBRARY } from '../src/data/cards';
 import { EventEngine } from '../src/services/EventEngine';
 
-const GAMES_COLLECTION = 'games';
+// GAMES_COLLECTION removed
 
 export function cleanForFirestore(obj: any): any {
   if (obj === undefined) {
@@ -457,6 +447,7 @@ export const ServerGameService = {
 
     gameState.phase = 'MAIN';
     gameState.isCountering = 0;
+    gameState.phaseTimerStart = Date.now();
 
     return gameState;
   },
@@ -475,11 +466,25 @@ export const ServerGameService = {
       throw new Error('单体攻击必须选择一个单位');
     }
 
+    if (!isAlliance) {
+      for (const id of attackerIds) {
+        const unit = player.unitZone.find(c => c?.gamecardId === id);
+        if (unit?.inAllianceGroup) {
+          throw new Error(`单位 [${unit.fullName}] 处于联军状态，只能进行联军攻击`);
+        }
+      }
+    }
+
     for (const id of attackerIds) {
       const unit = player.unitZone.find(c => c?.gamecardId === id);
       if (!unit) throw new Error('Attacker not found in unit zone');
       if (unit.isExhausted) throw new Error('Attacker is already exhausted');
       if (unit.canAttack === false) throw new Error(`单位 [${unit.fullName}] 无法攻击`);
+
+      // Interpretation: entering "allied territory" makes them participants in an alliance
+      if (isAlliance) {
+        unit.inAllianceGroup = true;
+      }
 
       // Attack conditions:
       // a. Upright, isrush=true, can attack this turn
@@ -514,6 +519,7 @@ export const ServerGameService = {
 
     // Transition to counter check (for now just move to defense declaration)
     gameState.phase = 'DEFENSE_DECLARATION';
+    gameState.phaseTimerStart = Date.now();
 
     return gameState;
   },
@@ -539,6 +545,7 @@ export const ServerGameService = {
 
     // Transition to counter check (for now just move to battle free)
     gameState.phase = 'BATTLE_FREE';
+    gameState.phaseTimerStart = Date.now();
 
     return gameState;
   },
@@ -625,6 +632,7 @@ export const ServerGameService = {
 
     gameState.phase = 'MAIN';
     gameState.battleState = undefined;
+    gameState.phaseTimerStart = Date.now();
     return gameState;
   },
 
@@ -719,6 +727,7 @@ export const ServerGameService = {
     gameState.currentTurnPlayer = gameState.currentTurnPlayer === 0 ? 1 : 0;
     gameState.turnCount += 1;
     gameState.phase = 'START';
+    gameState.phaseTimerStart = Date.now();
     const nextPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const nextPlayer = gameState.players[nextPlayerId];
 
@@ -731,6 +740,7 @@ export const ServerGameService = {
 
   async advancePhase(gameState: GameState, action?: 'DECLARE_BATTLE' | 'DECLARE_END' | 'RETURN_MAIN' | 'PROPOSE_DAMAGE_CALCULATION' | 'CONFIRM_CONFRONTATION' | 'DECLINE_CONFRONTATION' | 'DAMAGE_CALCULATION' | 'COUNTERING') {
     console.log(`[ServerGameService] advancePhase call, action: ${action}, phase: ${gameState.phase}`);
+    gameState.phaseTimerStart = Date.now();
     const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
 
     const currentPlayer = gameState.players[currentPlayerId];
@@ -855,6 +865,7 @@ export const ServerGameService = {
 
     // Automatically move to DRAW phase
     gameState.phase = 'DRAW';
+    gameState.phaseTimerStart = Date.now();
     this.executeDrawPhase(gameState, player);
   },
 
@@ -900,7 +911,7 @@ export const ServerGameService = {
     console.log(`[ServerGameService] executeErosionPhase for ${player.displayName}`);
     const faceUpCards = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
     console.log(`[ServerGameService] Found ${faceUpCards.length} face-up cards in erosion front`);
-    
+
     if (faceUpCards.length === 0) {
       gameState.logs.push(`${player.displayName} 侵蚀区没有正面卡，跳过侵蚀阶段。`);
       gameState.phase = 'MAIN';
@@ -1032,7 +1043,8 @@ export const ServerGameService = {
       logs: ['游戏已创建。等待对手加入...'],
       players: {
         [({ uid: "temp", displayName: "temp" } as any).uid]: initialPlayerState
-      }
+      },
+      phaseTimerStart: Date.now()
     };
 
     await setDoc(doc(null as any, GAMES_COLLECTION, ''), cleanForFirestore({
@@ -1126,7 +1138,8 @@ export const ServerGameService = {
       players: {
         [({ uid: "temp", displayName: "temp" } as any).uid]: myState,
         'BOT_PLAYER': botState
-      }
+      },
+      phaseTimerStart: Date.now()
     };
 
     await setDoc(doc(null as any, GAMES_COLLECTION, ''), cleanForFirestore({
@@ -1137,18 +1150,9 @@ export const ServerGameService = {
     return '';
   },
 
-  // Mulligan action
-  async performMulligan(gameState: GameState, cardIdsToReturn: string[]) {
-    const gameRef = doc(null as any, GAMES_COLLECTION, '');
-    const gameSnap = await getDoc(gameRef);
-    if (!gameSnap.exists()) return;
-
-    const game = gameSnap.data() as GameState;
-    const uid = ({ uid: "temp", displayName: "temp" } as any)?.uid;
-    if (!uid) return;
-
-    const player = game.players[uid];
-    if (player.mulliganDone) return;
+  async performMulligan(gameState: GameState, cardIdsToReturn: string[], uid: string) {
+    const player = gameState.players[uid];
+    if (!player || player.mulliganDone) return;
 
     if (cardIdsToReturn.length > 0) {
       // Return cards to deck
@@ -1173,37 +1177,29 @@ export const ServerGameService = {
         }
       }
 
-      game.logs.push(`${player.displayName} 进行了调度，更换了 ${cardIdsToReturn.length} 张卡牌。`);
+      gameState.logs.push(`${player.displayName} 进行了调度，更换了 ${cardIdsToReturn.length} 张卡牌。`);
     } else {
-      game.logs.push(`${player.displayName} 接受了初始手牌。`);
+      gameState.logs.push(`${player.displayName} 接受了初始手牌。`);
     }
 
     player.mulliganDone = true;
 
     // Check if both players are done
-    const allDone = Object.values(game.players).every(p => p.mulliganDone);
+    const allDone = Object.values(gameState.players).every(p => p.mulliganDone);
     if (allDone) {
-      game.phase = 'START';
-      game.turnCount = 1;
+      gameState.phase = 'START';
+      gameState.turnCount = 1;
       // Find the first player
-      const firstPlayerIdx = game.players[game.playerIds[0]].isFirst ? 0 : 1;
-      game.currentTurnPlayer = firstPlayerIdx as 0 | 1;
+      const firstPlayerIdx = gameState.players[gameState.playerIds[0]].isFirst ? 0 : 1;
+      gameState.currentTurnPlayer = firstPlayerIdx as 0 | 1;
 
-      const firstPlayerUid = game.playerIds[game.currentTurnPlayer];
-      game.players[firstPlayerUid].isTurn = true;
-      game.logs.push(`调度结束。第 1 回合开始，由 ${game.players[firstPlayerUid].displayName} 先行。`);
+      const firstPlayerUid = gameState.playerIds[gameState.currentTurnPlayer];
+      gameState.players[firstPlayerUid].isTurn = true;
+      gameState.logs.push(`调度结束。第 1 回合开始，由 ${gameState.players[firstPlayerUid].displayName} 先行。`);
 
-      const firstPlayer = game.players[firstPlayerUid];
-      this.executeStartPhase(game, firstPlayer);
+      const firstPlayer = gameState.players[firstPlayerUid];
+      this.executeStartPhase(gameState, firstPlayer);
     }
-
-    await updateDoc(gameRef, cleanForFirestore({
-      players: game.players,
-      phase: game.phase,
-      turnCount: game.turnCount,
-      currentTurnPlayer: game.currentTurnPlayer,
-      logs: game.logs
-    }));
   },
 
   async endTurn(gameState: GameState) {
@@ -1212,42 +1208,27 @@ export const ServerGameService = {
 
   // Bot logic
   async botMove(gameState: GameState) {
-    const gameRef = doc(null as any, GAMES_COLLECTION, '');
-    const gameSnap = await getDoc(gameRef);
-    if (!gameSnap.exists()) return;
-
-    const game = gameSnap.data() as GameState;
-    const bot = game.players['BOT_PLAYER'];
+    const bot = gameState.players['BOT_PLAYER'];
     if (!bot) return;
 
-    // Handle Countering (Bot chooses not to counter)
-    if (game.phase === 'COUNTERING') {
-      const lastStackItem = game.counterStack[game.counterStack.length - 1];
-      if (lastStackItem && lastStackItem.ownerUid !== 'BOT_PLAYER') {
-        // Player played a card, bot chooses not to counter
-        await this.resolvePlay(gameState);
-        return;
-      }
+    // Handle Countering (Bot skips countering)
+    if (gameState.phase === 'COUNTERING') {
+      await this.resolvePlay(gameState);
       return;
     }
 
-    // Handle Defense Declaration
-    if (game.phase === 'DEFENSE_DECLARATION') {
-      const attackerUid = Object.keys(game.players).find(uid => game.players[uid].isTurn);
+    // Handle Defense Declaration (Bot chooses not to defend)
+    if (gameState.phase === 'DEFENSE_DECLARATION') {
+      const attackerUid = Object.keys(gameState.players).find(uid => gameState.players[uid].isTurn);
       if (attackerUid !== 'BOT_PLAYER') {
-        // Bot is the defender
-        const availableDefender = bot.unitZone.find(c => c && !c.isExhausted);
-        if (availableDefender) {
-          await this.declareDefense(gameState, 'BOT_PLAYER', availableDefender.gamecardId);
-        } else {
-          await this.declareDefense(gameState, 'BOT_PLAYER', undefined);
-        }
+        // Bot is the defender - skip defense
+        await this.declareDefense(gameState, 'BOT_PLAYER', undefined);
         return;
       }
     }
 
     // Handle Discard Phase
-    if (game.phase === 'DISCARD' && bot.isTurn) {
+    if (gameState.phase === 'DISCARD' && bot.isTurn) {
       if (bot.hand.length > 6) {
         await this.discardCard(gameState, 'BOT_PLAYER', bot.hand[0].gamecardId);
       }
@@ -1257,21 +1238,21 @@ export const ServerGameService = {
     if (!bot.isTurn) return;
 
     // Handle Erosion Phase
-    if (game.phase === 'EROSION') {
+    if (gameState.phase === 'EROSION') {
       await this.handleErosionChoice(gameState, 'BOT_PLAYER', 'A');
       return;
     }
 
     // Main Phase Logic
-    if (game.phase === 'MAIN') {
-      // Try to play cards in order
+    if (gameState.phase === 'MAIN') {
+      // Sequentially play all possible cards from hand
       for (const card of bot.hand) {
         const canPlay = this.canPlayCard(bot, card);
         if (canPlay.canPlay) {
           try {
-            // Bot plays with default payment (deck to erosion)
             await this.playCard(gameState, 'BOT_PLAYER', card.gamecardId, {});
-            return; // Exit and wait for next botMove call or player response
+            // We return and let the next botMove tick handle the next card to ensure stack resolution
+            return;
           } catch (e) {
             console.error('Bot failed to play card', e);
           }
@@ -1282,11 +1263,11 @@ export const ServerGameService = {
       const canAttack = bot.unitZone.some(c => {
         if (!c || c.isExhausted) return false;
         const isRush = !!c.isrush;
-        const wasPlayedThisTurn = c.playedTurn === game.turnCount;
+        const wasPlayedThisTurn = c.playedTurn === gameState.turnCount;
         return isRush || !wasPlayedThisTurn;
       });
 
-      if (game.turnCount > 1 && canAttack) {
+      if (gameState.turnCount > 1 && canAttack) {
         // Enter battle phase
         await this.advancePhase(gameState, 'DECLARE_BATTLE');
       } else {
@@ -1296,11 +1277,11 @@ export const ServerGameService = {
     }
 
     // Battle Declaration Phase
-    if (game.phase === 'BATTLE_DECLARATION' && bot.isTurn) {
+    if (gameState.phase === 'BATTLE_DECLARATION' && bot.isTurn) {
       const attacker = bot.unitZone.find(c => {
         if (!c || c.isExhausted) return false;
         const isRush = !!c.isrush;
-        const wasPlayedThisTurn = c.playedTurn === game.turnCount;
+        const wasPlayedThisTurn = c.playedTurn === gameState.turnCount;
         return isRush || !wasPlayedThisTurn;
       });
       if (attacker) {
@@ -1312,80 +1293,20 @@ export const ServerGameService = {
     }
 
     // Battle Free Phase
-    if (game.phase === 'BATTLE_FREE' && bot.isTurn) {
+    if (gameState.phase === 'BATTLE_FREE' && bot.isTurn) {
       // Bot just ends battle free phase
-      await updateDoc(gameRef, { phase: 'DAMAGE_CALCULATION' });
+      gameState.phase = 'DAMAGE_CALCULATION';
       return;
     }
 
     // Damage Calculation Phase
-    if (game.phase === 'DAMAGE_CALCULATION') {
+    if (gameState.phase === 'DAMAGE_CALCULATION') {
       await this.resolveDamage(gameState);
       return;
     }
   },
 
-  // Join an existing game
-  async joinGame(gameState: GameState, deck: Card[]) {
-    if (!({ uid: "temp", displayName: "temp" } as any)) throw new Error('Not authenticated');
-
-    const validation = this.validateDeck(deck);
-    if (!validation.valid) throw new Error(validation.error);
-
-    const gameRef = doc(null as any, GAMES_COLLECTION, '');
-    const gameSnap = await getDoc(gameRef);
-
-    if (!gameSnap.exists()) throw new Error('Game not found');
-    const gameData = gameSnap.data() as GameState;
-
-    if ((gameData as any).status !== 'WAITING') throw new Error('Game already full');
-
-    const opponentState: PlayerState = {
-      uid: ({ uid: "temp", displayName: "temp" } as any).uid,
-      displayName: ({ uid: "temp", displayName: "temp" } as any).displayName || 'Player 2',
-      deck: this.assignGameCardIds(this.shuffle([...deck])),
-      hand: [],
-      grave: [],
-      exile: [],
-      itemZone: [],
-      erosionFront: [],
-      erosionBack: [],
-      unitZone: Array(6).fill(null),
-      playZone: [],
-      isTurn: false,
-      isFirst: false,
-      mulliganDone: false,
-      hasExhaustedThisTurn: [],
-    };
-
-    // Initial Draw 4
-    for (let i = 0; i < 4; i++) {
-      const card = opponentState.deck.pop();
-      if (card) opponentState.hand.push(card);
-    }
-
-    // Random first player
-    const uids = [Object.keys(gameData.players)[0], ({ uid: "temp", displayName: "temp" } as any).uid];
-    const firstIdx = Math.floor(Math.random() * uids.length) as 0 | 1;
-    const firstPlayerUid = uids[firstIdx];
-
-    const players = {
-      ...gameData.players,
-      [({ uid: "temp", displayName: "temp" } as any).uid]: opponentState
-    };
-
-    players[uids[0]].isFirst = firstPlayerUid === uids[0];
-    players[uids[1]].isFirst = firstPlayerUid === uids[1];
-
-    await updateDoc(gameRef, cleanForFirestore({
-      players,
-      playerIds: uids,
-      phase: 'MULLIGAN',
-      currentTurnPlayer: firstIdx,
-      status: 'ACTIVE',
-      logs: [...gameData.logs, `${opponentState.displayName} 加入了游戏。请进行调度 (Mulligan)。`]
-    }));
-  },
+  // Legacy Join Game removed
 
   // Helper: Assign unique gamecardId to all cards in a deck
   assignGameCardIds(deck: Card[]): Card[] {
@@ -1402,5 +1323,114 @@ export const ServerGameService = {
       [array[i], array[j]] = [array[j], array[i]];
     }
     return array;
+  },
+
+  async createPracticeGameState(deck: Card[], playerUid: string, playerName: string): Promise<GameState> {
+    const initializedDeck = deck.map(card => ({
+      ...card,
+      basePower: card.basePower ?? card.power,
+      baseDamage: card.baseDamage ?? card.damage,
+      baseIsrush: card.baseIsrush ?? card.isrush,
+      baseCanAttack: card.baseCanAttack ?? card.canAttack,
+      baseGodMark: card.baseGodMark ?? card.godMark,
+      baseAcValue: card.baseAcValue ?? card.acValue,
+      baseCanActivateEffect: card.baseCanActivateEffect ?? card.canActivateEffect ?? true,
+      cardlocation: 'DECK',
+      displayState: 'FRONT_FACEDOWN'
+    }));
+
+    const myState: PlayerState = {
+      uid: playerUid,
+      displayName: playerName,
+      deck: this.assignGameCardIds(this.shuffle([...initializedDeck])),
+      hand: [],
+      grave: [],
+      exile: [],
+      itemZone: Array(6).fill(null),
+      erosionFront: Array(10).fill(null),
+      erosionBack: Array(10).fill(null),
+      unitZone: Array(6).fill(null),
+      playZone: [],
+      isTurn: false,
+      isFirst: false,
+      mulliganDone: false,
+      hasExhaustedThisTurn: [],
+    };
+
+    const botState: PlayerState = {
+      uid: 'BOT_PLAYER',
+      displayName: '神蚀 AI',
+      deck: this.assignGameCardIds(this.shuffle([...initializedDeck])),
+      hand: [],
+      grave: [],
+      exile: [],
+      itemZone: Array(6).fill(null),
+      erosionFront: Array(10).fill(null),
+      erosionBack: Array(10).fill(null),
+      unitZone: Array(6).fill(null),
+      playZone: [],
+      isTurn: false,
+      isFirst: false,
+      mulliganDone: true,
+      hasExhaustedThisTurn: [],
+    };
+
+    // Draw 4
+    for (let i = 0; i < 4; i++) {
+      const c1 = myState.deck.pop(); if (c1) { c1.cardlocation = 'HAND'; myState.hand.push(c1); }
+      const c2 = botState.deck.pop(); if (c2) { c2.cardlocation = 'HAND'; botState.hand.push(c2); }
+    }
+
+    const firstIdx = Math.floor(Math.random() * 2) as 0 | 1;
+    myState.isFirst = firstIdx === 0;
+    botState.isFirst = firstIdx === 1;
+
+    const gameState: GameState = {
+      gameId: "temp",
+      phase: 'MULLIGAN',
+      currentTurnPlayer: firstIdx,
+      turnCount: 0,
+      isCountering: 0,
+      counterStack: [],
+      playerIds: [playerUid, 'BOT_PLAYER'],
+      gameStatus: 1,
+      logs: ['练习赛开始。由 AI 作为对手。'],
+      players: {
+        [playerUid]: myState,
+        'BOT_PLAYER': botState
+      },
+      phaseTimerStart: Date.now()
+    };
+    return gameState;
+  },
+
+  async createMatchGameState(uid1: string, deck1: Card[], uid2: string, deck2: Card[]): Promise<GameState> {
+    const init1 = this.assignGameCardIds(this.shuffle(deck1.map(c => ({ ...c, cardlocation: 'DECK', displayState: 'FRONT_FACEDOWN' }))));
+    const init2 = this.assignGameCardIds(this.shuffle(deck2.map(c => ({ ...c, cardlocation: 'DECK', displayState: 'FRONT_FACEDOWN' }))));
+
+    const p1: PlayerState = {
+      uid: uid1, displayName: 'Player 1', deck: init1, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
+      isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
+    };
+    const p2: PlayerState = {
+      uid: uid2, displayName: 'Player 2', deck: init2, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
+      isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
+    };
+
+    for (let i = 0; i < 4; i++) {
+      const c1 = p1.deck.pop(); if (c1) { c1.cardlocation = 'HAND'; p1.hand.push(c1); }
+      const c2 = p2.deck.pop(); if (c2) { c2.cardlocation = 'HAND'; p2.hand.push(c2); }
+    }
+
+    const firstIdx = Math.floor(Math.random() * 2) as 0 | 1;
+    p1.isFirst = firstIdx === 0;
+    p2.isFirst = firstIdx === 1;
+
+    return {
+      gameId: "match", phase: 'MULLIGAN', currentTurnPlayer: firstIdx, turnCount: 0, isCountering: 0, counterStack: [],
+      playerIds: [uid1, uid2], gameStatus: 1, logs: ['匹配成功。对局开始'],
+      players: { [uid1]: p1, [uid2]: p2 },
+      phaseTimerStart: Date.now()
+    };
   }
 };

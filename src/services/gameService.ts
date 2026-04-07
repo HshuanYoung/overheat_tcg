@@ -36,6 +36,14 @@ export const GameService = {
     socket.emit('gameAction', { gameId, action: 'DEFEND', payload: { defenderId } });
   },
 
+  async passConfrontation(gameId: string) {
+    socket.emit('gameAction', { gameId, action: 'PASS_CONFRONTATION' });
+  },
+
+  async activateEffect(gameId: string, playerId: string, cardId: string, effectIndex: number) {
+    socket.emit('gameAction', { gameId, action: 'ACTIVATE_EFFECT', payload: { cardId, effectIndex } });
+  },
+
   async resolvePlay(gameId: string) {
     socket.emit('gameAction', { gameId, action: 'RESOLVE_PLAY' });
   },

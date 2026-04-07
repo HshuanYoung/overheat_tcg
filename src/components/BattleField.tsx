@@ -11,7 +11,7 @@ import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight } from 'lucide-react';
+import { Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const BattleField: React.FC = () => {
@@ -58,22 +58,32 @@ export const BattleField: React.FC = () => {
     triggerLocation: TriggerLocation;
   } | null>(null);
 
-  // Handle 30s response timeout
+  // Universal Visual Timer Logic
   useEffect(() => {
     if (!game || !game.phaseTimerStart) return;
     
     const interval = setInterval(() => {
       const now = Date.now();
       const elapsed = now - (game.phaseTimerStart || now);
-      const remaining = Math.max(0, 30 - Math.floor(elapsed / 1000));
-      setTimer(remaining);
       
-      // Auto-advance logic for critical phases (Defense, Mulligan, Confrontation)
-      // This will be handled server-side as well, but UI can show it.
+      const sharedPhases = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
+      const independentPhases = ['EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN'];
+
+      if (sharedPhases.includes(game.phase)) {
+        // Budget is mainPhaseTimeRemaining
+        const remaining = Math.max(0, (game.mainPhaseTimeRemaining || 300000) - elapsed);
+        setTimer(Math.floor(remaining / 1000));
+      } else if (independentPhases.includes(game.phase)) {
+        // Budget is independent 30s
+        const remaining = Math.max(0, 30000 - elapsed);
+        setTimer(Math.floor(remaining / 1000));
+      } else {
+        setTimer(30);
+      }
     }, 500);
     
     return () => clearInterval(interval);
-  }, [game?.phase, game?.phaseTimerStart]);
+  }, [game?.phase, game?.phaseTimerStart, game?.mainPhaseTimeRemaining]);
 
   useEffect(() => {
     const audio = new Audio('/assets/music_bg.wav');
@@ -137,7 +147,7 @@ export const BattleField: React.FC = () => {
     if (!game || !gameId || !getAuthUser()) return;
 
     const myUid = getAuthUser().uid;
-    const isWaitingForMe = game.counterStack?.length > 0 && game.counterStack[game.counterStack.length - 1]?.ownerUid !== myUid;
+    const isWaitingForMe = game.phase === 'COUNTERING' && game.priorityPlayerId === myUid;
 
     if (isWaitingForMe) {
       setCounterTimer(30);
@@ -145,7 +155,7 @@ export const BattleField: React.FC = () => {
         setCounterTimer((prev) => {
           if (prev <= 1) {
             clearInterval(interval);
-            handleResolve(); // Auto resolve when timer hits 0
+            handleResolve(); // Auto pass when timer hits 0
             return 0;
           }
           return prev - 1;
@@ -155,7 +165,7 @@ export const BattleField: React.FC = () => {
     } else {
       setCounterTimer(30); // Reset timer when not waiting
     }
-  }, [game?.counterStack, gameId]);
+  }, [game?.phase, game?.priorityPlayerId, gameId]);
 
   // Bot Logic
   useEffect(() => {
@@ -349,43 +359,12 @@ export const BattleField: React.FC = () => {
   const activateAbility = async (card: Card, effect: CardEffect, effectIndex: number, triggerLocation?: TriggerLocation) => {
     if (!gameId) return;
 
-    if (card.canActivateEffect === false) {
-      alert("此卡牌目前无法发动效果！");
-      return;
-    }
-
-    if (!GameService.checkEffectLimitsAndReqs(game, myUid, card, effect, triggerLocation)) {
-      alert("不满足发动条件或已达到使用次数限制！");
-      return;
-    }
-
-    // Check and pay cost if defined
-    if (effect.cost) {
-      const canPay = effect.cost(game, me, card);
-      if (!canPay) {
-        alert("无法支付发动效果的费用！");
-        return;
-      }
-    }
-
-    const newStackItem: StackItem = {
-      card: card,
-      ownerUid: myUid,
-      type: 'EFFECT',
-      effectIndex: effectIndex,
-      timestamp: Date.now()
-    };
-
-    game.counterStack.push(newStackItem);
-    game.phase = 'COUNTERING';
-    game.isCountering = 1;
-    GameService.recordEffectUsage(game, myUid, card, effect);
-    game.logs.push(`${me.displayName} 发动了 [${card.fullName}] 的 [启] 能力: ${effect.description}`);
-
     try {
-      socket.emit('gameAction', { gameId, action: 'ACTIVATE_EFFECT', payload: { cardId: card.gamecardId, effectIndex: effectIndex } });
-    } catch (error) {
-      console.error("Error activating ability:", error);
+      await GameService.activateEffect(gameId, myUid, card.gamecardId, effectIndex);
+      setEffectConfirmation(null);
+      setEffectSelection(null);
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
@@ -424,7 +403,11 @@ export const BattleField: React.FC = () => {
   const handleResolve = async () => {
     if (!gameId) return;
     try {
-      await GameService.resolvePlay(gameId);
+      if (game.phase === 'COUNTERING') {
+        await GameService.passConfrontation(gameId);
+      } else {
+        await GameService.resolvePlay(gameId);
+      }
     } catch (error: any) {
       alert(error.message);
     }
@@ -831,62 +814,8 @@ export const BattleField: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Stack / Countering Overlay */}
-      <AnimatePresence>
-        {game.counterStack?.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center"
-          >
-            <div className="flex flex-col items-center gap-8">
-              <h3 className="text-2xl font-black italic text-white uppercase tracking-widest">
-                {game.counterStack[game.counterStack.length - 1]?.ownerUid === myUid ? 'WAITING FOR OPPONENT...' : 'OPPONENT PLAYED A CARD'}
-              </h3>
-              <div className="flex gap-8 items-center">
-                {game.counterStack.map((item, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ scale: 0.5, y: 100 }}
-                    animate={{ scale: 1, y: 0 }}
-                    className="w-64 relative"
-                  >
-                    <CardComponent card={item.card} />
-                    <div className="absolute -top-4 -left-4 bg-[#f27d26] text-black px-3 py-1 rounded-full text-[10px] font-black uppercase italic">
-                      {game.players[item.ownerUid].displayName}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
 
-              <div className="flex gap-4">
-                {game.counterStack[game.counterStack.length - 1]?.ownerUid !== myUid && (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="text-white/50 font-bold text-sm uppercase tracking-widest">
-                      RESPONSE TIMER: <span className={cn("text-lg", counterTimer <= 10 ? "text-red-500 animate-pulse" : "text-[#f27d26]")}>{counterTimer}s</span>
-                    </div>
-                    <div className="flex gap-4">
-                      <button
-                        className="px-12 py-3 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all"
-                        onClick={() => {/* Counter logic */ }}
-                      >
-                        COUNTER
-                      </button>
-                      <button
-                        className="px-12 py-3 bg-white text-black font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-200 transition-all"
-                        onClick={handleResolve}
-                      >
-                        PASS (RESOLVE)
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       {/* Header */}
       <div className="h-14 border-b border-white/5 flex items-center justify-between px-8 bg-black/80 backdrop-blur-md z-30">
@@ -924,7 +853,7 @@ export const BattleField: React.FC = () => {
               </motion.button>
             )}
 
-            {me.isTurn && game.phase === 'BATTLE' && (
+            {me.isTurn && (game.phase === 'BATTLE_DECLARATION' || game.phase === 'BATTLE_FREE') && (
               <div className="flex gap-2">
                 <motion.button
                   initial={{ scale: 0.9 }}
@@ -998,27 +927,32 @@ export const BattleField: React.FC = () => {
                   }
                 }}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-white/40 uppercase font-black tracking-[0.2em]">Current Phase</span>
-                  {showPhaseMenu ? <X className="w-3 h-3 text-red-500" /> : <Loader2 className="w-3 h-3 text-[#f27d26] animate-spin-slow" />}
-                </div>
-                <span className="text-xl font-black italic text-white uppercase tracking-wider flex items-center gap-2">
-                  {game.phase}
-                  {timer <= 10 && (
-                    <motion.span 
-                      animate={{ scale: [1, 1.2, 1], opacity: [1, 0.5, 1] }} 
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className={cn("ml-4 text-2xl font-mono", timer <= 5 ? "text-red-500" : "text-yellow-500")}
-                    >
-                      {timer}s
-                    </motion.span>
-                  )}
-                  {timer > 10 && (
-                    <span className="ml-4 text-xl font-mono text-white/40">
-                      {timer}s
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-white/40 uppercase font-black tracking-widest flex items-center gap-2">
+                      Current Phase
+                      {['MULLIGAN', 'EROSION', 'COUNTERING', 'DEFENSE_DECLARATION', 'BATTLE_FREE'].includes(game.phase) && (
+                        <span className="inline-block w-2 h-2 rounded-full animate-pulse bg-orange-500" />
+                      )}
                     </span>
-                  )}
-                </span>
+                    <span className="text-xl font-black italic text-white uppercase tracking-wider">
+                      {game.phase.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <div className="h-10 w-px bg-white/10 mx-2" />
+                  <div className="flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5 shadow-inner">
+                    <Loader2 className={cn("w-4 h-4 animate-spin text-[#f27d26]", timer <= 10 && "text-red-500")} />
+                    <span className={cn(
+                      "text-2xl font-black italic tabular-nums leading-none",
+                      timer > 10 ? "text-white" : "text-red-500 animate-pulse"
+                    )}>
+                      {['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'].includes(game.phase)
+                        ? `${Math.floor(timer / 60)}:${String(timer % 60).padStart(2, '0')}`
+                        : `${timer}s`
+                      }
+                    </span>
+                  </div>
+                </div>
               </div>
 
 
@@ -1079,6 +1013,77 @@ export const BattleField: React.FC = () => {
           </div>
         </div>
 
+        <AnimatePresence>
+          {game.phase === 'COUNTERING' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-x-0 top-[15%] z-[140] flex flex-col items-center gap-4 pointer-events-none"
+            >
+              <div className={cn(
+                "bg-zinc-900/90 border border-red-500/50 px-8 py-4 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.3)] backdrop-blur-sm flex items-center gap-6",
+                game.priorityPlayerId === myUid && "border-red-500 animate-pulse ring-2 ring-red-500/20"
+              )}>
+                <div className="flex flex-col items-center">
+                  <p className="text-red-500 font-black tracking-widest uppercase flex items-center gap-3 text-lg italic">
+                    <ShieldCheck className="w-6 h-6 animate-pulse" />
+                    CONFRONTATION PHASE
+                  </p>
+                  <p className="text-zinc-500 text-[10px] uppercase tracking-[0.3em] font-bold">
+                    {game.priorityPlayerId === myUid ? "YOUR TURN TO RESPOND" : `WAITING FOR ${game.players[game.priorityPlayerId!].displayName.toUpperCase()}`}
+                  </p>
+                </div>
+
+                {game.priorityPlayerId === myUid && (
+                  <div className="flex items-center gap-3 pointer-events-auto">
+                    <button
+                      onClick={handleResolve}
+                      className="px-8 py-2 bg-red-600 hover:bg-red-700 text-white font-black italic uppercase tracking-widest rounded-full transition-all flex items-center gap-2 border border-red-400 group"
+                    >
+                      <X className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+                      PASS
+                    </button>
+                    <div className="h-4 w-px bg-white/20" />
+                    <div className="flex items-center gap-2 px-3 py-1 bg-black/40 rounded-full border border-red-500/30">
+                      <span className="text-red-500 font-mono text-xl font-black">{counterTimer}s</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Stack Visualization */}
+              <div className="flex gap-4 mt-8">
+               {game.counterStack.map((item, idx) => (
+                 <motion.div
+                   key={`${idx}-${item.timestamp}`}
+                   initial={{ y: 20, opacity: 0 }}
+                   animate={{ y: 0, opacity: 1 }}
+                   className={cn(
+                     "w-32 h-44 rounded-lg overflow-hidden border-2 shadow-2xl relative",
+                     idx === game.counterStack.length - 1 ? "border-red-500 scale-110 z-10" : "border-white/10 opacity-50 grayscale"
+                   )}
+                 >
+                   {item.card ? (
+                     <CardComponent card={item.card} disableZoom />
+                   ) : (
+                     <div className="w-full h-full bg-zinc-900 flex flex-col items-center justify-center p-4 text-center">
+                        <Sword className="w-8 h-8 text-white/20 mb-2" />
+                        <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                          {item.type.replace(/_/g, ' ')}
+                        </span>
+                     </div>
+                   )}
+                   <div className="absolute top-2 left-2 w-5 h-5 bg-black/80 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-black italic text-white shadow-lg">
+                     {idx + 1}
+                   </div>
+                 </motion.div>
+               ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Defense Declaration Prompt Overlay (Replacement for Modal) */}
         <AnimatePresence>
           {game.phase === 'DEFENSE_DECLARATION' && !me.isTurn && (
@@ -1086,7 +1091,7 @@ export const BattleField: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-x-0 top-[15%] z-[140] flex flex-col items-center gap-4 pointer-events-none"
+              className="fixed inset-x-0 top-[15%] z-[140] flex flex-col items-center gap-4 pointer-events-auto"
             >
               <div className="bg-zinc-900/90 border border-blue-500/50 px-8 py-4 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.3)] backdrop-blur-sm">
                 <p className="text-blue-400 font-bold tracking-widest uppercase flex items-center gap-3 text-sm">
@@ -1094,7 +1099,7 @@ export const BattleField: React.FC = () => {
                   SELECT DEFENSE UNIT OR PASS
                 </p>
               </div>
-              <div className="flex gap-4 pointer-events-auto">
+              <div className="flex gap-4">
                 <button
                   onClick={() => handleDeclareDefense(undefined)}
                   className="px-10 py-2 bg-blue-600/10 hover:bg-blue-600/20 rounded-full text-blue-200 font-black italic tracking-widest transition-all backdrop-blur-md border border-blue-500/20 shadow-lg group"
@@ -1103,6 +1108,30 @@ export const BattleField: React.FC = () => {
                 </button>
               </div>
             </motion.div>
+          )}
+
+          {game.phase === 'DEFENSE_DECLARATION' && me.isTurn && (
+             <div className="absolute inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="bg-zinc-900/90 border border-blue-500/50 p-12 rounded-2xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(37,99,235,0.2)]"
+                >
+                  <div className="w-16 h-16 relative">
+                    <Shield className="w-full h-full text-blue-500 animate-pulse" />
+                    <Loader2 className="absolute inset-0 w-full h-full text-blue-400 animate-spin opacity-50" />
+                  </div>
+                  <div className="text-center">
+                    <h2 className="text-2xl font-black italic text-blue-500 uppercase tracking-widest mb-2">WAITING FOR DEFENSE</h2>
+                    <p className="text-blue-200/60 font-medium tracking-wide">Opponent is choosing a unit to block your attack...</p>
+                  </div>
+                  <div className="px-6 py-2 bg-blue-500/10 rounded-full border border-blue-500/20">
+                    <span className="text-blue-400 font-bold tabular-nums">
+                        {timer}s
+                    </span>
+                  </div>
+                </motion.div>
+             </div>
           )}
         </AnimatePresence>
 
@@ -1128,8 +1157,10 @@ export const BattleField: React.FC = () => {
             </div>
           )}
         </AnimatePresence>
-      </div>
 
+
+
+        </div>
       {/* Rulebook Overlay */}
       <Rulebook isOpen={isRulebookOpen} onClose={() => setIsRulebookOpen(false)} />
 
@@ -1143,23 +1174,23 @@ export const BattleField: React.FC = () => {
               initial={{ opacity: 0, scale: 0.9, x: 20 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.9, x: 20 }}
-              className="fixed z-[200] flex flex-col gap-1"
+              className="fixed z-[200] flex flex-col gap-1 w-40"
               style={{
-                left: cardMenu.x,
+                left: cardMenu.x + 85,
                 top: cardMenu.y,
-                transform: 'translate(-50%, -110%)'
+                transform: 'translate(0, -50%)'
               }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Action: Play (Yellow) */}
-              {cardMenu.zone === 'hand' && game.phase === 'MAIN' && me.isTurn && (
+              {cardMenu.zone === 'hand' && me.isTurn && (game.phase === 'MAIN' || (game.phase === 'BATTLE_FREE' && cardMenu.card.type === 'STORY')) && (
                 (() => {
                   const check = GameService.canPlayCard(me, cardMenu.card);
                   if (check.canPlay) {
                     return (
                       <motion.button
                         whileHover={{ scale: 1.1 }}
-                        className="px-4 py-1.5 text-[10px] font-bold text-black bg-[#facc15] rounded-full shadow-lg border border-white/20 flex items-center justify-center min-w-[70px]"
+                        className="px-4 py-1.5 text-[10px] font-bold text-black bg-[#facc15] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                         onClick={() => {
                           playCardFromHand(cardMenu.card);
                           setCardMenu(null);
@@ -1201,7 +1232,7 @@ export const BattleField: React.FC = () => {
                     return (
                       <motion.button
                         whileHover={{ scale: 1.1 }}
-                        className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#22c55e] rounded-full shadow-lg border border-white/20 flex items-center justify-center min-w-[70px]"
+                        className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#22c55e] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                         onClick={() => {
                           const triggerLocation = (cardMenu.zone === 'unit' ? 'UNIT' : cardMenu.zone === 'item' ? 'ITEM' : cardMenu.zone === 'erosion_front' ? 'EROSION_FRONT' : 'HAND') as TriggerLocation;
                           if (validEffects.length === 1) {
@@ -1239,7 +1270,7 @@ export const BattleField: React.FC = () => {
                           {!cardMenu.card.inAllianceGroup && (
                             <motion.button
                               whileHover={{ scale: 1.1 }}
-                              className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center min-w-[70px]"
+                              className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                               onClick={() => {
                                 handleDeclareAttack([cardMenu.card.gamecardId], false);
                                 setCardMenu(null);
@@ -1378,6 +1409,9 @@ export const BattleField: React.FC = () => {
               className="bg-zinc-900 border border-white/10 rounded-2xl max-w-2xl w-full p-8 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
+              <div className="absolute top-4 right-6 text-2xl font-black text-red-500 animate-pulse">
+                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+              </div>
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter">选择要发动的效果</h3>
               <div className="space-y-4">
                 {effectSelection.effects.map((e, i) => (
@@ -1440,6 +1474,9 @@ export const BattleField: React.FC = () => {
               className="bg-zinc-900 border border-red-500/30 rounded-2xl max-w-xl w-full p-8 shadow-[0_0_50px_rgba(220,38,38,0.15)]"
               onClick={(e) => e.stopPropagation()}
             >
+              <div className="absolute top-4 right-6 text-2xl font-black text-red-500 animate-pulse">
+                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+              </div>
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter flex items-center gap-3">
                 <Zap className="w-6 h-6" />
                 CONFIRM EFFECT
@@ -1493,7 +1530,10 @@ export const BattleField: React.FC = () => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-md flex items-center justify-center p-8"
           >
-            <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)]">
+            <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)] relative">
+              <div className="absolute top-4 right-6 text-2xl font-black text-[#f27d26] animate-pulse">
+                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+              </div>
               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">CONFIRM COUNTER</h2>
               <p className="text-white/80">Your opponent is proposing damage calculation. Would you like to counter first?</p>
               <div className="flex gap-4">
@@ -1509,7 +1549,10 @@ export const BattleField: React.FC = () => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-md flex items-center justify-center p-8"
           >
-            <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)]">
+            <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)] relative">
+              <div className="absolute top-4 right-6 text-2xl font-black text-[#f27d26] animate-pulse">
+                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+              </div>
               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">CONFIRM COUNTER</h2>
               <p className="text-white/80">Opponent declined counter. Would you like to counter? (Choosing NO moves to damage calculation)</p>
               <div className="flex gap-4">
@@ -1632,6 +1675,7 @@ export const BattleField: React.FC = () => {
                   </>
                 )}
 
+
                 {game.phase === 'BATTLE_DECLARATION' && (
                   <motion.button
                     whileHover={{ scale: 1.05, y: -5 }}
@@ -1663,18 +1707,34 @@ export const BattleField: React.FC = () => {
                 )}
 
                 {game.phase === 'BATTLE_FREE' && (
-                  <motion.button
-                    whileHover={{ scale: 1.05, y: -5 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="w-full h-18 py-5 px-10 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-3xl text-sm font-black uppercase italic tracking-widest transition-all shadow-[0_20px_40px_rgba(220,38,38,0.4)] flex items-center justify-center gap-5 border-t border-white/20"
-                    onClick={() => {
-                      GameService.advancePhase(gameId!, 'PROPOSE_DAMAGE_CALCULATION');
-                      setShowPhaseMenu(false);
-                    }}
-                  >
-                    <Zap className="w-6 h-6" />
-                    DAMAGE RESOLVE
-                  </motion.button>
+                  <>
+                    {me.isTurn && (
+                      <motion.button
+                        whileHover={{ scale: 1.05, y: -5 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="w-full h-18 py-5 px-10 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white rounded-3xl text-sm font-black uppercase italic tracking-widest transition-all shadow-[0_20px_40px_rgba(242,125,38,0.4)] flex items-center justify-center gap-5 border-t border-white/20"
+                        onClick={() => {
+                          GameService.advancePhase(gameId!, 'PROPOSE_DAMAGE_CALCULATION');
+                          setShowPhaseMenu(false);
+                        }}
+                      >
+                        <ShieldCheck className="w-6 h-6" />
+                        END FREE BATTLE
+                      </motion.button>
+                    )}
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -5 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="w-full h-18 py-5 px-10 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-3xl text-sm font-black uppercase italic tracking-widest transition-all shadow-[0_20px_40px_rgba(220,38,38,0.4)] flex items-center justify-center gap-5 border-t border-white/20"
+                      onClick={() => {
+                        GameService.advancePhase(gameId!, 'PROPOSE_DAMAGE_CALCULATION');
+                        setShowPhaseMenu(false);
+                      }}
+                    >
+                      <Zap className="w-6 h-6" />
+                      DAMAGE RESOLVE
+                    </motion.button>
+                  </>
                 )}
 
                 {game.phase === 'DAMAGE_CALCULATION' && (

@@ -111,56 +111,61 @@ setInterval(async () => {
             if (!gameState || !gameState.phaseTimerStart) continue;
             
             const now = Date.now();
-            const phaseElapsed = now - gameState.phaseTimerStart;
-            const checkInterval = 2000; // Decrement 2s every interval
+            const phaseElapsed = now - (gameState.phaseTimerStart || now);
+            const checkInterval = 2000;
 
-            if (gameState.phase === 'MAIN') {
-                // Initialize remaining time if missing
-                if (gameState.mainPhaseTimeRemaining === undefined) {
-                    gameState.mainPhaseTimeRemaining = 300000;
-                }
+            const sharedPhases = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
+            const independentPhases = ['EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN'];
 
-                // "The time will not be reduced while waiting for the opponent's response"
+            if (sharedPhases.includes(gameState.phase)) {
+                // Shared 300s budget logic
+                // The time will not be reduced while waiting for the opponent's response
                 const isWaitingForOpponent = 
                     (gameState.counterStack && gameState.counterStack.length > 0) ||
                     (gameState.battleState && gameState.battleState.askConfront);
 
                 if (!isWaitingForOpponent) {
-                    gameState.mainPhaseTimeRemaining -= checkInterval;
-                }
+                    gameState.mainPhaseTimeRemaining = (gameState.mainPhaseTimeRemaining || 300000) - checkInterval;
+                    
+                    if (gameState.mainPhaseTimeRemaining <= 0) {
+                        console.log(`[Timer] Shared budget timeout for game ${gameId}, auto-advancing.`);
+                        gameState.logs.push('阶段时间耗尽，强制推进。');
+                        if (gameState.phase === 'BATTLE_FREE') {
+                            await ServerGameService.advancePhase(gameState, 'PROPOSE_DAMAGE_CALCULATION');
+                        } else {
+                            await ServerGameService.advancePhase(gameState, 'DECLARE_END');
+                        }
+                        gameState.mainPhaseTimeRemaining = 300000;
+                        gameState.phaseTimerStart = Date.now();
+                    }
 
-                if (gameState.mainPhaseTimeRemaining <= 0) {
-                    console.log(`[Timer] Main Phase timeout for game ${gameId}, auto-ending turn.`);
-                    gameState.logs.push('主要阶段时间耗尽，强制结束回合。');
-                    await ServerGameService.advancePhase(gameState, 'DECLARE_END');
-                    gameState.mainPhaseTimeRemaining = 300000; // Reset for next
-                    gameState.phaseTimerStart = now;
                     await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
                     io.to(gameId).emit('gameStateUpdate', gameState);
                 }
-            } else {
-                // 30 second timeout for other phases
+            } else if (independentPhases.includes(gameState.phase)) {
+                // Independent 30s timeout logic
                 if (phaseElapsed > 30000) {
                     console.log(`[Timer] Auto-advancing game ${gameId} due to timeout in phase ${gameState.phase}`);
                     
                     if (gameState.phase === 'MULLIGAN') {
-                        Object.values(gameState.players).forEach((p: any) => {
-                            p.mulliganDone = true;
-                        });
+                        Object.values(gameState.players).forEach((p: any) => { p.mulliganDone = true; });
                         gameState.phase = 'START';
                         gameState.turnCount = 1;
-                        const currentUid = gameState.playerIds[gameState.currentTurnPlayer];
+                        const firstUid = gameState.playerIds[gameState.currentTurnPlayer];
                         gameState.playerIds.forEach((uid: string) => {
-                            gameState.players[uid].isTurn = (uid === currentUid);
+                            gameState.players[uid].isTurn = (uid === firstUid);
                         });
                         gameState.logs.push('调度超时，自动开始游戏。');
+                    } else if (gameState.phase === 'EROSION') {
+                        const playerUid = gameState.playerIds[gameState.currentTurnPlayer];
+                        gameState.logs.push(`侵蚀阶段超时，自动选择方案 A。`);
+                        await ServerGameService.handleErosionChoice(gameState, playerUid, 'A');
                     } else if (gameState.phase === 'DEFENSE_DECLARATION') {
                         const defenderUid = gameState.playerIds[gameState.currentTurnPlayer === 0 ? 1 : 0];
                         await ServerGameService.declareDefense(gameState, defenderUid, undefined);
                     } else if (gameState.phase === 'COUNTERING') {
-                        await ServerGameService.resolvePlay(gameState);
+                        await ServerGameService.resolveCounterStack(gameState);
                     } else {
-                        // General forward advance
                         await ServerGameService.advancePhase(gameState);
                     }
 
@@ -960,9 +965,18 @@ io.on('connection', (socket) => {
                 await ServerGameService.discardCard(gameState, myUid, cardId);
                 await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
                 io.to(gameId).emit('gameStateUpdate', gameState);
+            } else if (action === 'ACTIVATE_EFFECT') {
+                const { cardId, effectIndex } = payload;
+                await ServerGameService.activateEffect(gameState, myUid, cardId, effectIndex);
+                await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
+                io.to(gameId).emit('gameStateUpdate', gameState);
+            } else if (action === 'PASS_CONFRONTATION') {
+                await ServerGameService.passConfrontation(gameState, myUid);
+                await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
+                io.to(gameId).emit('gameStateUpdate', gameState);
             } else if (action === 'RESOLVE_PLAY') {
                 if (gameState.phase === 'COUNTERING') {
-                    await ServerGameService.resolvePlay(gameState);
+                    await ServerGameService.resolveCounterStack(gameState);
                     await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
                     io.to(gameId).emit('gameStateUpdate', gameState);
                 }
@@ -989,54 +1003,6 @@ const start = async () => {
         await initServerCardLibrary();
         console.log('[Server] Connecting to database...');
         await dbInit();
-
-        // Background Game Timeout Checker (30s)
-        setInterval(async () => {
-            try {
-                const activeGames = await pool.query('SELECT id, state FROM games WHERE status = 0');
-                for (const g of activeGames) {
-                    let gameState = typeof g.state === 'string' ? JSON.parse(g.state) : g.state;
-                    if (!gameState || !gameState.phaseTimerStart) continue;
-
-                    const now = Date.now();
-                    const elapsed = now - gameState.phaseTimerStart;
-                    if (elapsed > 30000) {
-                        console.log(`[Timer] Auto-advancing game ${g.id} due to timeout (phase: ${gameState.phase})`);
-
-                        if (['MULLIGAN', 'DEFENSE_DECLARATION', 'COUNTERING', 'EROSION', 'DISCARD', 'DRAW'].includes(gameState.phase)) {
-                            try {
-                                if (gameState.phase === 'COUNTERING') {
-                                    await ServerGameService.resolvePlay(gameState);
-                                } else if (gameState.phase === 'DEFENSE_DECLARATION') {
-                                    const defenderUid = gameState.playerIds[gameState.currentTurnPlayer === 0 ? 1 : 0];
-                                    await ServerGameService.declareDefense(gameState, defenderUid, undefined);
-                                } else if (gameState.phase === 'MULLIGAN') {
-                                    Object.values(gameState.players).forEach((p: any) => {
-                                        (p as any).mulliganDone = true;
-                                    });
-                                    await ServerGameService.advancePhase(gameState);
-                                } else {
-                                    await ServerGameService.advancePhase(gameState);
-                                }
-
-                                await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), g.id]);
-                                io.to(g.id).emit('gameStateUpdate', gameState);
-
-                                // Trigger Bot move if it's the bot's turn in the new phase
-                                const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-                                if (currentPlayerId === 'BOT_PLAYER') {
-                                    handleBotMove(gameState, g.id);
-                                }
-                            } catch (e) {
-                                console.error('[Timer] Error during auto-advance:', e);
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('[Timer] Error:', err);
-            }
-        }, 5000);
 
         const PORT = process.env.PORT || 3001;
         httpServer.listen(PORT, () => {

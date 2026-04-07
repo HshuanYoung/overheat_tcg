@@ -109,11 +109,16 @@ export interface PlayerState {
   isGoddessMode?: boolean;
 }
 
+export type StackItemType = 'PLAY' | 'EFFECT' | 'ATTACK' | 'PHASE_END';
+
 export interface StackItem {
-  card: Card;
+  card?: Card;
   ownerUid: string;
-  type: 'PLAY' | 'EFFECT';
+  type: StackItemType;
   effectIndex?: number;
+  nextPhase?: GamePhase; // For PHASE_END
+  attackerIds?: string[]; // For ATTACK
+  isAlliance?: boolean; // For ATTACK
   timestamp: number;
 }
 
@@ -140,6 +145,8 @@ export interface GameState {
   turnCount: number; // Starts at 1
   isCountering: 0 | 1; // 1 if countering
   counterStack: StackItem[]; // LIFO
+  priorityPlayerId?: string; // Player who currently has the option to respond
+  passCount: number; // Number of consecutive passes during identification
   playerIds: [string, string]; // [FirstPlayerID, SecondPlayerID]
   gameStatus: 1 | 2; // 1: Normal, 2: Interrupted
   winReason?: string;
@@ -157,6 +164,7 @@ export interface GameState {
   effectUsage?: Record<string, number>;
   phaseTimerStart?: number;
   mainPhaseTimeRemaining?: number; 
+  previousPhase?: GamePhase;
 }
 
 export interface Deck {

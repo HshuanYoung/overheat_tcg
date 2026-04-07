@@ -1,5 +1,5 @@
 // Firebase imports removed - logic is now database-agnostic
-import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect } from '../src/types/game';
+import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackItem, GamePhase } from '../src/types/game';
 import { CARD_LIBRARY } from '../src/data/cards';
 import { EventEngine } from '../src/services/EventEngine';
 
@@ -360,8 +360,34 @@ export const ServerGameService = {
     return { success: false, reason: '未知错误' };
   },
 
-  async playCard(gameState: GameState, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }) {
+  enterCountering(gameState: GameState, sourcePlayerId: string, stackItem: StackItem) {
+    const now = Date.now();
+    const elapsed = now - (gameState.phaseTimerStart || now);
 
+    if (gameState.phase !== 'COUNTERING') {
+      // If we are leaving a shared phase (MAIN, BATTLE_DECLARATION, BATTLE_FREE), subtract from turn budget
+      const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
+      if (sharedPhases.includes(gameState.phase)) {
+        gameState.mainPhaseTimeRemaining = Math.max(0, (gameState.mainPhaseTimeRemaining || 300000) - elapsed);
+      }
+
+      gameState.previousPhase = gameState.phase;
+      gameState.phase = 'COUNTERING';
+      gameState.phaseTimerStart = now; // Independent 30s starts now
+    }
+    
+    gameState.isCountering = 1;
+    gameState.counterStack.push(stackItem);
+    gameState.passCount = 0;
+    
+    // In TCGs, usually the non-active player gets the first chance to respond
+    const opponentId = gameState.playerIds.find(id => id !== sourcePlayerId);
+    gameState.priorityPlayerId = opponentId;
+    
+    gameState.logs.push(`[对抗开始] 等待 ${gameState.players[opponentId!].displayName} 响应。`);
+  },
+
+  async playCard(gameState: GameState, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }) {
     const player = gameState.players[playerId];
     const card = player.hand.find(c => c.gamecardId === cardId);
     if (!card) throw new Error('Card not found in hand');
@@ -370,16 +396,13 @@ export const ServerGameService = {
     if (!canPlay.canPlay) throw new Error(canPlay.reason);
 
     const cost = card.acValue;
-
     const paymentResult = this.payCost(gameState, playerId, cost, paymentSelection, card.color, cardId);
     if (!paymentResult.success) throw new Error(paymentResult.reason);
 
     this.moveCard(gameState, playerId, 'HAND', playerId, 'PLAY', cardId);
     gameState.logs.push(`${player.displayName} 打出了 ${card.fullName}`);
 
-    gameState.phase = 'COUNTERING';
-    gameState.isCountering = 1;
-    gameState.counterStack.push({
+    this.enterCountering(gameState, playerId, {
       card,
       ownerUid: playerId,
       type: 'PLAY',
@@ -389,58 +412,198 @@ export const ServerGameService = {
     return gameState;
   },
 
-  async resolvePlay(gameState: GameState) {
+  async activateEffect(gameState: GameState, playerId: string, cardId: string, effectIndex: number) {
+    // Find card in hand or on field
+    const player = gameState.players[playerId];
+    let card: Card | undefined;
+    let location: TriggerLocation | undefined;
 
+    const findInZones = (zones: (Card | null)[][], loc: TriggerLocation) => {
+      for (const zone of zones) {
+        const found = zone.find(c => c?.gamecardId === cardId);
+        if (found) { card = found; location = loc; break; }
+      }
+    };
+
+    findInZones([player.unitZone], 'UNIT');
+    if (!card) findInZones([player.itemZone], 'ITEM');
+    if (!card) findInZones([player.erosionFront], 'EROSION_FRONT');
+    if (!card) findInZones([player.erosionBack], 'EROSION_BACK');
+    if (!card) {
+      card = player.hand.find(c => c.gamecardId === cardId);
+      if (card) location = 'HAND';
+    }
+
+    if (!card) throw new Error('Card not found');
+
+    const effect = card.effects?.[effectIndex];
+    if (!effect) throw new Error('Effect not found');
+
+    if (!this.checkEffectLimitsAndReqs(gameState, playerId, card, effect, location)) {
+      throw new Error('不满足发动条件或已达到使用次数限制');
+    }
+
+    this.recordEffectUsage(gameState, playerId, card, effect);
+    gameState.logs.push(`${player.displayName} 发动了 ${card.fullName} 的效果: ${effect.description}`);
+
+    this.enterCountering(gameState, playerId, {
+      card,
+      ownerUid: playerId,
+      type: 'EFFECT',
+      effectIndex,
+      timestamp: Date.now()
+    });
+
+    return gameState;
+  },
+
+  async passConfrontation(gameState: GameState, playerId: string) {
+    if (gameState.phase !== 'COUNTERING') return;
+    if (gameState.priorityPlayerId !== playerId) throw new Error('尚未轮到你进行响应');
+
+    gameState.passCount += 1;
+    gameState.logs.push(`${gameState.players[playerId].displayName} 选择不进行对抗`);
+
+    // Special Case: Phase End (Clean Pass)
+    const isPhaseEndOnly = gameState.counterStack.length === 1 && gameState.counterStack[0].type === 'PHASE_END';
+    const phaseEndItem = isPhaseEndOnly ? gameState.counterStack[0] : null;
+    const isOpponentPassing = phaseEndItem && playerId !== phaseEndItem.ownerUid;
+
+    // Resolve immediately if:
+    // 1. Both players passed (passCount >= 2)
+    // 2. OR it's a PHASE_END and the opponent just passed (passCount >= 1)
+    if (isPhaseEndOnly && (gameState.passCount >= 2 || (isOpponentPassing && gameState.passCount >= 1))) {
+      gameState.counterStack.pop();
+      gameState.isCountering = 0;
+      gameState.priorityPlayerId = undefined;
+      gameState.passCount = 0;
+      
+      // CRITICAL: Restore the phase we are transitioning FROM
+      // This ensures advancePhase's switch(gameState.phase) hits the correct case.
+      if (gameState.previousPhase) {
+        gameState.phase = gameState.previousPhase;
+        gameState.previousPhase = undefined;
+      }
+      
+      if (phaseEndItem!.nextPhase) {
+        return this.advancePhase(gameState, phaseEndItem!.nextPhase);
+      }
+    }
+
+    if (gameState.passCount >= 2) {
+      await this.resolveCounterStack(gameState);
+    } else {
+      // Switch priority
+      const nextId = gameState.playerIds.find(id => id !== playerId);
+      gameState.priorityPlayerId = nextId;
+    }
+
+    return gameState;
+  },
+
+  async resolveCounterStack(gameState: GameState) {
     if (gameState.counterStack.length === 0) return;
 
-    // Resolve the entire stack from top to bottom
+    // Special Case: If it's just a PHASE_END and we are resolving (likely due to a timeout)
+    // AND it's the ONLY item, we should ADVANCE.
+    if (gameState.counterStack.length === 1 && gameState.counterStack[0].type === 'PHASE_END') {
+      const item = gameState.counterStack.pop()!;
+      gameState.isCountering = 0;
+      gameState.passCount = 0;
+      gameState.priorityPlayerId = undefined;
+      
+      if (gameState.previousPhase) {
+        gameState.phase = gameState.previousPhase;
+        gameState.previousPhase = undefined;
+      }
+      
+      if (item.nextPhase) {
+        return this.advancePhase(gameState, item.nextPhase);
+      }
+      return gameState;
+    }
+
+    gameState.logs.push(`[连锁结算] 开始处理对抗请求...`);
+
+    // Resolve the entire stack from top to bottom (LIFO)
     while (gameState.counterStack.length > 0) {
       const stackItem = gameState.counterStack.pop();
       if (!stackItem) continue;
 
       const card = stackItem.card;
+      const owner = gameState.players[stackItem.ownerUid];
 
-      if (stackItem.type === 'EFFECT') {
-        // Execute the effect
-        const effectIndex = stackItem.effectIndex ?? 0;
-        const effect = card.effects?.[effectIndex];
-        if (effect && effect.execute) {
-          effect.execute(card, gameState, gameState.players[stackItem.ownerUid]);
-          gameState.logs.push(`[效果结算] ${card.fullName} 的效果已结算。`);
-          EventEngine.dispatchEvent(gameState, {
-            type: 'EFFECT_ACTIVATED',
-            playerUid: stackItem.ownerUid,
-            sourceCardId: card.gamecardId
-          });
-        }
-      } else {
-        if (card.type === 'UNIT') {
-          const playZoneCard = gameState.players[stackItem.ownerUid].playZone.find(c => c && c.gamecardId === card.gamecardId);
-          if (playZoneCard) playZoneCard.playedTurn = gameState.turnCount;
-          this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'UNIT', card.gamecardId);
-        } else if (card.type === 'ITEM') {
-          const playZoneCard = gameState.players[stackItem.ownerUid].playZone.find(c => c && c.gamecardId === card.gamecardId);
-          if (playZoneCard) playZoneCard.playedTurn = gameState.turnCount;
-          this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'ITEM', card.gamecardId);
-        } else {
-          // STORY card
-          const effect = card.effects?.find(e => e.type === 'ALWAYS' || e.type === 'ACTIVATE' || e.type === 'ACTIVATED');
+      switch (stackItem.type) {
+        case 'PLAY':
+          if (!card) break;
+          if (card.type === 'UNIT') {
+            const playZoneCard = owner.playZone.find(c => c && c.gamecardId === card.gamecardId);
+            if (playZoneCard) playZoneCard.playedTurn = gameState.turnCount;
+            this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'UNIT', card.gamecardId);
+          } else if (card.type === 'ITEM') {
+            const playZoneCard = owner.playZone.find(c => c && c.gamecardId === card.gamecardId);
+            if (playZoneCard) playZoneCard.playedTurn = gameState.turnCount;
+            this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'ITEM', card.gamecardId);
+          } else {
+            // STORY card
+            const effect = card.effects?.find(e => e.type === 'ALWAYS' || e.type === 'ACTIVATE' || e.type === 'ACTIVATED');
+            if (effect && effect.execute) {
+              effect.execute(card, gameState, owner);
+              EventEngine.dispatchEvent(gameState, {
+                type: 'EFFECT_ACTIVATED',
+                playerUid: stackItem.ownerUid,
+                sourceCardId: card.gamecardId
+              });
+            }
+            this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'GRAVE', card.gamecardId);
+          }
+          gameState.logs.push(`${card.fullName} 结算完成`);
+          break;
+
+        case 'EFFECT':
+          if (!card) break;
+          const effectIndex = stackItem.effectIndex ?? 0;
+          const effect = card.effects?.[effectIndex];
           if (effect && effect.execute) {
-            effect.execute(card, gameState, gameState.players[stackItem.ownerUid]);
+            effect.execute(card, gameState, owner);
+            gameState.logs.push(`[效果结算] ${card.fullName} 的效果已结算。`);
             EventEngine.dispatchEvent(gameState, {
               type: 'EFFECT_ACTIVATED',
               playerUid: stackItem.ownerUid,
               sourceCardId: card.gamecardId
             });
           }
-          this.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'GRAVE', card.gamecardId);
-        }
-        gameState.logs.push(`${card.fullName} 结算完成`);
+          break;
+
+        case 'ATTACK':
+          // Set battle state and transition to defense declaration
+          gameState.battleState = {
+            attackers: stackItem.attackerIds || [],
+            isAlliance: !!stackItem.isAlliance
+          };
+          gameState.phase = 'DEFENSE_DECLARATION';
+          gameState.logs.push(`[攻击宣告] 进入防御宣言阶段`);
+          // Special return: if an attack was responded to, we go to defense declaration instead of previousPhase
+          gameState.previousPhase = undefined;
+          break;
+
+        case 'PHASE_END':
+          // A confrontation occurred (stack length was > 1 or something else was resolved first)
+          // Yu-Gi-Oh rule: If a chain happens on Phase End, the phase does not end automatically.
+          gameState.logs.push(`[阶段请求] 受到对抗影响，结算完毕后将返回原阶段。`);
+          break;
       }
     }
 
-    gameState.phase = 'MAIN';
+    // After resolving the stack, return to previous phase if it exists
+    if (gameState.previousPhase) {
+      gameState.phase = gameState.previousPhase;
+      gameState.previousPhase = undefined;
+    }
+    
     gameState.isCountering = 0;
+    gameState.priorityPlayerId = undefined;
+    gameState.passCount = 0;
     gameState.phaseTimerStart = Date.now();
 
     return gameState;
@@ -511,9 +674,13 @@ export const ServerGameService = {
       data: { attackerIds, isAlliance }
     });
 
-    // Transition to counter check (for now just move to defense declaration)
-    gameState.phase = 'DEFENSE_DECLARATION';
-    gameState.phaseTimerStart = Date.now();
+    this.enterCountering(gameState, playerId, {
+      ownerUid: playerId,
+      type: 'ATTACK',
+      attackerIds,
+      isAlliance,
+      timestamp: Date.now()
+    });
 
     return gameState;
   },
@@ -623,6 +790,11 @@ export const ServerGameService = {
         }
       }
     }
+    // Mark all attackers as exhausted
+    attackingUnits.forEach(u => {
+      const unit = attacker.unitZone.find(uz => uz?.gamecardId === u.gamecardId);
+      if (unit) unit.isExhausted = true;
+    });
 
     gameState.phase = 'MAIN';
     gameState.battleState = undefined;
@@ -733,9 +905,19 @@ export const ServerGameService = {
     this.executeStartPhase(gameState, nextPlayer);
   },
 
-  async advancePhase(gameState: GameState, action?: 'DECLARE_BATTLE' | 'DECLARE_END' | 'RETURN_MAIN' | 'PROPOSE_DAMAGE_CALCULATION' | 'CONFIRM_CONFRONTATION' | 'DECLINE_CONFRONTATION' | 'DAMAGE_CALCULATION' | 'COUNTERING') {
+  async advancePhase(gameState: GameState, action?: string) {
     console.log(`[ServerGameService] advancePhase call, action: ${action}, phase: ${gameState.phase}`);
-    gameState.phaseTimerStart = Date.now();
+    
+    const now = Date.now();
+    const elapsed = now - (gameState.phaseTimerStart || now);
+
+    // If we are leaving a shared phase (MAIN, BATTLE_DECLARATION, BATTLE_FREE), subtract from turn budget
+    const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
+    if (sharedPhases.includes(gameState.phase)) {
+      gameState.mainPhaseTimeRemaining = Math.max(0, (gameState.mainPhaseTimeRemaining || 300000) - elapsed);
+    }
+
+    gameState.phaseTimerStart = now;
     const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
 
     const currentPlayer = gameState.players[currentPlayerId];
@@ -756,61 +938,88 @@ export const ServerGameService = {
       case 'DRAW':
         gameState.phase = 'EROSION';
         EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'EROSION' } });
-        console.log(gameState);
         this.executeErosionPhase(gameState, currentPlayer);
         break;
       case 'EROSION':
         // Handled by handleErosionChoice
         break;
       case 'MAIN':
-        if (action === 'DECLARE_BATTLE') {
+        if (action === 'DECLARE_BATTLE' || action === 'BATTLE_DECLARATION') {
           if (gameState.turnCount === 1) {
             throw new Error('先手玩家第一回合不能进入战斗阶段');
           }
-          gameState.phase = 'BATTLE_DECLARATION';
-          EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION' } });
-          gameState.logs.push(`${currentPlayer.displayName} 进入战斗阶段`);
-        } else if (action === 'DECLARE_END') {
-          this.executeEndPhase(gameState, currentPlayer);
+          if (action === 'BATTLE_DECLARATION') {
+            gameState.phase = 'BATTLE_DECLARATION';
+            EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION' } });
+            gameState.logs.push(`${currentPlayer.displayName} 进入战斗阶段`);
+          } else {
+            this.enterCountering(gameState, currentPlayerId, {
+              ownerUid: currentPlayerId,
+              type: 'PHASE_END',
+              nextPhase: 'BATTLE_DECLARATION',
+              timestamp: Date.now()
+            });
+          }
+        } else if (action === 'DECLARE_END' || action === 'DISCARD') {
+          if (action === 'DISCARD') {
+             this.executeEndPhase(gameState, currentPlayer);
+          } else {
+            this.enterCountering(gameState, currentPlayerId, {
+              ownerUid: currentPlayerId,
+              type: 'PHASE_END',
+              nextPhase: 'DISCARD', // Transition to discard/end
+              timestamp: Date.now()
+            });
+          }
         }
         break;
       case 'BATTLE_DECLARATION':
-        if (action === 'DECLARE_END') {
-          this.executeEndPhase(gameState, currentPlayer);
-        } else if (action === 'RETURN_MAIN') {
-          gameState.phase = 'MAIN';
-          EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } });
-          gameState.logs.push(`${currentPlayer.displayName} 返回主要阶段`);
+        if (action === 'DECLARE_END' || action === 'DISCARD') {
+          if (action === 'DISCARD') {
+            this.executeEndPhase(gameState, currentPlayer);
+          } else {
+            this.enterCountering(gameState, currentPlayerId, {
+              ownerUid: currentPlayerId,
+              type: 'PHASE_END',
+              nextPhase: 'DISCARD',
+              timestamp: Date.now()
+            });
+          }
+        } else if (action === 'RETURN_MAIN' || action === 'MAIN') {
+          if (action === 'MAIN') {
+            gameState.phase = 'MAIN';
+            EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } });
+            gameState.logs.push(`${currentPlayer.displayName} 返回主要阶段`);
+          } else {
+            this.enterCountering(gameState, currentPlayerId, {
+              ownerUid: currentPlayerId,
+              type: 'PHASE_END',
+              nextPhase: 'MAIN',
+              timestamp: Date.now()
+            });
+          }
         }
         break;
       case 'BATTLE_FREE':
-        if (action === 'PROPOSE_DAMAGE_CALCULATION') {
-          if (gameState.battleState) {
-            gameState.battleState.askConfront = 'ASKING_OPPONENT';
-            gameState.logs.push(`${currentPlayer.displayName} 准备进入伤害判定，等待对手响应`);
+        if (action === 'PROPOSE_DAMAGE_CALCULATION' || action === 'DAMAGE_CALCULATION') {
+          if (action === 'DAMAGE_CALCULATION') {
+            gameState.phase = 'DAMAGE_CALCULATION';
+            this.resolveDamage(gameState);
+          } else {
+            this.enterCountering(gameState, currentPlayerId, {
+              ownerUid: currentPlayerId,
+              type: 'PHASE_END',
+              nextPhase: 'DAMAGE_CALCULATION',
+              timestamp: Date.now()
+            });
           }
         } else if (action === 'CONFIRM_CONFRONTATION') {
           gameState.phase = 'COUNTERING';
-          if (gameState.battleState) gameState.battleState.askConfront = undefined;
           gameState.logs.push(`双方进入对抗阶段`);
         } else if (action === 'DECLINE_CONFRONTATION') {
-          if (gameState.battleState?.askConfront === 'ASKING_OPPONENT') {
-            gameState.battleState.askConfront = 'ASKING_TURN_PLAYER';
-            gameState.logs.push(`对手拒绝进入对抗，等待当前回合玩家确认`);
-          } else if (gameState.battleState?.askConfront === 'ASKING_TURN_PLAYER') {
-            gameState.phase = 'DAMAGE_CALCULATION';
-            if (gameState.battleState) gameState.battleState.askConfront = undefined;
-            gameState.logs.push(`双方均拒绝进入对抗，直接进入伤害判定`);
-            this.resolveDamage(gameState);
-          }
-
-        } else if (action === 'DAMAGE_CALCULATION') {
           gameState.phase = 'DAMAGE_CALCULATION';
-          if (gameState.battleState) gameState.battleState.askConfront = undefined;
+          gameState.logs.push(`直接进入伤害判定`);
           this.resolveDamage(gameState);
-        } else if (action === 'COUNTERING') {
-          gameState.phase = 'COUNTERING';
-          if (gameState.battleState) gameState.battleState.askConfront = undefined;
         }
         break;
       case 'BATTLE_END':
@@ -832,6 +1041,7 @@ export const ServerGameService = {
 
   executeStartPhase(gameState: GameState, player: PlayerState) {
     console.log(`[ServerGameService] executeStartPhase for ${player.displayName}`);
+    gameState.mainPhaseTimeRemaining = 300000;
     const unitsToReset = player.unitZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
 
     const itemsToReset = player.itemZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
@@ -1032,6 +1242,7 @@ export const ServerGameService = {
       turnCount: 0,
       isCountering: 0,
       counterStack: [],
+      passCount: 0,
       playerIds: [({ uid: "temp", displayName: "temp" } as any).uid, ''],
       gameStatus: 1,
       logs: ['游戏已创建。等待对手加入...'],
@@ -1120,6 +1331,7 @@ export const ServerGameService = {
       turnCount: 0,
       isCountering: 0,
       counterStack: [],
+      passCount: 0,
       playerIds: [uids[0], uids[1]],
       gameStatus: 1,
       logs: ['练习赛开始。请进行调度 (Mulligan)。'],
@@ -1195,7 +1407,7 @@ export const ServerGameService = {
 
     // Handle Countering (Bot skips countering)
     if (gameState.phase === 'COUNTERING') {
-      await this.resolvePlay(gameState);
+      await this.resolveCounterStack(gameState);
       return;
     }
 
@@ -1241,22 +1453,25 @@ export const ServerGameService = {
         }
       }
 
-      // If no cards can be played, try to enter battle or end turn
-      const canAttack = bot.unitZone.some(c => {
-        if (!c || c.isExhausted) return false;
-        const isRush = !!c.isrush;
-        const wasPlayedThisTurn = c.playedTurn === gameState.turnCount;
-        return isRush || !wasPlayedThisTurn;
-      });
+        // If no cards can be played, try to enter battle or end turn
+        const canAttack = bot.unitZone.some(c => {
+          if (!c || c.isExhausted) return false;
+          const isRush = !!c.isrush;
+          const wasPlayedThisTurn = c.playedTurn === gameState.turnCount;
+          return isRush || !wasPlayedThisTurn;
+        });
 
-      if (gameState.turnCount > 1 && canAttack) {
-        // Enter battle phase
-        await this.advancePhase(gameState, 'DECLARE_BATTLE');
-      } else {
-        await this.advancePhase(gameState, 'DECLARE_END');
+        if (gameState.turnCount > 1 && canAttack) {
+          // Enter battle phase only if we haven't already exhausted all attackers this AI iteration
+          // To prevent infinite re-entry to BATTLE_DECLARATION from MAIN, we check if there's truly something new to do
+          console.log('[Bot] Entering Battle Phase');
+          await this.advancePhase(gameState, 'DECLARE_BATTLE');
+        } else {
+          console.log('[Bot] Ending Turn');
+          await this.advancePhase(gameState, 'DECLARE_END');
+        }
+        return;
       }
-      return;
-    }
 
     // Battle Declaration Phase
     if (gameState.phase === 'BATTLE_DECLARATION' && bot.isTurn) {
@@ -1274,21 +1489,20 @@ export const ServerGameService = {
       return;
     }
 
-    // Battle Free Phase
-    if (gameState.phase === 'BATTLE_FREE' && bot.isTurn) {
-      // Bot just ends battle free phase
-      gameState.phase = 'DAMAGE_CALCULATION';
-      return;
-    }
+      // Battle Free Phase
+      if (gameState.phase === 'BATTLE_FREE' && bot.isTurn) {
+        // Bot declines confrontation to move to damage calculation
+        console.log('[Bot] Declining confrontation in BATTLE_FREE');
+        await this.advancePhase(gameState, 'DECLINE_CONFRONTATION');
+        return;
+      }
 
-    // Damage Calculation Phase
-    if (gameState.phase === 'DAMAGE_CALCULATION') {
-      await this.resolveDamage(gameState);
-      return;
-    }
+      // Damage Calculation Phase
+      if (gameState.phase === 'DAMAGE_CALCULATION') {
+        await this.resolveDamage(gameState);
+        return;
+      }
   },
-
-  // Legacy Join Game removed
 
   // Helper: Assign unique gamecardId to all cards in a deck
   assignGameCardIds(deck: Card[]): Card[] {
@@ -1374,6 +1588,7 @@ export const ServerGameService = {
       turnCount: 0,
       isCountering: 0,
       counterStack: [],
+      passCount: 0,
       playerIds: [playerUid, 'BOT_PLAYER'],
       gameStatus: 1,
       logs: ['练习赛开始。由 AI 作为对手。'],
@@ -1416,6 +1631,7 @@ export const ServerGameService = {
 
     const gameState: GameState = {
       gameId: "match", phase: 'MULLIGAN', currentTurnPlayer: firstIdx, turnCount: 0, isCountering: 0, counterStack: [],
+      passCount: 0,
       playerIds: [uid1, uid2], gameStatus: 1, logs: ['匹配成功。对局开始'],
       players: { [uid1]: p1, [uid2]: p2 },
       phaseTimerStart: Date.now(),

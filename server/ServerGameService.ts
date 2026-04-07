@@ -911,6 +911,12 @@ export const ServerGameService = {
       card.cardlocation = 'GRAVE';
       player.grave.push(card);
       player.unitZone[idx] = null;
+
+      EventEngine.dispatchEvent(gameState, {
+        type: 'CARD_DESTROYED_BATTLE',
+        targetCardId: gamecardId,
+        playerUid: playerId
+      });
     }
   },
 

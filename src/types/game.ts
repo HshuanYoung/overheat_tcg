@@ -46,6 +46,8 @@ export type AtomicEffectType =
   | 'SHUFFLE_DECK'
   | 'REVEAL_DECK'
   | 'SEARCH_DECK'
+  | 'BOTH_PLAYERS_DRAW'
+  | 'TURN_EROSION_FACE_DOWN'
   | 'MOVE_FROM_HAND'
   | 'MOVE_FROM_EROSION'
   | 'MOVE_FROM_EROSION_BACK'
@@ -87,6 +89,11 @@ export interface CardFilter {
   tags?: string[];
   zone?: TriggerLocation[];
   onField?: boolean;
+  excludeColor?: CardColor;
+  excludeSelf?: boolean;
+  excludeId?: string;
+  excludeGamecardId?: string;
+  fuzzyName?: string;
 }
 
 export interface AtomicEffect {

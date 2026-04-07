@@ -22,6 +22,16 @@ export class AtomicEffectExecutor {
         this.drawCards(gameState, playerUid, effect.value || 1);
         break;
 
+      case 'BOTH_PLAYERS_DRAW':
+        Object.keys(gameState.players).forEach(uid => {
+          this.drawCards(gameState, uid, effect.value || 1);
+        });
+        break;
+
+      case 'TURN_EROSION_FACE_DOWN':
+        this.turnErosionFaceDown(gameState, playerUid, effect.value || 0);
+        break;
+
       case 'ROTATE_HORIZONTAL':
         this.rotateCards(gameState, playerUid, effect, 'HORIZONTAL');
         break;
@@ -292,7 +302,7 @@ export class AtomicEffectExecutor {
      });
   }
 
-  static matchesFilter(card: Card, filter?: CardFilter): boolean {
+  static matchesFilter(card: Card, filter?: CardFilter, sourceCard?: Card): boolean {
     if (!filter) return true;
     if (filter.id && card.id !== filter.id) return false;
     if (filter.type && card.type !== filter.type) return false;
@@ -303,13 +313,26 @@ export class AtomicEffectExecutor {
     if (filter.maxPower !== undefined && (card.power || 0) > filter.maxPower) return false;
     if (filter.minAc !== undefined && card.acValue < filter.minAc) return false;
     if (filter.maxAc !== undefined && card.acValue > filter.maxAc) return false;
+    
+    // Exclusions
+    if (filter.excludeColor && card.color === filter.excludeColor) return false;
+    if (filter.excludeSelf && sourceCard && card.gamecardId === sourceCard.gamecardId) return false;
+    if (filter.excludeId && card.id === filter.excludeId) return false;
+    if (filter.excludeGamecardId && card.gamecardId === filter.excludeGamecardId) return false;
+    
+    if (filter.fuzzyName && !card.fullName.includes(filter.fuzzyName)) return false;
+
+    // Field/Zone check
+    if (filter.onField && !['UNIT', 'ITEM'].includes(card.cardlocation as string)) return false;
+    if (filter.zone && !filter.zone.includes(card.cardlocation as any)) return false;
+
     return true;
   }
 
   static findTargets(gameState: GameState, filter?: CardFilter, sourceCard?: Card): Card[] {
     const results: Card[] = [];
     const checkCard = (card: Card | null) => {
-      if (card && this.matchesFilter(card, filter)) results.push(card);
+      if (card && this.matchesFilter(card, filter, sourceCard)) results.push(card);
     };
 
     Object.values(gameState.players).forEach(player => {
@@ -394,5 +417,20 @@ export class AtomicEffectExecutor {
       } else if (['UNIT', 'ITEM'].includes(from)) {
           EventEngine.dispatchEvent(gameState, { type: 'CARD_LEFT_FIELD', playerUid, sourceCardId: card.gamecardId });
       }
+  }
+
+  private static turnErosionFaceDown(gameState: GameState, playerUid: string, count: number) {
+      const player = gameState.players[playerUid];
+      const faceUpCards = [...player.erosionFront, ...player.erosionBack]
+          .filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
+      
+      const targets = faceUpCards.slice(0, count);
+      targets.forEach(card => {
+          if (card) {
+              card.displayState = 'FRONT_FACEDOWN';
+          }
+      });
+
+      gameState.logs.push(`${player.displayName} 将 ${targets.length} 张侵蚀区的卡翻面。`);
   }
 }

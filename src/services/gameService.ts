@@ -61,6 +61,13 @@ export const GameService = {
     socket.emit('gameAction', { gameId, action: 'DISCARD', payload: { cardId } });
   },
 
+  moveCard(gameOrId: GameState | string, playerId: string, fromZone: TriggerLocation, toPlayerId: string, toZone: TriggerLocation, cardId: string): boolean {
+    if (typeof gameOrId === 'string') {
+      socket.emit('gameAction', { gameId: gameOrId, action: 'MOVE_CARD', payload: { fromZone, toPlayerId, toZone, cardId } });
+    }
+    return true;
+  },
+
   // --- Local UI Utilities ---
   canPlayCard(player: any, card: Card): { canPlay: boolean; reason?: string } {
     if (!player || !card) return { canPlay: false };

@@ -1,16 +1,12 @@
-import { Card,GameState,PlayerState} from '../types/game';
+import { Card, GameState, PlayerState } from '../types/game';
 
-
-const trigger_10400003_1 = (card: Card, gameState: GameState, playerState: PlayerState) => {
-
-}
 const card: Card = {
   id: '20403006',
-  fullName: '接变委托',
+  fullName: '接受委托',
   specialName: '',
   type: 'STORY',
   color: 'BLUE',
-  gamecardId: null,
+  gamecardId: null as any,
   colorReq: {},
   faction: '无',
   acValue: 1,
@@ -20,12 +16,23 @@ const card: Card = {
   canResetCount: 0,
   effects: [
     {
-      type: 'TRIGGER',
-      description: '这个单位进入战场时，所有玩家抽1张卡。',
-      playCost: 0,
-      playColorReq: {'BLUE': 2},
-      content: 'DRAW',
-      execute:trigger_10400003_1,
+      id: 'accept_commission_effect',
+      type: 'ACTIVATE',
+      triggerLocation: ['PLAY'],
+      description: '从你的侵蚀区中选择一个非神格且AC为3或以下的单位卡放置到战场。',
+      atomicEffects: [
+        {
+          type: 'MOVE_FROM_EROSION',
+          targetFilter: {
+            godMark: false,
+            type: 'UNIT',
+            maxAc: 3,
+            zone: ['EROSION_FRONT']
+          },
+          targetCount: 1,
+          destinationZone: 'UNIT'
+        }
+      ]
     }
   ],
   imageUrl: '/pics/20403006_thumb.jpg',

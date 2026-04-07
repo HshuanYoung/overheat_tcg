@@ -3,16 +3,16 @@ import { GameService } from '../services/gameService';
 
 const card: Card = {
   id: '99999999',
-  fullName: '测试巨龙 (Test Dragon)',
+  fullName: '实验巨龙 (Test Dragon)',
   specialName: '',
   type: 'UNIT',
   color: 'BLUE',
   gamecardId: null as any,
   colorReq: { BLUE: 1 },
-  faction: '测试阵营',
-  acValue: 3,
-  power: 3000,
-  basePower: 3000,
+  faction: '测试',
+  acValue: 4,
+  power: 3500,
+  basePower: 3500,
   damage: 2,
   baseDamage: 2,
   godMark: false,
@@ -24,112 +24,72 @@ const card: Card = {
   canResetCount: 0,
   effects: [
     {
-      id: 'effect_continuous_1',
-      type: 'CONTINUOUS',
-      description: '【永续】只要这张卡在单位区，我方所有红色单位力量+1000，对方所有单位无法攻击。',
-      applyContinuous: (gameState: GameState, card: Card) => {
-        // Find owner
-        const ownerUid = Object.keys(gameState.players).find(uid => 
-          gameState.players[uid].unitZone.some(c => c?.gamecardId === card.gamecardId)
-        );
-        if (!ownerUid) return;
-        
-        // Buff my red units
-        const player = gameState.players[ownerUid];
-        player.unitZone.forEach(c => {
-          if (c && c.color === 'RED' && c.gamecardId !== card.gamecardId) {
-            c.power = (c.power || 0) + 1000;
-          }
-        });
-
-        // Debuff opponent units
-        const opponentUid = Object.keys(gameState.players).find(uid => uid !== ownerUid);
-        if (opponentUid) {
-          const opponent = gameState.players[opponentUid];
-          opponent.unitZone.forEach(c => {
-            if (c) {
-              c.canAttack = false;
-            }
-          });
-        }
-      }
-    },
-    {
-      id: 'effect_triggered_1',
-      type: 'TRIGGERED',
-      triggerEvent: 'CARD_ENTERED_ZONE',
-      isMandatory: true,
-      description: '【诱发】当其他单位进入战场时，这张卡力量+500。',
-      condition: (gameState: GameState, playerState: PlayerState, card: Card, event?: GameEvent) => {
-        return event?.data?.zone === 'UNIT' && event?.sourceCardId !== card.gamecardId;
-      },
-      execute: (card: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => {
-        if (card.basePower !== undefined) {
-          card.basePower += 500;
-        }
-        card.power = (card.power || 0) + 500;
-      }
-    },
-    {
-      id: 'effect_activated_1',
-      type: 'ACTIVATED',
-      triggerLocation: ['UNIT'],
-      limitCount: 1,
-      limitGlobal: false, // Turn limit
-      limitNameType: true, // By card name
-      erosionFrontLimit: [1, 10], // Requires at least 1 front erosion card
-      description: '【启动】[一回合一次] 支付1点侵蚀，抽一张卡。',
-      cost: (gameState: GameState, playerState: PlayerState, card: Card) => {
-        // Check if player has at least 1 front erosion card
-        const faceUpCards = playerState.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
-        if (faceUpCards.length >= 1) {
-          // Pay cost: move 1 to grave
-          const cardToGrave = faceUpCards[0];
-          GameService.moveCard(gameState, playerState.uid, 'EROSION_FRONT', playerState.uid, 'GRAVE', cardToGrave!.gamecardId);
-          return true;
-        }
-        return false;
-      },
-      execute: (card: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => {
-        if (playerState.deck.length > 0) {
-          const drawnCard = playerState.deck.pop()!;
-          drawnCard.cardlocation = 'HAND';
-          playerState.hand.push(drawnCard);
-          gameState.logs.push(`${playerState.displayName} 通过 [测试巨龙] 的效果抽了一张卡。`);
-        }
-      }
-    },
-    {
-      id: 'effect_activated_2',
-      type: 'ACTIVATED',
+      id: 'testdragon_effect_1',
+      type: 'ACTIVATE',
       triggerLocation: ['HAND'],
       limitCount: 1,
-      limitGlobal: true, // Game limit
-      limitNameType: true, // By card name
-      playCost: 2,
-      playColorReq: { BLUE: 1 },
-      targetcost: [0, 4], // Target cost 0-4
-      factionReq: '测试阵营',
-      description: '【启动】[一局一次][手牌] 丢弃这张卡，破坏对方一个费用4以下的单位。',
+      limitGlobal: false,
+      description: '【启动】[一回合一次][手牌] 将这张卡丢弃，抽1张卡。',
       cost: (gameState: GameState, playerState: PlayerState, card: Card) => {
-        // Discard this card
+        // Discard self
         return GameService.moveCard(gameState, playerState.uid, 'HAND', playerState.uid, 'GRAVE', card.gamecardId);
       },
-      execute: (card: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => {
-        // Find a valid target automatically for demonstration
-        const opponentUid = Object.keys(gameState.players).find(uid => uid !== playerState.uid);
-        if (opponentUid) {
-          const opponent = gameState.players[opponentUid];
-          const validTargets = opponent.unitZone.filter(c => c !== null && c.acValue <= 4);
-          if (validTargets.length > 0) {
-            const target = validTargets[0];
-            GameService.moveCard(gameState, opponent.uid, 'UNIT', opponent.uid, 'GRAVE', target!.gamecardId);
-            gameState.logs.push(`${playerState.displayName} 从手牌发动 [测试巨龙] 的效果，破坏了 ${opponent.displayName} 的 [${target!.fullName}]。`);
-          } else {
-            gameState.logs.push(`${playerState.displayName} 从手牌发动 [测试巨龙] 的效果，但对方没有合法的目标。`);
-          }
+      atomicEffects: [
+        {
+          type: 'DRAW',
+          value: 1
         }
-      }
+      ]
+    },
+    {
+      id: 'testdragon_effect_2',
+      type: 'ACTIVATE',
+      triggerLocation: ['UNIT'],
+      limitCount: 1,
+      limitGlobal: true,
+      description: '【启动】[一局一次][战场] 侵蚀区存在AC值为4-6的卡牌时，将此卡横置，选择场上一个[非红色][非侵蚀区]且[费用<3][力量<3000]的单位破坏。',
+      condition: (gameState: GameState, playerState: PlayerState) => {
+        const erosionCards = [...playerState.erosionFront, ...playerState.erosionBack];
+        return erosionCards.some(c => c && c.acValue >= 4 && c.acValue <= 6);
+      },
+      cost: (gameState: GameState, playerState: PlayerState, card: Card) => {
+        if (card.isExhausted) return false;
+        card.isExhausted = true;
+        return true;
+      },
+      atomicEffects: [
+        {
+          type: 'DESTROY_CARD',
+          targetFilter: {
+            type: 'UNIT',
+            excludeColor: 'RED',
+            maxAc: 2,
+            maxPower: 2999,
+            onField: true
+          },
+          targetCount: 1
+        }
+      ]
+    },
+    {
+      id: 'testdragon_effect_3',
+      type: 'TRIGGER',
+      triggerEvent: 'CARD_ENTERED_ZONE',
+      isMandatory: true,
+      description: '【诱发】这张卡进入战场时，场上除这张卡以外的所有卡牌返回持有者手牌。',
+      condition: (gameState: GameState, playerState: PlayerState, card: Card, event?: GameEvent) => {
+        return event?.data?.zone === 'UNIT' && event?.sourceCardId === card.gamecardId;
+      },
+      atomicEffects: [
+        {
+          type: 'MOVE_FROM_FIELD',
+          targetFilter: {
+            excludeSelf: true,
+            onField: true
+          },
+          destinationZone: 'HAND'
+        }
+      ]
     }
   ],
   imageUrl: 'https://picsum.photos/seed/testdragon/400/600',

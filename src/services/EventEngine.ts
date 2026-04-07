@@ -1,4 +1,4 @@
-import { GameState, PlayerState, Card, GameEvent, CardEffect } from '../types/game';
+import { GameState, PlayerState, Card, GameEvent, CardEffect, TriggerLocation } from '../types/game';
 import { GameService } from './gameService';
 import { AtomicEffectExecutor } from './AtomicEffectExecutor';
 
@@ -7,17 +7,35 @@ export class EventEngine {
     // 1. Find all active effects that listen to this event
     const triggeredEffects: { card: Card, effect: CardEffect, playerUid: string }[] = [];
 
+    const BATTLEFIELD_ZONES: TriggerLocation[] = ['UNIT', 'ITEM'];
+
     const checkPlayerCards = (player: PlayerState) => {
+      // activeZones: units and items are always active. 
+      // erosionFront cards are active (e.g. for continuous effects like color), 
+      // but TRIGGER effects should only fire if the card is in an allowed triggerLocation.
       const activeZones = [...player.unitZone, ...player.itemZone, ...player.erosionFront];
+      
       activeZones.forEach(card => {
         if (card && card.effects) {
           card.effects.forEach(effect => {
             if ((effect.type === 'TRIGGERED' || effect.type === 'TRIGGER') && effect.triggerEvent === event.type) {
-              // Check limits
-              if (!GameService.checkEffectLimitsAndReqs(gameState, player.uid, card, effect)) {
+              
+              // New: Check if the card's current location is in the effect's triggerLocation array
+              // If triggerLocation is not specified, default depends on the card type (usually UNIT/ITEM for units)
+              const cardLoc = card.cardlocation as TriggerLocation;
+              const allowedLocations = effect.triggerLocation || BATTLEFIELD_ZONES;
+              
+              if (!allowedLocations.includes(cardLoc)) {
                 return;
               }
+
+              // Check limits and requirements
+              if (!GameService.checkEffectLimitsAndReqs(gameState, player.uid, card, effect, cardLoc)) {
+                return;
+              }
+
               if (!effect.condition || effect.condition(gameState, player, card, event)) {
+                console.log(`[EventEngine] Trigger Match: Card ${card.fullName} (GID: ${card.gamecardId}) evaluating event ${event.type} from source ${event.sourceCardId}`);
                 triggeredEffects.push({ card, effect, playerUid: player.uid });
               }
             }
@@ -29,8 +47,6 @@ export class EventEngine {
     Object.values(gameState.players).forEach(checkPlayerCards);
 
     // 2. Execute mandatory effects first, then optional (or add to stack)
-    // For simplicity, we'll execute them sequentially right now.
-    // In a real Yu-Gi-Oh like game, they might go on a chain/stack.
     for (const { card, effect, playerUid } of triggeredEffects) {
       const player = gameState.players[playerUid];
       
@@ -109,6 +125,7 @@ export class EventEngine {
     
     this.dispatchEvent(gameState, {
       type: 'CARD_ENTERED_ZONE',
+      sourceCard: card,
       sourceCardId: card.gamecardId,
       playerUid,
       data: { zone }
@@ -120,6 +137,7 @@ export class EventEngine {
     
     this.dispatchEvent(gameState, {
       type: 'CARD_LEFT_ZONE',
+      sourceCard: card,
       sourceCardId: card.gamecardId,
       playerUid,
       data: { zone }

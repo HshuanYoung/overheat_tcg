@@ -77,8 +77,10 @@ const card: Card = {
       triggerEvent: 'CARD_ENTERED_ZONE',
       isMandatory: true,
       description: '【诱发】这张卡进入战场时，场上除这张卡以外的所有卡牌返回持有者手牌。',
-      condition: (gameState: GameState, playerState: PlayerState, card: Card, event?: GameEvent) => {
-        return event?.data?.zone === 'UNIT' && event?.sourceCardId === card.gamecardId;
+      condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
+        const isSelf = event?.type === 'CARD_ENTERED_ZONE' && event?.sourceCard === instance;
+        const isOnBattlefield = event?.data?.zone === 'UNIT' || event?.data?.zone === 'ITEM';
+        return isSelf && isOnBattlefield;
       },
       atomicEffects: [
         {

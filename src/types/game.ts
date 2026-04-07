@@ -110,6 +110,7 @@ export interface AtomicEffect {
 
 export interface GameEvent {
   type: GameEventType;
+  sourceCard?: Card;
   sourceCardId?: string;
   targetCardId?: string;
   playerUid?: string;

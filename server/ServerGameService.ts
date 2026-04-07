@@ -201,6 +201,8 @@ export const ServerGameService = {
 
     if (targetZone === 'UNIT' || targetZone === 'ITEM') {
       this.readyCard(card);
+      // Mark as played this turn to handle summon sickness/triggers correctly
+      card.playedTurn = gameState.turnCount;
     }
 
     let targetArray: any[] = [];
@@ -399,7 +401,7 @@ export const ServerGameService = {
     return { success: false, reason: '未知错误' };
   },
 
-  enterCountering(gameState: GameState, sourcePlayerId: string, stackItem: StackItem) {
+  enterCountering(gameState: GameState, sourcePlayerId: string, stackItem: StackItem, initialPassCount: number = 0) {
     const now = Date.now();
     const elapsed = now - (gameState.phaseTimerStart || now);
 
@@ -417,7 +419,7 @@ export const ServerGameService = {
 
     gameState.isCountering = 1;
     gameState.counterStack.push(stackItem);
-    gameState.passCount = 0;
+    gameState.passCount = initialPassCount;
 
     // In TCGs, usually the non-active player gets the first chance to respond
     const opponentId = gameState.playerIds.find(id => id !== sourcePlayerId);
@@ -443,6 +445,7 @@ export const ServerGameService = {
 
     EventEngine.dispatchEvent(gameState, {
       type: 'CARD_PLAYED',
+      sourceCard: card,
       playerUid: playerId,
       sourceCardId: card.gamecardId
     });
@@ -726,6 +729,7 @@ export const ServerGameService = {
 
     EventEngine.dispatchEvent(gameState, {
       type: 'CARD_ATTACK_DECLARED',
+      sourceCard: attackers[0], // Use first attacker as source for simplicity, or omit if not card-specific
       playerUid: playerId,
       data: { attackerIds, isAlliance }
     });
@@ -1025,7 +1029,7 @@ export const ServerGameService = {
               type: 'PHASE_END',
               nextPhase: 'BATTLE_DECLARATION',
               timestamp: Date.now()
-            });
+            }, 1); // Start with 1 pass (the proposer)
           }
         } else if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
@@ -1036,7 +1040,7 @@ export const ServerGameService = {
               type: 'PHASE_END',
               nextPhase: 'DISCARD', // Transition to discard/end
               timestamp: Date.now()
-            });
+            }, 1); // Start with 1 pass (the proposer)
           }
         }
         break;
@@ -1050,7 +1054,7 @@ export const ServerGameService = {
               type: 'PHASE_END',
               nextPhase: 'DISCARD',
               timestamp: Date.now()
-            });
+            }, 1);
           }
         } else if (action === 'RETURN_MAIN' || action === 'MAIN') {
           if (action === 'MAIN') {
@@ -1092,7 +1096,7 @@ export const ServerGameService = {
             type: 'PHASE_END',
             nextPhase: 'DAMAGE_CALCULATION',
             timestamp: Date.now()
-          });
+          }, 1);
           gameState.logs.push(`在自由阶段展开对抗！`);
         } else if (action === 'DECLINE_CONFRONTATION') {
           if (gameState.battleState.askConfront === 'ASKING_OPPONENT') {
@@ -1305,7 +1309,7 @@ export const ServerGameService = {
     const initialPlayerState: PlayerState = {
       uid: ({ uid: "temp", displayName: "temp" } as any).uid,
       displayName: ({ uid: "temp", displayName: "temp" } as any).displayName || 'Player 1',
-      deck: this.shuffle([...initializedDeck]),
+      deck: this.assignGameCardIds(this.shuffle([...initializedDeck])),
       hand: [],
       grave: [],
       exile: [],

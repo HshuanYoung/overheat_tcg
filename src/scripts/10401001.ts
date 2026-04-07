@@ -29,8 +29,10 @@ const card: Card = {
       triggerEvent: 'CARD_ENTERED_ZONE',
       isMandatory: true,
       description: '这张卡进入战场时，从你的卡组或墓地中选择一张名称含有「歌月」的卡牌放逐。该能力的效果作为此能力的后续效果执行，不触发对抗响应。',
-      condition: (gameState: GameState, playerState: PlayerState, card: Card, event?: GameEvent) => {
-        return event?.type === 'CARD_ENTERED_ZONE' && event?.sourceCardId === card.gamecardId && event?.data?.zone === 'UNIT';
+      condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
+        const isSelf = event?.type === 'CARD_ENTERED_ZONE' && event?.sourceCard === instance;
+        const isOnBattlefield = event?.data?.zone === 'UNIT' || event?.data?.zone === 'ITEM';
+        return isSelf && isOnBattlefield;
       },
       execute: (card: Card, gameState: GameState, playerState: PlayerState) => {
         // 1. Search Deck and Grave

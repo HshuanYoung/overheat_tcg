@@ -155,6 +155,7 @@ export class AtomicEffectExecutor {
         player.hand.push(card);
         EventEngine.dispatchEvent(gameState, {
           type: 'CARD_DRAWN',
+          sourceCard: card,
           playerUid,
           sourceCardId: card.gamecardId
         });
@@ -255,9 +256,26 @@ export class AtomicEffectExecutor {
     const finalTargets = effect.targetCount ? targets.slice(0, effect.targetCount) : targets;
     
     finalTargets.forEach(card => {
-      // Find current zone if not provided
+      // Find current zone and OWNER
       const currentZone = card.cardlocation as TriggerLocation;
-      this.moveCard(gameState, playerUid, currentZone, playerUid, toZone, card.gamecardId);
+      
+      // Look for the actual owner of the target card
+      let ownerUid = playerUid;
+      for (const uid of Object.keys(gameState.players)) {
+        const p = gameState.players[uid];
+        const allZones = [p.hand, p.unitZone, p.itemZone, p.grave, p.exile, p.deck, p.erosionFront, p.erosionBack];
+        if (allZones.some(zone => zone.some(c => c && c.gamecardId === card.gamecardId))) {
+          ownerUid = uid;
+          break;
+        }
+      }
+
+      this.moveCard(gameState, ownerUid, currentZone, ownerUid, toZone, card.gamecardId);
+      
+      // If moving to unit zone from anywhere, mark as played this turn to ensure summon sickness applies
+      if (toZone === 'UNIT' && card) {
+        card.playedTurn = gameState.turnCount;
+      }
     });
   }
 
@@ -405,21 +423,26 @@ export class AtomicEffectExecutor {
   }
 
   private static dispatchMovementEvents(gameState: GameState, playerUid: string, card: Card, from: TriggerLocation, to: TriggerLocation) {
-      EventEngine.dispatchEvent(gameState, { type: 'CARD_ENTERED_ZONE', playerUid, sourceCardId: card.gamecardId, data: { zone: to } });
-      
-      if (from === 'DECK' && to === 'EROSION_FRONT') {
-          EventEngine.dispatchEvent(gameState, { type: 'CARD_DECK_TO_EROSION_UP', playerUid, sourceCardId: card.gamecardId });
-      } else if (from === 'EROSION_FRONT' && ['UNIT', 'ITEM'].includes(to)) {
-          EventEngine.dispatchEvent(gameState, { type: 'CARD_EROSION_TO_FIELD', playerUid, sourceCardId: card.gamecardId });
-      } else if (from === 'EROSION_FRONT' && to === 'HAND') {
-          EventEngine.dispatchEvent(gameState, { type: 'CARD_EROSION_TO_HAND', playerUid, sourceCardId: card.gamecardId });
-      } else if (from === 'HAND' && to === 'GRAVE') {
-          EventEngine.dispatchEvent(gameState, { type: 'CARD_DISCARDED', playerUid, sourceCardId: card.gamecardId });
-      } else if (['UNIT', 'ITEM'].includes(from) && to === 'HAND') {
-          EventEngine.dispatchEvent(gameState, { type: 'CARD_FIELD_TO_HAND', playerUid, sourceCardId: card.gamecardId });
-      } else if (['UNIT', 'ITEM'].includes(from)) {
-          EventEngine.dispatchEvent(gameState, { type: 'CARD_LEFT_FIELD', playerUid, sourceCardId: card.gamecardId });
-      }
+    // Use centralized EventEngine handlers for movement events to avoid double dispatches
+    if (from !== to) {
+      EventEngine.handleCardLeftZone(gameState, playerUid, card, from);
+      EventEngine.handleCardEnteredZone(gameState, playerUid, card, to);
+    }
+    
+    // Dispatch specific movement-related sub-events if necessary
+    if (from === 'DECK' && to === 'EROSION_FRONT') {
+        EventEngine.dispatchEvent(gameState, { type: 'CARD_DECK_TO_EROSION_UP', playerUid, sourceCardId: card.gamecardId });
+    } else if (from === 'EROSION_FRONT' && ['UNIT', 'ITEM'].includes(to)) {
+        EventEngine.dispatchEvent(gameState, { type: 'CARD_EROSION_TO_FIELD', playerUid, sourceCardId: card.gamecardId });
+    } else if (from === 'EROSION_FRONT' && to === 'HAND') {
+        EventEngine.dispatchEvent(gameState, { type: 'CARD_EROSION_TO_HAND', playerUid, sourceCardId: card.gamecardId });
+    } else if (from === 'HAND' && to === 'GRAVE') {
+        EventEngine.dispatchEvent(gameState, { type: 'CARD_DISCARDED', playerUid, sourceCardId: card.gamecardId });
+    } else if (['UNIT', 'ITEM'].includes(from) && to === 'HAND') {
+        EventEngine.dispatchEvent(gameState, { type: 'CARD_FIELD_TO_HAND', playerUid, sourceCardId: card.gamecardId });
+    } else if (['UNIT', 'ITEM'].includes(from)) {
+        EventEngine.dispatchEvent(gameState, { type: 'CARD_LEFT_FIELD', playerUid, sourceCardId: card.gamecardId });
+    }
   }
 
   private static turnErosionFaceDown(gameState: GameState, playerUid: string, count: number) {

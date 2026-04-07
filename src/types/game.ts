@@ -5,15 +5,100 @@ export type EffectType = 'CONTINUOUS' | 'TRIGGERED' | 'ACTIVATED' | 'ALWAYS' | '
 export type TriggerLocation = 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK' | 'PLAY' | 'DECK';
 
 export type GameEventType = 
+  | 'PHASE_CHANGED'
+  | 'CARD_ROTATED'
+  | 'CARD_DRAWN'
+  | 'CARD_PLAYED'
   | 'CARD_ENTERED_ZONE'
   | 'CARD_LEFT_ZONE'
-  | 'ATTACK_DECLARED'
-  | 'DAMAGE_TAKEN'
   | 'EFFECT_ACTIVATED'
+  | 'EFFECT_TRIGGERED'
+  | 'CARD_POWER_CHANGED'
+  | 'CARD_DAMAGE_CHANGED'
+  | 'CARD_AC_CHANGED'
+  | 'CARD_DESTROYED_BATTLE'
+  | 'CARD_DESTROYED_EFFECT'
+  | 'CARD_DECK_TO_EROSION_UP'
+  | 'CARD_EROSION_TO_FIELD'
+  | 'CARD_EROSION_TO_HAND'
+  | 'CARD_DECK_TO_EROSION_DOWN'
+  | 'CARD_HAND_TO_EROSION_UP'
+  | 'CARD_FIELD_TO_HAND'
+  | 'CARD_ATTACK_DECLARED'
+  | 'CARD_SELECTED_ALLIANCE'
+  | 'CARD_DEFENSE_DECLARED'
+  | 'COMBAT_DAMAGE_CAUSED'
+  | 'EFFECT_DAMAGE_CAUSED'
+  | 'GODDESS_TRANSFORMATION'
+  | 'EFFECT_COUNTERED'
+  | 'CARD_SELECTED_TARGET'
+  | 'CARD_EXILED'
+  | 'CARD_LEFT_FIELD'
   | 'CARD_DISCARDED'
-  | 'CARD_DRAWN'
-  | 'DECK_SHUFFLED'
-  | 'PHASE_CHANGED';
+  | 'REVEAL_HAND'
+  | 'REVEAL_DECK'
+  | 'DECK_SHUFFLED';
+
+export type AtomicEffectType =
+  | 'DRAW'
+  | 'ROTATE_HORIZONTAL'
+  | 'ROTATE_VERTICAL'
+  | 'SHUFFLE_DECK'
+  | 'REVEAL_DECK'
+  | 'SEARCH_DECK'
+  | 'MOVE_FROM_HAND'
+  | 'MOVE_FROM_EROSION'
+  | 'MOVE_FROM_EROSION_BACK'
+  | 'MOVE_FROM_FIELD'
+  | 'COUNTER_EFFECT'
+  | 'NEGATE_EFFECT'
+  | 'IMMUNE_COMBAT_DESTRUCTION'
+  | 'IMMUNE_EFFECT'
+  | 'CHANGE_DAMAGE'
+  | 'CHANGE_POWER'
+  | 'CHANGE_AC'
+  | 'CHANGE_GOD_MARK'
+  | 'DYNAMIC_POWER'
+  | 'DEAL_EFFECT_DAMAGE'
+  | 'DEAL_COMBAT_DAMAGE'
+  | 'DESTROY_CARD'
+  | 'BANISH_CARD'
+  | 'DISCARD_CARD'
+  | 'IMMUNE_SPECIFIC'
+  | 'GAIN_EFFECT'
+  | 'REVEAL_HAND'
+  | 'FORCE_PLAY'
+  | 'SKIP_PHASE'
+  | 'FORCE_END_PHASE';
+
+export interface CardFilter {
+  id?: string;
+  name?: string;
+  type?: CardType;
+  color?: CardColor;
+  faction?: string;
+  godMark?: boolean;
+  minPower?: number;
+  maxPower?: number;
+  minDamage?: number;
+  maxDamage?: number;
+  minAc?: number;
+  maxAc?: number;
+  tags?: string[];
+  zone?: TriggerLocation[];
+  onField?: boolean;
+}
+
+export interface AtomicEffect {
+  type: AtomicEffectType;
+  value?: number;
+  turnDuration?: number; // 0 for instant, -1 for infinite, >0 for specific turns
+  targetFilter?: CardFilter;
+  targetCount?: number;
+  destinationZone?: TriggerLocation;
+  faceDown?: boolean;
+  params?: any;
+}
 
 export interface GameEvent {
   type: GameEventType;
@@ -49,6 +134,7 @@ export interface CardEffect {
   removeContinuous?: (gameState: GameState, card: Card) => void;
   
   execute?: (card: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => void; // The function to execute when the effect is triggered
+  atomicEffects?: AtomicEffect[]; // Structured atomic effects
   content?: string; // Description of the effect: Move, Draw, Add Power, etc.
   description: string; // Human readable text
 }

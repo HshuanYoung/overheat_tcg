@@ -2,6 +2,7 @@
 import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackItem, GamePhase } from '../src/types/game';
 import { CARD_LIBRARY } from '../src/data/cards';
 import { EventEngine } from '../src/services/EventEngine';
+import { AtomicEffectExecutor } from '../src/services/AtomicEffectExecutor';
 
 export function cleanForFirestore(obj: any): any {
   if (obj === undefined) {
@@ -439,6 +440,12 @@ export const ServerGameService = {
     this.moveCard(gameState, playerId, 'HAND', playerId, 'PLAY', cardId);
     gameState.logs.push(`${player.displayName} 打出了 ${card.fullName}`);
 
+    EventEngine.dispatchEvent(gameState, {
+      type: 'CARD_PLAYED',
+      playerUid: playerId,
+      sourceCardId: card.gamecardId
+    });
+
     this.enterCountering(gameState, playerId, {
       card,
       ownerUid: playerId,
@@ -601,8 +608,19 @@ export const ServerGameService = {
           if (!card) break;
           const effectIndex = stackItem.effectIndex ?? 0;
           const effect = card.effects?.[effectIndex];
-          if (effect && effect.execute) {
-            effect.execute(card, gameState, owner);
+          if (effect) {
+            // Execute Atomic Effects if present
+            if (effect.atomicEffects && effect.atomicEffects.length > 0) {
+              effect.atomicEffects.forEach(atomic => {
+                AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card);
+              });
+            }
+
+            // Execute legacy callback
+            if (effect.execute) {
+              effect.execute(card, gameState, owner);
+            }
+
             gameState.logs.push(`[效果结算] ${card.fullName} 的效果已结算。`);
             EventEngine.dispatchEvent(gameState, {
               type: 'EFFECT_ACTIVATED',
@@ -706,7 +724,7 @@ export const ServerGameService = {
     gameState.logs.push(`${player.displayName} 宣告了攻击: ${attackerNames}${isAlliance ? ' (联军攻击)' : ''}`);
 
     EventEngine.dispatchEvent(gameState, {
-      type: 'ATTACK_DECLARED',
+      type: 'CARD_ATTACK_DECLARED',
       playerUid: playerId,
       data: { attackerIds, isAlliance }
     });
@@ -773,7 +791,7 @@ export const ServerGameService = {
       gameState.logs.push(`${attacker.displayName} 对 ${defender.displayName} 造成了 ${totalDamage} 点战斗伤害`);
 
       EventEngine.dispatchEvent(gameState, {
-        type: 'DAMAGE_TAKEN',
+        type: 'COMBAT_DAMAGE_CAUSED',
         playerUid: defenderId,
         data: { amount: totalDamage, source: 'BATTLE' }
       });

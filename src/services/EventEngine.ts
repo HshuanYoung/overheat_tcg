@@ -1,5 +1,6 @@
 import { GameState, PlayerState, Card, GameEvent, CardEffect } from '../types/game';
 import { GameService } from './gameService';
+import { AtomicEffectExecutor } from './AtomicEffectExecutor';
 
 export class EventEngine {
   static dispatchEvent(gameState: GameState, event: GameEvent) {
@@ -32,21 +33,29 @@ export class EventEngine {
     // In a real Yu-Gi-Oh like game, they might go on a chain/stack.
     for (const { card, effect, playerUid } of triggeredEffects) {
       const player = gameState.players[playerUid];
-      if (effect.isMandatory) {
-        if (effect.execute) {
-          effect.execute(card, gameState, player, event);
-          GameService.recordEffectUsage(gameState, playerUid, card, effect);
-          gameState.logs.push(`[诱发效果] ${player.displayName} 的 ${card.fullName} 触发了效果。`);
-        }
-      } else {
-        // Optional effects could be added to a pending queue for the player to decide
-        // For now, we auto-execute or we could add to counterStack
-        if (effect.execute) {
-          effect.execute(card, gameState, player, event);
-          GameService.recordEffectUsage(gameState, playerUid, card, effect);
-          gameState.logs.push(`[诱发效果] ${player.displayName} 的 ${card.fullName} 触发了效果。`);
-        }
+      
+      // Execute Atomic Effects if present
+      if (effect.atomicEffects && effect.atomicEffects.length > 0) {
+        effect.atomicEffects.forEach(atomic => {
+          AtomicEffectExecutor.execute(gameState, playerUid, atomic, card, event);
+        });
       }
+
+      // Execute legacy callback if present
+      if (effect.execute) {
+        effect.execute(card, gameState, player, event);
+      }
+
+      GameService.recordEffectUsage(gameState, playerUid, card, effect);
+      gameState.logs.push(`[诱发效果] ${player.displayName} 的 ${card.fullName} 触发了效果: ${effect.description}`);
+      
+      // Special event for triggering
+      this.dispatchEvent(gameState, {
+        type: 'EFFECT_TRIGGERED',
+        playerUid,
+        sourceCardId: card.gamecardId,
+        data: { effectId: effect.id }
+      });
     }
   }
 
@@ -77,8 +86,16 @@ export class EventEngine {
       activeZones.forEach(card => {
         if (card && card.effects) {
           card.effects.forEach(effect => {
-            if (effect.type === 'CONTINUOUS' && effect.applyContinuous) {
-              effect.applyContinuous(gameState, card);
+            if (effect.type === 'CONTINUOUS') {
+              if (effect.applyContinuous) {
+                effect.applyContinuous(gameState, card);
+              }
+              if (effect.atomicEffects) {
+                effect.atomicEffects.forEach(atomic => {
+                   // Only applying stat changes for continuous atomic effects for now
+                   AtomicEffectExecutor.execute(gameState, player.uid, atomic, card);
+                });
+              }
             }
           });
         }

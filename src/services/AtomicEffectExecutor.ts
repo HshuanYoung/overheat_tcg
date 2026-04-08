@@ -182,6 +182,15 @@ export class AtomicEffectExecutor {
           playerUid,
           sourceCardId: card.gamecardId
         });
+      } else {
+        // Loss condition: Deck out during draw
+        if (gameState.gameStatus !== 2) {
+            gameState.gameStatus = 2;
+            gameState.winReason = 'DECK_OUT_DRAW_EFFECT';
+            gameState.winnerId = gameState.playerIds.find(id => id !== playerUid);
+            gameState.logs.push(`[游戏结束] ${player.displayName} 尝试抽牌但卡组已空，判负。`);
+        }
+        return;
       }
     }
     gameState.logs.push(`${player.displayName} 抽了 ${count} 张卡`);
@@ -233,17 +242,27 @@ export class AtomicEffectExecutor {
 
   private static dealDamage(gameState: GameState, playerUid: string, amount: number, source: 'BATTLE' | 'EFFECT') {
     const player = gameState.players[playerUid];
+
+    // Loss condition: Insufficient deck for damage
+    if (player.deck.length < amount) {
+        if (gameState.gameStatus !== 2) {
+            gameState.gameStatus = 2;
+            gameState.winReason = source === 'BATTLE' ? 'DECK_OUT_BATTLE_DAMAGE' : 'DECK_OUT_EFFECT_DAMAGE';
+            gameState.winnerId = gameState.playerIds.find(id => id !== playerUid);
+            gameState.logs.push(`[游戏结束] ${player.displayName} 受到伤害但卡组不足以支付，判负。`);
+        }
+        return;
+    }
+
     gameState.logs.push(`${player.displayName} 受到了 ${amount} 点 ${source === 'BATTLE' ? '战斗' : '效果'} 伤害`);
     
     for (let i = 0; i < amount; i++) {
-        if (player.deck.length > 0) {
-            const card = player.deck.pop()!;
-            card.displayState = 'FRONT_UPRIGHT';
-            card.cardlocation = 'EROSION_FRONT';
-            const emptyIndex = player.erosionFront.findIndex(c => c === null);
-            if (emptyIndex !== -1) player.erosionFront[emptyIndex] = card;
-            else player.erosionFront.push(card);
-        }
+        const card = player.deck.pop()!;
+        card.displayState = 'FRONT_UPRIGHT';
+        card.cardlocation = 'EROSION_FRONT';
+        const emptyIndex = player.erosionFront.findIndex(c => c === null);
+        if (emptyIndex !== -1) player.erosionFront[emptyIndex] = card;
+        else player.erosionFront.push(card);
     }
 
     EventEngine.dispatchEvent(gameState, {

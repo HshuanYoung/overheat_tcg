@@ -271,6 +271,9 @@ export const ServerGameService = {
 
     EventEngine.handleCardEnteredZone(gameState, targetPlayerId, card, targetZone);
 
+    // 3. There are 10 cards on the back of the erosion area
+    this.checkWinConditions(gameState);
+
     return true;
   },
 
@@ -411,7 +414,15 @@ export const ServerGameService = {
       if (feijingCard) {
         this.moveCard(gameState, playerId, 'HAND', playerId, 'GRAVE', feijingCard.gamecardId);
       }
-      for (let i = 0; i < remainingCost; i++) {
+    for (let i = 0; i < remainingCost; i++) {
+        // 2. The cards in the damaged deck do not have enough damage value
+        if (player.deck.length === 0) {
+          gameState.logs.push(`[游戏结束] ${player.displayName} 的卡组中没有足够的卡牌来支付剩余费用，判负。`);
+          gameState.gameStatus = 2;
+          gameState.winReason = 'DECK_OUT_COST';
+          gameState.winnerId = gameState.playerIds.find(id => id !== playerId);
+          return { success: false, reason: 'DECK OUT' };
+        }
         const topCard = player.deck.pop();
         if (topCard) {
           topCard.cardlocation = 'EROSION_FRONT';
@@ -981,8 +992,17 @@ export const ServerGameService = {
 
   applyDamageToPlayer(gameState: GameState, playerId: string, damage: number) {
     const player = gameState.players[playerId];
+    
+    // 2. The cards in the damaged deck do not have enough damage value
+    if (player.deck.length < damage) {
+      gameState.logs.push(`[游戏结束] ${player.displayName} 的卡组中没有足够的卡牌来承受 ${damage} 点伤害，判负。`);
+      gameState.gameStatus = 2;
+      gameState.winReason = 'DECK_OUT_DAMAGE';
+      gameState.winnerId = gameState.playerIds.find(id => id !== playerId);
+      return;
+    }
+
     for (let i = 0; i < damage; i++) {
-      if (player.deck.length > 0) {
         const card = player.deck.pop()!;
         card.cardlocation = 'EROSION_FRONT';
         card.displayState = 'FRONT_UPRIGHT';
@@ -1005,8 +1025,6 @@ export const ServerGameService = {
         // If more than 10, excess to grave
         const currentTotal = player.erosionFront.filter(c => c !== null).length;
         if (currentTotal > 10) {
-          // This logic might need refinement based on which one to move to grave
-          // For now, just move the last one added
           const lastIdx = player.erosionFront.length - 1;
           const excessCard = player.erosionFront[lastIdx];
           if (excessCard) {
@@ -1015,14 +1033,10 @@ export const ServerGameService = {
             player.erosionFront[lastIdx] = null;
           }
         }
-      } else {
-        // Deck out
-        gameState.gameStatus = 2;
-        gameState.winReason = 'DECK_OUT';
-        gameState.winnerId = gameState.playerIds.find(id => id !== playerId);
-        break;
-      }
     }
+    
+    // Check 10 erosion back condition just in case (though it's mostly in moveCard)
+    this.checkWinConditions(gameState);
   },
 
   destroyUnit(gameState: GameState, playerId: string, gamecardId: string) {
@@ -1086,6 +1100,23 @@ export const ServerGameService = {
     gameState.logs.push(`--- 回合 ${gameState.turnCount}: ${nextPlayer.displayName} ---`);
     gameState.mainPhaseTimeRemaining = 300000;
     this.executeStartPhase(gameState, nextPlayer);
+  },
+
+  checkWinConditions(gameState: GameState): boolean {
+    if (gameState.gameStatus === 2) return true; // Already over
+
+    for (const player of Object.values(gameState.players)) {
+      // 3. There are 10 cards on the back of the erosion area
+      const erosionBackCount = player.erosionBack.filter(c => c !== null).length;
+      if (erosionBackCount >= 10) {
+        gameState.gameStatus = 2;
+        gameState.winReason = 'EROSION_BACK_FULL';
+        gameState.winnerId = gameState.playerIds.find(id => id !== player.uid);
+        gameState.logs.push(`[游戏结束] ${player.displayName} 的侵蚀区背面达到 10 张，判负。`);
+        return true;
+      }
+    }
+    return false;
   },
 
   async advancePhase(gameState: GameState, action?: string, playerId?: string) {
@@ -1312,10 +1343,12 @@ export const ServerGameService = {
         });
       }
     } else {
-      gameState.logs.push(`${player.displayName} 卡组为空！`);
+      // 1. During the card drawing stage, there are no cards available for drawing
+      gameState.logs.push(`[游戏结束] ${player.displayName} 在抽牌阶段卡组已空，判负。`);
       gameState.gameStatus = 2;
-      gameState.winReason = 'DECK_OUT';
+      gameState.winReason = 'DECK_OUT_DRAW';
       gameState.winnerId = gameState.playerIds.find(id => id !== player.uid);
+      return; // Stop processing further phases
     }
 
     // Automatically move to EROSION phase

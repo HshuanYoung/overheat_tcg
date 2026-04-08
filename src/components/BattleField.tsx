@@ -11,7 +11,7 @@ import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const BattleField: React.FC = () => {
@@ -1845,7 +1845,93 @@ export const BattleField: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Game Over Modal */}
+      <AnimatePresence>
+        {game?.gameStatus === 2 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 50 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className="max-w-md w-full bg-zinc-900 border-2 border-white/10 rounded-[3rem] p-12 shadow-[0_0_100px_rgba(0,0,0,0.8)] flex flex-col items-center gap-8 relative overflow-hidden text-center"
+            >
+              {/* Premium Background Effects */}
+              <div className={cn(
+                "absolute -top-24 -right-24 w-48 h-48 blur-[80px] rounded-full opacity-20",
+                game.winnerId === myUid ? "bg-orange-500" : "bg-blue-600"
+              )} />
+              
+              <motion.div
+                initial={{ rotate: -10, scale: 0.8 }}
+                animate={{ rotate: 0, scale: 1 }}
+                transition={{ type: "spring", damping: 12 }}
+                className={cn(
+                  "w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl relative z-10",
+                  game.winnerId === myUid 
+                    ? "bg-gradient-to-br from-orange-400 to-red-600 shadow-orange-500/40" 
+                    : "bg-gradient-to-br from-zinc-700 to-zinc-900 shadow-black/40"
+                )}
+              >
+                {game.winnerId === myUid ? (
+                  <Trophy className="w-12 h-12 text-white" />
+                ) : (
+                  <Frown className="w-12 h-12 text-zinc-400" />
+                )}
+              </motion.div>
+
+              <div className="space-y-2 relative z-10">
+                <h2 className={cn(
+                  "text-5xl font-black italic uppercase tracking-tighter leading-none",
+                  game.winnerId === myUid ? "text-orange-500" : "text-white/40"
+                )}>
+                  {game.winnerId === myUid ? "Victory" : "Defeat"}
+                </h2>
+                <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">
+                  Game Session Terminated
+                </p>
+              </div>
+
+              <div className="w-full h-px bg-white/5 relative z-10" />
+
+              <div className="space-y-4 relative z-10">
+                <p className="text-zinc-400 text-sm font-medium">
+                  结算原因:
+                </p>
+                <div className="px-6 py-3 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm">
+                  <span className="text-white font-black italic uppercase tracking-widest text-sm">
+                    {winReasonMap[game.winReason || ''] || game.winReason || '未知原因'}
+                  </span>
+                </div>
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.05, y: -5 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => navigate('/')}
+                className="w-full py-5 px-10 bg-white text-black rounded-3xl font-black uppercase italic tracking-widest transition-all shadow-[0_20px_40px_rgba(255,255,255,0.1)] flex items-center justify-center gap-4 group relative z-10 mt-4"
+              >
+                <Home className="w-5 h-5" />
+                Return to Home
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
+};
+
+const winReasonMap: Record<string, string> = {
+  'DECK_OUT_DRAW': '抽牌阶段卡组已空',
+  'DECK_OUT_DRAW_EFFECT': '由于效果抽牌时卡组已空',
+  'DECK_OUT_DAMAGE': '受到伤害时卡组卡牌不足',
+  'DECK_OUT_BATTLE_DAMAGE': '受到战斗伤害时卡组卡牌不足',
+  'DECK_OUT_EFFECT_DAMAGE': '受到效果伤害时卡组卡牌不足',
+  'DECK_OUT_COST': '支付费用时卡组卡牌不足',
+  'EROSION_BACK_FULL': '侵蚀区背面卡牌达到10张'
 };
 

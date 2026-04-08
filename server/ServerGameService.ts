@@ -294,9 +294,6 @@ export const ServerGameService = {
       if (c && c.color !== 'NONE') availableColors[c.color] = (availableColors[c.color] || 0) + 1;
     };
     player.unitZone.forEach(countColors);
-    player.itemZone.forEach(countColors);
-    player.erosionFront.forEach(countColors);
-
     for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
       if ((availableColors[color] || 0) < (reqCount as number)) {
         return { canPlay: false, reason: `缺少颜色: ${color}` };
@@ -642,27 +639,35 @@ export const ServerGameService = {
 
         case 'EFFECT':
           if (!card) break;
-          const effectIndex = stackItem.effectIndex ?? 0;
-          const effect = card.effects?.[effectIndex];
-          if (effect) {
-            // Execute Atomic Effects if present
-            if (effect.atomicEffects && effect.atomicEffects.length > 0) {
-              effect.atomicEffects.forEach(atomic => {
-                AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card);
+          const data = stackItem.data as any;
+          if (data && data.afterSelectionEffects) {
+            data.afterSelectionEffects.forEach((atomic: any) => {
+              AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card, undefined, data.selections);
+            });
+            gameState.logs.push(`[效果结算] 连锁中的选择效果已结算。`);
+          } else {
+            const effectIndex = stackItem.effectIndex ?? 0;
+            const effect = card.effects?.[effectIndex];
+            if (effect) {
+              // Execute Atomic Effects if present
+              if (effect.atomicEffects && effect.atomicEffects.length > 0) {
+                effect.atomicEffects.forEach(atomic => {
+                  AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card);
+                });
+              }
+
+              // Execute legacy callback
+              if (effect.execute) {
+                effect.execute(card, gameState, owner);
+              }
+
+              gameState.logs.push(`[效果结算] ${card.fullName} 的效果已结算。`);
+              EventEngine.dispatchEvent(gameState, {
+                type: 'EFFECT_ACTIVATED',
+                playerUid: stackItem.ownerUid,
+                sourceCardId: card.gamecardId
               });
             }
-
-            // Execute legacy callback
-            if (effect.execute) {
-              effect.execute(card, gameState, owner);
-            }
-
-            gameState.logs.push(`[效果结算] ${card.fullName} 的效果已结算。`);
-            EventEngine.dispatchEvent(gameState, {
-              type: 'EFFECT_ACTIVATED',
-              playerUid: stackItem.ownerUid,
-              sourceCardId: card.gamecardId
-            });
           }
           break;
 
@@ -698,6 +703,86 @@ export const ServerGameService = {
     gameState.phaseTimerStart = Date.now();
 
     return gameState;
+  },
+
+  async resolvePlay(gameState: GameState) {
+    return this.resolveCounterStack(gameState);
+  },
+
+  async handleQueryChoice(gameState: GameState, playerUid: string, queryId: string, selections: string[]) {
+    if (!gameState.pendingQuery || gameState.pendingQuery.id !== queryId) {
+      throw new Error('无效的选择请求');
+    }
+    if (gameState.pendingQuery.playerUid !== playerUid) {
+      throw new Error('不属于你的选择请求');
+    }
+
+    const query = gameState.pendingQuery;
+    gameState.pendingQuery = undefined; // Clear it
+
+    // Generic Resolution logic
+    const afterEffects = query.afterSelectionEffects;
+    if (afterEffects && afterEffects.length > 0) {
+      const sourceCardId = query.context?.sourceCardId;
+      const sourceCard = sourceCardId ? this.findCardById(gameState, sourceCardId) : undefined;
+
+      if (query.executionMode === 'ON_STACK') {
+        const queryCard = sourceCard || query.options[0]?.card;
+        this.enterCountering(gameState, playerUid, {
+          ownerUid: playerUid,
+          type: 'EFFECT',
+          card: queryCard, // The card that initiated the query is usually the source of the follow-up
+          timestamp: Date.now(),
+          // Custom data to tell the stack resolver to use the query selections
+          data: {
+            afterSelectionEffects: afterEffects,
+            selections
+          } as any
+        });
+      } else {
+        // IMMEDIATE resolution
+        afterEffects.forEach(effect => {
+          AtomicEffectExecutor.execute(gameState, playerUid, effect, sourceCard, undefined, selections);
+        });
+      }
+    }
+
+    // Historical/Legacy fallback for 10401001 (though scripts will be updated next)
+    if (query.callbackKey === '10401001_exile' && !afterEffects) {
+      const selectedGamecardId = selections[0];
+      const option = query.options.find(o => o.card.gamecardId === selectedGamecardId);
+      if (option) {
+        const player = gameState.players[playerUid];
+        const card = option.card;
+        this.moveCard(gameState, playerUid, option.source, playerUid, 'EXILE', card.gamecardId);
+        gameState.logs.push(`[风花] 放逐了 ${card.fullName}。`);
+        if (card.effects) {
+          card.effects.forEach(effect => {
+            if (effect.atomicEffects) {
+              effect.atomicEffects.forEach(atomic => {
+                AtomicEffectExecutor.execute(gameState, playerUid, atomic, card);
+              });
+            }
+            if (effect.execute) {
+              effect.execute(card, gameState, player);
+            }
+          });
+        }
+      }
+    }
+
+    return gameState;
+  },
+
+  findCardById(gameState: GameState, gamecardId: string): Card | undefined {
+    for (const player of Object.values(gameState.players)) {
+      const zones = [player.hand, player.deck, player.grave, player.exile, player.unitZone, player.itemZone, player.erosionFront, player.erosionBack];
+      for (const zone of zones) {
+        const found = zone.find(c => c?.gamecardId === gamecardId);
+        if (found) return found;
+      }
+    }
+    return undefined;
   },
 
   async declareAttack(gameState: GameState, playerId: string, attackerIds: string[], isAlliance: boolean) {

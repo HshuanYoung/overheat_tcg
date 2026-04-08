@@ -37,6 +37,7 @@ export const BattleField: React.FC = () => {
   const [showDefenseModal, setShowDefenseModal] = useState(false);
   const [selectedErosionCardId, setSelectedErosionCardId] = useState<string | null>(null);
   const [erosionChoice, setErosionChoice] = useState<'A' | 'B' | 'C' | null>(null);
+  const [selectedQueryIds, setSelectedQueryIds] = useState<string[]>([]);
 
   const [timer, setTimer] = useState<number>(30);
   const [cardMenu, setCardMenu] = useState<{
@@ -69,17 +70,17 @@ export const BattleField: React.FC = () => {
       const independentPhases = ['EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN'];
 
       const isWaiting = (game.counterStack && game.counterStack.length > 0) ||
-                        (game.battleState && game.battleState.askConfront);
- 
-       let remaining = 30000;
-       if (sharedPhases.includes(game.phase) && !isWaiting) {
-         remaining = Math.max(0, (game.mainPhaseTimeRemaining || 300000) - elapsed);
-       } else {
-         remaining = Math.max(0, 30000 - elapsed);
-       }
- 
-       const newTimerValue = Math.floor(remaining / 1000);
-       setTimer(newTimerValue);
+        (game.battleState && game.battleState.askConfront);
+
+      let remaining = 30000;
+      if (sharedPhases.includes(game.phase) && !isWaiting) {
+        remaining = Math.max(0, (game.mainPhaseTimeRemaining || 300000) - elapsed);
+      } else {
+        remaining = Math.max(0, 30000 - elapsed);
+      }
+
+      const newTimerValue = Math.floor(remaining / 1000);
+      setTimer(newTimerValue);
 
       // Auto-resolve for player if timeout during Countering
       if (game.phase === 'COUNTERING' && game.priorityPlayerId === myUid && remaining <= 0) {
@@ -428,6 +429,16 @@ export const BattleField: React.FC = () => {
     }
   };
 
+  const handleQuerySubmit = async () => {
+    if (!gameId || !game?.pendingQuery) return;
+    try {
+      await GameService.submitQueryChoice(gameId, game.pendingQuery.id, selectedQueryIds);
+      setSelectedQueryIds([]);
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
   const togglePaymentExhaust = (gamecardId: string) => {
     setPaymentSelection(prev => {
       const isExhausted = prev.exhaustIds.includes(gamecardId);
@@ -719,14 +730,14 @@ export const BattleField: React.FC = () => {
                       )}
 
                       {/* Exhaust Section */}
-                      {[...me.unitZone, ...me.itemZone].some(c => c && !c.isExhausted) && (
+                      {me.unitZone.some(c => c && !c.isExhausted) && (
                         <div className="flex flex-col gap-3">
                           <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
                             <Sword className="w-4 h-4" />
                             横置支付 (Exhaust Payment - Cost -1)
                           </div>
                           <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-                            {[...me.unitZone, ...me.itemZone].filter(c => c && !c.isExhausted).map(card => {
+                            {me.unitZone.filter(c => c && !c.isExhausted).map(card => {
                               const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
                               return (
                                 <motion.div
@@ -1541,6 +1552,93 @@ export const BattleField: React.FC = () => {
               <div className="flex gap-4">
                 <button onClick={() => GameService.advancePhase(gameId!, 'CONFIRM_CONFRONTATION')} className="px-8 py-3 bg-[#f27d26] text-black font-black uppercase rounded-lg hover:bg-orange-400">COUNTER</button>
                 <button onClick={() => GameService.advancePhase(gameId!, 'DECLINE_CONFRONTATION')} className="px-8 py-3 bg-zinc-700 text-white font-black uppercase rounded-lg hover:bg-zinc-600">PASS</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Effect Query Overlay */}
+      <AnimatePresence>
+        {game.pendingQuery && game.pendingQuery.playerUid === myUid && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-8"
+          >
+            <div className="max-w-6xl w-full flex flex-col items-center gap-10">
+              <div className="text-center">
+                <h2 className="text-5xl font-black italic text-[#f27d26] mb-3 uppercase tracking-tighter">
+                  {game.pendingQuery.title}
+                </h2>
+                <p className="text-zinc-400 uppercase tracking-[0.4em] text-sm max-w-2xl mx-auto leading-relaxed">
+                  {game.pendingQuery.description}
+                </p>
+                <div className="mt-4 px-6 py-2 bg-white/5 rounded-full border border-white/10 inline-block font-mono text-xs text-zinc-500">
+                  SELECTIONS REQUIRED: {game.pendingQuery.minSelections} - {game.pendingQuery.maxSelections}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 max-h-[50vh] overflow-y-auto p-4 custom-scrollbar">
+                {game.pendingQuery.options.map((option, i) => {
+                  const isSelected = selectedQueryIds.includes(option.card.gamecardId);
+                  return (
+                    <div key={`${option.card.gamecardId}-${i}`} className="flex flex-col items-center gap-4 group">
+                      <div className="relative">
+                        <motion.div
+                          whileHover={{ scale: 1.05, y: -10 }}
+                          onClick={() => {
+                            setSelectedQueryIds(prev => {
+                              const alreadySelected = prev.includes(option.card.gamecardId);
+                              if (alreadySelected) return prev.filter(id => id !== option.card.gamecardId);
+                              if (prev.length >= (game.pendingQuery?.maxSelections || 1)) {
+                                if (game.pendingQuery?.maxSelections === 1) return [option.card.gamecardId];
+                                return prev;
+                              }
+                              return [...prev, option.card.gamecardId];
+                            });
+                          }}
+                          className={cn(
+                            "w-44 cursor-pointer transition-all rounded-2xl overflow-hidden border-2 relative",
+                            isSelected
+                              ? "border-[#f27d26] shadow-[0_0_40px_rgba(242,125,38,0.4)] scale-105"
+                              : "border-white/5 opacity-80 hover:opacity-100"
+                          )}
+                        >
+                          <CardComponent card={option.card} disableZoom={true} />
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-[#f27d26]/10 flex items-center justify-center pointer-events-none">
+                              <div className="w-12 h-12 rounded-full bg-[#f27d26] text-black flex items-center justify-center font-black shadow-2xl">
+                                <Zap className="w-6 h-6 fill-current" />
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                        <div className="absolute -top-4 -right-4 px-3 py-1 bg-black border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#f27d26] shadow-2xl">
+                          {option.source}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-white text-[12px] font-bold truncate max-w-[176px]">{option.card.fullName}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-col items-center gap-6">
+                <button
+                  onClick={handleQuerySubmit}
+                  disabled={selectedQueryIds.length < game.pendingQuery.minSelections}
+                  className="px-16 py-5 bg-[#f27d26] text-white font-black italic uppercase tracking-[0.2em] rounded-2xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_20px_50px_rgba(242,125,38,0.3)] hover:scale-105 active:scale-95"
+                >
+                  CONFIRM SELECTION
+                </button>
+                <div className="flex items-center gap-2 text-zinc-600 uppercase text-[10px] font-black tracking-widest">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Awaiting player input
+                </div>
               </div>
             </div>
           </motion.div>

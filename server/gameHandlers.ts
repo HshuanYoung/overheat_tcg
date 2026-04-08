@@ -43,6 +43,9 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                 case 'ADVANCE_PHASE':
                     gameState = await ServerGameService.advancePhase(gameState, payload.action);
                     break;
+                case 'SUBMIT_QUERY_CHOICE':
+                    gameState = await ServerGameService.handleQueryChoice(gameState, user.userId, payload.queryId, payload.selections);
+                    break;
             }
             
             // Save state back to DB

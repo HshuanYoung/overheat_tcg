@@ -72,7 +72,8 @@ export type AtomicEffectType =
   | 'REVEAL_HAND'
   | 'FORCE_PLAY'
   | 'SKIP_PHASE'
-  | 'FORCE_END_PHASE';
+  | 'FORCE_END_PHASE'
+  | 'EXECUTE_CARD_EFFECTS';
 
 export interface CardFilter {
   id?: string;
@@ -95,6 +96,7 @@ export interface CardFilter {
   excludeId?: string;
   excludeGamecardId?: string;
   fuzzyName?: string;
+  querySelection?: boolean; // If true, only target cards selected in the current query context
 }
 
 export interface AtomicEffect {
@@ -216,7 +218,27 @@ export interface StackItem {
   nextPhase?: GamePhase; // For PHASE_END
   attackerIds?: string[]; // For ATTACK
   isAlliance?: boolean; // For ATTACK
+  data?: any; // Generic data for effects (e.g. query results)
   timestamp: number;
+}
+
+
+export interface EffectQuery {
+  id: string; // Unique ID for this query to match response
+  type: 'SELECT_CARD';
+  playerUid: string;
+  options: {
+    card: Card;
+    source: TriggerLocation;
+  }[];
+  title: string;
+  description: string;
+  minSelections: number;
+  maxSelections: number;
+  callbackKey: string; // Identifier for resolution logic (e.g. 'GENERIC_RESOLVE')
+  context?: any; // Extra data like the card that triggered this
+  afterSelectionEffects?: AtomicEffect[]; // Effects to run after choice is made
+  executionMode?: 'IMMEDIATE' | 'ON_STACK'; // How to resolve the after effects
 }
 
 export type GamePhase = 
@@ -262,6 +284,7 @@ export interface GameState {
   phaseTimerStart?: number;
   mainPhaseTimeRemaining?: number; 
   previousPhase?: GamePhase;
+  pendingQuery?: EffectQuery;
 }
 
 export interface Deck {

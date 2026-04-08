@@ -73,8 +73,8 @@ const CardSlot: React.FC<{
           <CardComponent isBack />
         ) : card ? (
           <div className={cn(
-            "h-full w-full relative transition-[transform,opacity] duration-500", 
-            isOpponent && "rotate-180", 
+            "h-full w-full relative transition-[transform,opacity] duration-500",
+            isOpponent && "rotate-180",
             isExhausted && "opacity-80",
             card.inAllianceGroup && (isOpponent ? "rotate-[270deg]" : "rotate-90")
           )}>
@@ -202,7 +202,7 @@ const PlayerHalf: React.FC<{
                   label={`ITEM ${i + 1}`}
                   onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
                   isExhausted={item ? item.isExhausted : false}
-                  isSelectedForPayment={item ? paymentSelection?.exhaustIds.includes(item.gamecardId) : false}
+                  isSelectedForPayment={false}
                   showCount={false}
                 />
               );
@@ -425,7 +425,7 @@ const PlayerHalf: React.FC<{
                   label={`ITEM ${i + 1}`}
                   onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
                   isExhausted={item ? item.isExhausted : false}
-                  isSelectedForPayment={item ? paymentSelection?.exhaustIds.includes(item.gamecardId) : false}
+                  isSelectedForPayment={false}
                   showCount={false}
                 />
               );

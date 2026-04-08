@@ -18,7 +18,7 @@ const card: Card = {
   damage: 0,
   godMark: false,
   displayState: 'FRONT_UPRIGHT',
-  isExhausted:false,
+  isExhausted: false,
   isrush: false,
   canAttack: true,
   feijingMark: false,
@@ -32,17 +32,17 @@ const card: Card = {
       description: '这张卡进入战场时，若你的战场上有2个或以上的蓝色区域（包括侵蚀区和道具区），双方玩家抽1张卡。',
       condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
         // Absolute Identification Check
-        const isSelf = event?.type === 'CARD_ENTERED_ZONE' && 
-                       ( (event?.sourceCard === instance && !!instance.runtimeFingerprint) || 
-                         (event?.sourceCard?.runtimeFingerprint && event?.sourceCard?.runtimeFingerprint === instance.runtimeFingerprint) ||
-                         (event?.sourceCardId && event?.sourceCardId === instance.gamecardId && !!instance.gamecardId) );
-        
-        const isOnBattlefield = event?.data?.zone === 'UNIT' || event?.data?.zone === 'ITEM';
+        const isSelf = event?.type === 'CARD_ENTERED_ZONE' &&
+          ((event?.sourceCard === instance && !!instance.runtimeFingerprint) ||
+            (event?.sourceCard?.runtimeFingerprint && event?.sourceCard?.runtimeFingerprint === instance.runtimeFingerprint) ||
+            (event?.sourceCardId && event?.sourceCardId === instance.gamecardId && !!instance.gamecardId));
+
+        const isOnBattlefield = event?.data?.zone === 'UNIT';
         if (!isSelf || !isOnBattlefield) return false;
 
         // Count blue zones (Unit, Item, Erosion) on your side
         let blueCount = 0;
-        const zones = [...playerState.unitZone, ...playerState.itemZone, ...playerState.erosionFront, ...playerState.erosionBack];
+        const zones = [...playerState.unitZone];
         zones.forEach(c => {
           if (c && c.color === 'BLUE') blueCount++;
         });

@@ -61,6 +61,10 @@ export const GameService = {
     socket.emit('gameAction', { gameId, action: 'DISCARD', payload: { cardId } });
   },
 
+  async submitQueryChoice(gameId: string, queryId: string, selections: string[]) {
+    socket.emit('gameAction', { gameId, action: 'SUBMIT_QUERY_CHOICE', payload: { queryId, selections } });
+  },
+
   moveCard(gameOrId: GameState | string, playerId: string, fromZone: TriggerLocation, toPlayerId: string, toZone: TriggerLocation, cardId: string): boolean {
     if (typeof gameOrId === 'string') {
       socket.emit('gameAction', { gameId: gameOrId, action: 'MOVE_CARD', payload: { fromZone, toPlayerId, toZone, cardId } });
@@ -92,8 +96,6 @@ export const GameService = {
       if (c && c.color !== 'NONE') availableColors[c.color] = (availableColors[c.color] || 0) + 1;
     };
     player.unitZone.forEach(countColors);
-    player.itemZone.forEach(countColors);
-    player.erosionFront.forEach(countColors);
 
     for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
       if ((availableColors[color] || 0) < (reqCount as number)) {
@@ -111,25 +113,25 @@ export const GameService = {
       }
     } else if (cost > 0) {
       let remainingCost = cost;
-      
+
       // I. Check for Feijing card in hand (of the same color)
-      const hasFeijing = player.hand.some((c: any) => 
-        c.gamecardId !== card.gamecardId && 
-        c.feijingMark && 
+      const hasFeijing = player.hand.some((c: any) =>
+        c.gamecardId !== card.gamecardId &&
+        c.feijingMark &&
         c.color === card.color
       );
       if (hasFeijing) {
         remainingCost = Math.max(0, remainingCost - 3);
       }
-      
+
       // II. Check for ready units on field
       const readyUnitsCount = player.unitZone.filter((c: any) => c !== null && !c.isExhausted).length;
       remainingCost = Math.max(0, remainingCost - readyUnitsCount);
-      
+
       // III. Check Erosion space limit (cannot reach 10 total)
       if (remainingCost > 0) {
-        const totalErosionCount = player.erosionFront.filter((c: any) => c !== null).length + 
-                                  player.erosionBack.filter((c: any) => c !== null).length;
+        const totalErosionCount = player.erosionFront.filter((c: any) => c !== null).length +
+          player.erosionBack.filter((c: any) => c !== null).length;
         if (totalErosionCount + remainingCost >= 10) {
           return { canPlay: false, reason: 'EROSION ZONE IS FULL (LIMIT 9)' };
         }

@@ -11,7 +11,8 @@ export class AtomicEffectExecutor {
     playerUid: string,
     effect: AtomicEffect,
     sourceCard?: Card,
-    event?: any
+    event?: any,
+    querySelections?: string[] // IDs of cards selected in a query
   ): void {
     const player = gameState.players[playerUid];
     const opponentUid = Object.keys(gameState.players).find(id => id !== playerUid)!;
@@ -113,11 +114,11 @@ export class AtomicEffectExecutor {
         break;
 
       case 'BANISH_CARD':
-        this.moveCards(gameState, playerUid, effect, 'EXILE');
+        this.moveCards(gameState, playerUid, effect, 'EXILE', undefined, sourceCard, querySelections);
         break;
 
       case 'DISCARD_CARD':
-        this.moveCards(gameState, playerUid, effect, 'GRAVE', 'HAND');
+        this.moveCards(gameState, playerUid, effect, 'GRAVE', 'HAND', sourceCard, querySelections);
         break;
 
       case 'REVEAL_HAND':
@@ -135,7 +136,9 @@ export class AtomicEffectExecutor {
         // This might need integration with ServerGameService.advancePhase
         break;
 
-      // ... Add other 20+ cases here
+      case 'EXECUTE_CARD_EFFECTS':
+        this.executeCardEffects(gameState, playerUid, effect, sourceCard, querySelections);
+        break;
       
       default:
         console.warn(`AtomicEffectExecutor: Effect type ${effect.type} not fully implemented yet.`);
@@ -144,6 +147,26 @@ export class AtomicEffectExecutor {
 
     // After any atomic effect, we might need to recalculate continuous effects
     EventEngine.recalculateContinuousEffects(gameState);
+  }
+
+  private static executeCardEffects(gameState: GameState, playerUid: string, effect: AtomicEffect, sourceCard?: Card, querySelections?: string[]) {
+    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
+    const player = gameState.players[playerUid];
+    
+    targets.forEach(card => {
+        if (card.effects) {
+            card.effects.forEach(e => {
+                if (e.atomicEffects) {
+                    e.atomicEffects.forEach(atomic => {
+                        this.execute(gameState, playerUid, atomic, card, undefined, querySelections);
+                    });
+                }
+                if (e.execute) {
+                    e.execute(card, gameState, player);
+                }
+            });
+        }
+    });
   }
 
   private static drawCards(gameState: GameState, playerUid: string, count: number) {
@@ -178,8 +201,8 @@ export class AtomicEffectExecutor {
     gameState.logs.push(`${player.displayName} 洗了卡组`);
   }
 
-  private static applyStatChange(gameState: GameState, effect: AtomicEffect, stat: 'power' | 'damage' | 'acValue' | 'godMark', sourceCard?: Card) {
-    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard);
+  private static applyStatChange(gameState: GameState, effect: AtomicEffect, stat: 'power' | 'damage' | 'acValue' | 'godMark', sourceCard?: Card, querySelections?: string[]) {
+    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
     targets.forEach(card => {
       if (effect.value !== undefined) {
         if (stat === 'power') {
@@ -230,8 +253,8 @@ export class AtomicEffectExecutor {
     });
   }
 
-  private static destroyCards(gameState: GameState, playerUid: string, effect: AtomicEffect, sourceCard?: Card) {
-    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard);
+  private static destroyCards(gameState: GameState, playerUid: string, effect: AtomicEffect, sourceCard?: Card, querySelections?: string[]) {
+    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
     targets.forEach(card => {
       // Find which player owns the card
       for (const pUid of Object.keys(gameState.players)) {
@@ -250,8 +273,8 @@ export class AtomicEffectExecutor {
     });
   }
 
-  private static moveCards(gameState: GameState, playerUid: string, effect: AtomicEffect, toZone: TriggerLocation, fromZonePref?: TriggerLocation, sourceCard?: Card) {
-    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard);
+  private static moveCards(gameState: GameState, playerUid: string, effect: AtomicEffect, toZone: TriggerLocation, fromZonePref?: TriggerLocation, sourceCard?: Card, querySelections?: string[]) {
+    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
     // Limit by targetCount if specified
     const finalTargets = effect.targetCount ? targets.slice(0, effect.targetCount) : targets;
     
@@ -279,8 +302,8 @@ export class AtomicEffectExecutor {
     });
   }
 
-  private static rotateCards(gameState: GameState, playerUid: string, effect: AtomicEffect, direction: 'HORIZONTAL' | 'VERTICAL', sourceCard?: Card) {
-    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard);
+  private static rotateCards(gameState: GameState, playerUid: string, effect: AtomicEffect, direction: 'HORIZONTAL' | 'VERTICAL', sourceCard?: Card, querySelections?: string[]) {
+    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
     targets.forEach(card => {
       card.displayState = direction === 'HORIZONTAL' ? 'BACK_UPRIGHT' : 'FRONT_UPRIGHT'; // Simplified for now
       EventEngine.dispatchEvent(gameState, { type: 'CARD_ROTATED', targetCardId: card.gamecardId, data: { direction } });
@@ -323,8 +346,13 @@ export class AtomicEffectExecutor {
      });
   }
 
-  static matchesFilter(card: Card, filter?: CardFilter, sourceCard?: Card): boolean {
+  static matchesFilter(card: Card, filter?: CardFilter, sourceCard?: Card, querySelections?: string[]): boolean {
     if (!filter) return true;
+
+    if (filter.querySelection && querySelections) {
+      if (!querySelections.includes(card.gamecardId)) return false;
+    }
+
     if (filter.id && card.id !== filter.id) return false;
     if (filter.type && card.type !== filter.type) return false;
     if (filter.color && card.color !== filter.color) return false;
@@ -350,10 +378,10 @@ export class AtomicEffectExecutor {
     return true;
   }
 
-  static findTargets(gameState: GameState, filter?: CardFilter, sourceCard?: Card): Card[] {
+  static findTargets(gameState: GameState, filter?: CardFilter, sourceCard?: Card, querySelections?: string[]): Card[] {
     const results: Card[] = [];
     const checkCard = (card: Card | null) => {
-      if (card && this.matchesFilter(card, filter, sourceCard)) results.push(card);
+      if (card && this.matchesFilter(card, filter, sourceCard, querySelections)) results.push(card);
     };
 
     Object.values(gameState.players).forEach(player => {
@@ -460,8 +488,8 @@ export class AtomicEffectExecutor {
       gameState.logs.push(`${player.displayName} 将 ${targets.length} 张侵蚀区的卡翻面。`);
   }
 
-  private static applyCanResetChange(gameState: GameState, effect: AtomicEffect, sourceCard?: Card) {
-      const targets = this.findTargets(gameState, effect.targetFilter, sourceCard);
+  private static applyCanResetChange(gameState: GameState, effect: AtomicEffect, sourceCard?: Card, querySelections?: string[]) {
+      const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
       targets.forEach(card => {
           if (effect.value !== undefined) {
               card.canResetCount = effect.value;

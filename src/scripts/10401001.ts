@@ -40,26 +40,49 @@ const card: Card = {
         return isSelf && isOnBattlefield;
       },
       execute: (card: Card, gameState: GameState, playerState: PlayerState) => {
-        // 1. Search Deck and Grave
-        const pool = [...playerState.deck, ...playerState.grave];
-        const target = pool.find(c => c && c.fullName.includes('歌月'));
+        // 1. Search Deck and Grave for "歌月" cards
+        const options: { card: Card; source: any }[] = [];
         
-        if (target) {
-          // 2. Exile it
-          const fromZone = playerState.deck.includes(target) ? 'DECK' : 'GRAVE';
-          GameService.moveCard(gameState, playerState.uid, fromZone, playerState.uid, 'EXILE', target.gamecardId);
-          gameState.logs.push(`[风花] 放逐了 ${target.fullName} 并执行其效果。`);
+        playerState.deck.forEach(c => {
+            if (c.fullName.includes('歌月')) {
+                options.push({ card: { ...c }, source: 'DECK' });
+            }
+        });
+        
+        playerState.grave.forEach(c => {
+            if (c.fullName.includes('歌月')) {
+                options.push({ card: { ...c }, source: 'GRAVE' });
+            }
+        });
 
-          // 3. Execute its atomic effects immediately (bypassing the counter stack)
-          if (target.effects) {
-            target.effects.forEach(effect => {
-               if (effect.atomicEffects) {
-                 effect.atomicEffects.forEach(atomic => {
-                   AtomicEffectExecutor.execute(gameState, playerState.uid, atomic, target);
-                 });
-               }
-            });
-          }
+        if (options.length > 0) {
+          // 2. Set pending query for the player
+          gameState.pendingQuery = {
+            id: Math.random().toString(36).substring(7),
+            type: 'SELECT_CARD',
+            playerUid: playerState.uid,
+            options: options as any,
+            title: '选择「歌月」卡牌',
+            description: '从你的卡组或墓地中选择一张名称含有「歌月」的卡牌放逐。',
+            minSelections: 1,
+            maxSelections: 1,
+            callbackKey: 'GENERIC_RESOLVE',
+            context: { sourceCardId: card.gamecardId },
+            afterSelectionEffects: [
+                {
+                    type: 'BANISH_CARD',
+                    targetFilter: { querySelection: true }
+                },
+                {
+                    type: 'EXECUTE_CARD_EFFECTS',
+                    targetFilter: { querySelection: true }
+                }
+            ],
+            executionMode: 'IMMEDIATE'
+          };
+          gameState.logs.push(`[风花] 正在寻找「歌月」卡牌...`);
+        } else {
+          gameState.logs.push(`[风花] 未在卡组或墓地中找到「歌月」卡牌。`);
         }
       }
     },

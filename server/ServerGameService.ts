@@ -732,52 +732,89 @@ export const ServerGameService = {
     gameState.pendingQuery = undefined; // Clear it
 
     // Generic Resolution logic
-    const afterEffects = query.afterSelectionEffects;
-    if (afterEffects && afterEffects.length > 0) {
-      const sourceCardId = query.context?.sourceCardId;
-      const sourceCard = sourceCardId ? this.findCardById(gameState, sourceCardId) : undefined;
+    let afterEffects = query.afterSelectionEffects || [];
+    let currentSelections = selections;
+    const sourceCardId = query.context?.sourceCardId;
+    const sourceCard = sourceCardId ? this.findCardById(gameState, sourceCardId) : undefined;
 
-      if (query.executionMode === 'ON_STACK') {
-        const queryCard = sourceCard || query.options[0]?.card;
-        this.enterCountering(gameState, playerUid, {
-          ownerUid: playerUid,
-          type: 'EFFECT',
-          card: queryCard, // The card that initiated the query is usually the source of the follow-up
-          timestamp: Date.now(),
-          // Custom data to tell the stack resolver to use the query selections
-          data: {
-            afterSelectionEffects: afterEffects,
-            selections
-          } as any
-        });
-      } else {
-        // IMMEDIATE resolution
-        afterEffects.forEach(effect => {
-          AtomicEffectExecutor.execute(gameState, playerUid, effect, sourceCard, undefined, selections);
-        });
-      }
+    // Special Case: Handling the response from a SELECT_PAYMENT query
+    if (query.type === 'SELECT_PAYMENT') {
+        try {
+            const paymentSelection = JSON.parse(selections[0]);
+            const result = this.payCost(
+                gameState, 
+                playerUid, 
+                query.paymentCost || 0, 
+                paymentSelection, 
+                query.paymentColor, 
+                query.context.targetCardId
+            );
+            
+            if (!result.success) {
+                // If payment fails, we might need to re-issue the query or cancel
+                // For now, let's throw an error which should be caught by the client
+                throw new Error(result.reason || '支付失败');
+            }
+            
+            // Resume the remaining effects stored in context
+            afterEffects = query.context.remainingEffects || [];
+            currentSelections = query.context.targetSelections || [];
+        } catch (e: any) {
+            // Restore query so player can try again? 
+            // Better to throw so client sees the error message
+            gameState.pendingQuery = query;
+            throw e;
+        }
     }
 
-    // Historical/Legacy fallback for 10401001 (though scripts will be updated next)
-    if (query.callbackKey === '10401001_exile' && !afterEffects) {
-      const selectedGamecardId = selections[0];
-      const option = query.options.find(o => o.card.gamecardId === selectedGamecardId);
-      if (option) {
-        const player = gameState.players[playerUid];
-        const card = option.card;
-        this.moveCard(gameState, playerUid, option.source, playerUid, 'EXILE', card.gamecardId);
-        gameState.logs.push(`[风花] 放逐了 ${card.fullName}。`);
-        if (card.effects) {
-          card.effects.forEach(effect => {
-            if (effect.atomicEffects) {
-              effect.atomicEffects.forEach(atomic => {
-                AtomicEffectExecutor.execute(gameState, playerUid, atomic, card);
-              });
+    if (afterEffects.length > 0) {
+      for (let i = 0; i < afterEffects.length; i++) {
+        const effect = afterEffects[i];
+
+        // INTERCEPT: If we need payment, "pause" and issue a SELECT_PAYMENT query
+        if (effect.type === 'PAY_CARD_COST') {
+            const targetId = currentSelections[0];
+            const targetCard = this.findCardById(gameState, targetId);
+            if (targetCard && targetCard.acValue && targetCard.acValue !== 0) {
+                gameState.pendingQuery = {
+                    id: Math.random().toString(36).substring(7),
+                    type: 'SELECT_PAYMENT',
+                    playerUid,
+                    options: [], // Not used for payment
+                    title: `支付费用: ${targetCard.fullName}`,
+                    description: `请选择如何支付 ${targetCard.acValue} 点费用。`,
+                    minSelections: 1,
+                    maxSelections: 1,
+                    callbackKey: 'GENERIC_RESOLVE',
+                    paymentCost: targetCard.acValue,
+                    paymentColor: targetCard.color,
+                    context: {
+                        ...query.context,
+                        targetCardId: targetId,
+                        targetSelections: currentSelections,
+                        remainingEffects: afterEffects.slice(i + 1)
+                    }
+                };
+                return gameState; // Exit handleQueryChoice, waiting for payment
             }
-            if (effect.execute) {
-              effect.execute(card, gameState, player);
-            }
+            continue; // No cost to pay
+        }
+
+        if (query.executionMode === 'ON_STACK') {
+          const queryCard = sourceCard || query.options[0]?.card;
+          this.enterCountering(gameState, playerUid, {
+            ownerUid: playerUid,
+            type: 'EFFECT',
+            card: queryCard,
+            timestamp: Date.now(),
+            data: { 
+              afterSelectionEffects: [effect], // Push one by one to stack? 
+              selections: currentSelections 
+            } as any
           });
+        } else {
+          // IMMEDIATE resolution
+          AtomicEffectExecutor.execute(gameState, playerUid, effect, sourceCard, undefined, currentSelections);
         }
       }
     }

@@ -140,6 +140,10 @@ export class AtomicEffectExecutor {
         this.executeCardEffects(gameState, playerUid, effect, sourceCard, querySelections);
         break;
       
+      case 'PAY_CARD_COST':
+        // This is handled by ServerGameService's handleQueryChoice
+        break;
+      
       default:
         console.warn(`AtomicEffectExecutor: Effect type ${effect.type} not fully implemented yet.`);
         break;

@@ -432,8 +432,13 @@ export const BattleField: React.FC = () => {
   const handleQuerySubmit = async () => {
     if (!gameId || !game?.pendingQuery) return;
     try {
-      await GameService.submitQueryChoice(gameId, game.pendingQuery.id, selectedQueryIds);
+      let selections = selectedQueryIds;
+      if (game.pendingQuery.type === 'SELECT_PAYMENT') {
+        selections = [JSON.stringify(paymentSelection)];
+      }
+      await GameService.submitQueryChoice(gameId, game.pendingQuery.id, selections);
       setSelectedQueryIds([]);
+      setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
     } catch (error: any) {
       alert(error.message);
     }
@@ -1558,7 +1563,6 @@ export const BattleField: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Effect Query Overlay */}
       <AnimatePresence>
         {game.pendingQuery && game.pendingQuery.playerUid === myUid && (
           <motion.div
@@ -1575,65 +1579,146 @@ export const BattleField: React.FC = () => {
                 <p className="text-zinc-400 uppercase tracking-[0.4em] text-sm max-w-2xl mx-auto leading-relaxed">
                   {game.pendingQuery.description}
                 </p>
-                <div className="mt-4 px-6 py-2 bg-white/5 rounded-full border border-white/10 inline-block font-mono text-xs text-zinc-500">
-                  SELECTIONS REQUIRED: {game.pendingQuery.minSelections} - {game.pendingQuery.maxSelections}
-                </div>
+                {game.pendingQuery.type === 'SELECT_CARD' && (
+                  <div className="mt-4 px-6 py-2 bg-white/5 rounded-full border border-white/10 inline-block font-mono text-xs text-zinc-500">
+                    SELECTIONS REQUIRED: {game.pendingQuery.minSelections} - {game.pendingQuery.maxSelections}
+                  </div>
+                )}
+                {game.pendingQuery.type === 'SELECT_PAYMENT' && (
+                  <div className="mt-4 flex items-center justify-center gap-6">
+                    <div className="flex items-center gap-2">
+                       <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Required:</span>
+                       <span className="text-3xl font-black text-red-500">{game.pendingQuery.paymentCost}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Selected:</span>
+                       <span className="text-3xl font-black text-white">{(paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 max-h-[50vh] overflow-y-auto p-4 custom-scrollbar">
-                {game.pendingQuery.options.map((option, i) => {
-                  const isSelected = selectedQueryIds.includes(option.card.gamecardId);
-                  return (
-                    <div key={`${option.card.gamecardId}-${i}`} className="flex flex-col items-center gap-4 group">
-                      <div className="relative">
-                        <motion.div
-                          whileHover={{ scale: 1.05, y: -10 }}
-                          onClick={() => {
-                            setSelectedQueryIds(prev => {
-                              const alreadySelected = prev.includes(option.card.gamecardId);
-                              if (alreadySelected) return prev.filter(id => id !== option.card.gamecardId);
-                              if (prev.length >= (game.pendingQuery?.maxSelections || 1)) {
-                                if (game.pendingQuery?.maxSelections === 1) return [option.card.gamecardId];
-                                return prev;
-                              }
-                              return [...prev, option.card.gamecardId];
-                            });
-                          }}
-                          className={cn(
-                            "w-44 cursor-pointer transition-all rounded-2xl overflow-hidden border-2 relative",
-                            isSelected
-                              ? "border-[#f27d26] shadow-[0_0_40px_rgba(242,125,38,0.4)] scale-105"
-                              : "border-white/5 opacity-80 hover:opacity-100"
-                          )}
-                        >
-                          <CardComponent card={option.card} disableZoom={true} />
-                          {isSelected && (
-                            <div className="absolute inset-0 bg-[#f27d26]/10 flex items-center justify-center pointer-events-none">
-                              <div className="w-12 h-12 rounded-full bg-[#f27d26] text-black flex items-center justify-center font-black shadow-2xl">
-                                <Zap className="w-6 h-6 fill-current" />
+              {game.pendingQuery.type === 'SELECT_CARD' ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 max-h-[50vh] overflow-y-auto p-4 custom-scrollbar w-full">
+                  {game.pendingQuery.options.map((option, i) => {
+                    const isSelected = selectedQueryIds.includes(option.card.gamecardId);
+                    return (
+                      <div key={`${option.card.gamecardId}-${i}`} className="flex flex-col items-center gap-4 group">
+                        <div className="relative">
+                          <motion.div
+                            whileHover={{ scale: 1.05, y: -10 }}
+                            onClick={() => {
+                              setSelectedQueryIds(prev => {
+                                const alreadySelected = prev.includes(option.card.gamecardId);
+                                if (alreadySelected) return prev.filter(id => id !== option.card.gamecardId);
+                                if (prev.length >= (game.pendingQuery?.maxSelections || 1)) {
+                                  if (game.pendingQuery?.maxSelections === 1) return [option.card.gamecardId];
+                                  return prev;
+                                }
+                                return [...prev, option.card.gamecardId];
+                              });
+                            }}
+                            className={cn(
+                              "w-44 cursor-pointer transition-all rounded-2xl overflow-hidden border-2 relative",
+                              isSelected
+                                ? "border-[#f27d26] shadow-[0_0_40px_rgba(242,125,38,0.4)] scale-105"
+                                : "border-white/5 opacity-80 hover:opacity-100"
+                            )}
+                          >
+                            <CardComponent card={option.card} disableZoom={true} />
+                            {isSelected && (
+                              <div className="absolute inset-0 bg-[#f27d26]/10 flex items-center justify-center pointer-events-none">
+                                <div className="w-12 h-12 rounded-full bg-[#f27d26] text-black flex items-center justify-center font-black shadow-2xl">
+                                  <Zap className="w-6 h-6 fill-current" />
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </motion.div>
-                        <div className="absolute -top-4 -right-4 px-3 py-1 bg-black border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#f27d26] shadow-2xl">
-                          {option.source}
+                            )}
+                          </motion.div>
+                          <div className="absolute -top-4 -right-4 px-3 py-1 bg-black border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#f27d26] shadow-2xl">
+                            {option.source}
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-white text-[12px] font-bold truncate max-w-[176px]">{option.card.fullName}</p>
                         </div>
                       </div>
-                      <div className="text-center">
-                        <p className="text-white text-[12px] font-bold truncate max-w-[176px]">{option.card.fullName}</p>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Payment Selection for Query */
+                <div className="flex flex-col gap-8 w-full max-w-4xl max-h-[50vh] overflow-y-auto p-4 custom-scrollbar">
+                  {/* Feijing Section */}
+                  {me.hand.some(c => c.feijingMark && c.color === game.pendingQuery?.paymentColor) && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 text-blue-400 font-black uppercase italic tracking-widest text-sm">
+                        <Zap className="w-4 h-4" />
+                        菲晶支付 (Feijing Payment - Cost -3)
+                      </div>
+                      <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                        {me.hand.filter(c => c.feijingMark && c.color === game.pendingQuery?.paymentColor).map(card => {
+                          const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
+                          return (
+                            <motion.div
+                              key={card.gamecardId}
+                              whileHover={{ y: -5 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => togglePaymentFeijing(card.gamecardId)}
+                              className={cn(
+                                "w-32 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                isSelected ? "border-blue-500 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
+                              )}
+                            >
+                              <CardComponent card={card} disableZoom />
+                            </motion.div>
+                          );
+                        })}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+
+                  {/* Exhaust Section */}
+                  {me.unitZone.some(c => c && !c.isExhausted) && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
+                        <Sword className="w-4 h-4" />
+                        横置支付 (Exhaust Payment - Cost -1)
+                      </div>
+                      <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                        {me.unitZone.filter(c => c && !c.isExhausted).map(card => {
+                          const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
+                          return (
+                            <motion.div
+                              key={card!.gamecardId}
+                              whileHover={{ y: -5 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => togglePaymentExhaust(card!.gamecardId)}
+                              className={cn(
+                                "w-32 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
+                              )}
+                            >
+                              <CardComponent card={card!} disableZoom />
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <p className="text-zinc-500 text-xs italic text-center px-8">
+                    Note: Any remaining cost will be automatically deducted from your deck as Erosion Damage.
+                  </p>
+                </div>
+              )}
 
               <div className="flex flex-col items-center gap-6">
                 <button
                   onClick={handleQuerySubmit}
-                  disabled={selectedQueryIds.length < game.pendingQuery.minSelections}
+                  disabled={game.pendingQuery.type === 'SELECT_CARD' && selectedQueryIds.length < game.pendingQuery.minSelections}
                   className="px-16 py-5 bg-[#f27d26] text-white font-black italic uppercase tracking-[0.2em] rounded-2xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_20px_50px_rgba(242,125,38,0.3)] hover:scale-105 active:scale-95"
                 >
-                  CONFIRM SELECTION
+                  {game.pendingQuery.type === 'SELECT_CARD' ? 'CONFIRM SELECTION' : 'CONFIRM PAYMENT'}
                 </button>
                 <div className="flex items-center gap-2 text-zinc-600 uppercase text-[10px] font-black tracking-widest">
                   <Loader2 className="w-3 h-3 animate-spin" />

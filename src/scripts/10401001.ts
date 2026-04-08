@@ -28,31 +28,31 @@ const card: Card = {
       type: 'TRIGGER',
       triggerEvent: 'CARD_ENTERED_ZONE',
       isMandatory: true,
-      description: '这张卡进入战场时，从你的卡组或墓地中选择一张名称含有「歌月」的卡牌放逐。该能力的效果作为此能力的后续效果执行，不触发对抗响应。',
+      description: '这张卡进入战场时，从你的卡组或墓地中选择一张名称含有「歌月」的故事卡放逐。该能力的效果作为此能力的后续效果执行，不触发对抗响应。',
       condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
         // Absolute Identification Check
-        const isSelf = event?.type === 'CARD_ENTERED_ZONE' && 
-                       ( (event?.sourceCard === instance && !!instance.runtimeFingerprint) || 
-                         (event?.sourceCard?.runtimeFingerprint && event?.sourceCard?.runtimeFingerprint === instance.runtimeFingerprint) ||
-                         (event?.sourceCardId && event?.sourceCardId === instance.gamecardId && !!instance.gamecardId) );
-        
+        const isSelf = event?.type === 'CARD_ENTERED_ZONE' &&
+          ((event?.sourceCard === instance && !!instance.runtimeFingerprint) ||
+            (event?.sourceCard?.runtimeFingerprint && event?.sourceCard?.runtimeFingerprint === instance.runtimeFingerprint) ||
+            (event?.sourceCardId && event?.sourceCardId === instance.gamecardId && !!instance.gamecardId));
+
         const isOnBattlefield = event?.data?.zone === 'UNIT' || event?.data?.zone === 'ITEM';
         return isSelf && isOnBattlefield;
       },
       execute: (card: Card, gameState: GameState, playerState: PlayerState) => {
         // 1. Search Deck and Grave for "歌月" cards
         const options: { card: Card; source: any }[] = [];
-        
+
         playerState.deck.forEach(c => {
-            if (c.fullName.includes('歌月')) {
-                options.push({ card: { ...c }, source: 'DECK' });
-            }
+          if (c.fullName.includes('歌月') && c.type === 'STORY') {
+            options.push({ card: { ...c }, source: 'DECK' });
+          }
         });
-        
+
         playerState.grave.forEach(c => {
-            if (c.fullName.includes('歌月')) {
-                options.push({ card: { ...c }, source: 'GRAVE' });
-            }
+          if (c.fullName.includes('歌月') && c.type === 'STORY') {
+            options.push({ card: { ...c }, source: 'GRAVE' });
+          }
         });
 
         if (options.length > 0) {
@@ -63,20 +63,24 @@ const card: Card = {
             playerUid: playerState.uid,
             options: options as any,
             title: '选择「歌月」卡牌',
-            description: '从你的卡组或墓地中选择一张名称含有「歌月」的卡牌放逐。',
+            description: '从你的卡组或墓地中选择一张名称含有「歌月」的故事卡放逐。',
             minSelections: 1,
             maxSelections: 1,
             callbackKey: 'GENERIC_RESOLVE',
             context: { sourceCardId: card.gamecardId },
             afterSelectionEffects: [
-                {
-                    type: 'BANISH_CARD',
-                    targetFilter: { querySelection: true }
-                },
-                {
-                    type: 'EXECUTE_CARD_EFFECTS',
-                    targetFilter: { querySelection: true }
-                }
+              {
+                type: 'BANISH_CARD',
+                targetFilter: { querySelection: true }
+              },
+              {
+                type: 'PAY_CARD_COST',
+                targetFilter: { querySelection: true }
+              },
+              {
+                type: 'EXECUTE_CARD_EFFECTS',
+                targetFilter: { querySelection: true }
+              }
             ],
             executionMode: 'IMMEDIATE'
           };

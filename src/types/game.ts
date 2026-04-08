@@ -73,7 +73,8 @@ export type AtomicEffectType =
   | 'FORCE_PLAY'
   | 'SKIP_PHASE'
   | 'FORCE_END_PHASE'
-  | 'EXECUTE_CARD_EFFECTS';
+  | 'EXECUTE_CARD_EFFECTS'
+  | 'PAY_CARD_COST';
 
 export interface CardFilter {
   id?: string;
@@ -225,7 +226,7 @@ export interface StackItem {
 
 export interface EffectQuery {
   id: string; // Unique ID for this query to match response
-  type: 'SELECT_CARD';
+  type: 'SELECT_CARD' | 'SELECT_PAYMENT';
   playerUid: string;
   options: {
     card: Card;
@@ -239,6 +240,9 @@ export interface EffectQuery {
   context?: any; // Extra data like the card that triggered this
   afterSelectionEffects?: AtomicEffect[]; // Effects to run after choice is made
   executionMode?: 'IMMEDIATE' | 'ON_STACK'; // How to resolve the after effects
+  // Payment Query specialized fields
+  paymentCost?: number;
+  paymentColor?: string;
 }
 
 export type GamePhase = 

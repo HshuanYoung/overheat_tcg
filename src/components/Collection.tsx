@@ -23,6 +23,13 @@ export const Collection: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRarity, setFilterRarity] = useState<string | null>(null);
   const [filterColor, setFilterColor] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    ac: '',
+    damage: '',
+    power: '',
+    faction: '',
+    ownership: 'ALL' // ALL, OWNED, NOT_OWNED
+  });
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
   const token = localStorage.getItem('token');
@@ -39,13 +46,25 @@ export const Collection: React.FC = () => {
     loadCollection();
   }, []);
 
-  const ownedCards = CARD_LIBRARY.filter(card => {
-    // Check both base id (legacy) and uniqueId (new)
-    const owned = (collection[card.uniqueId] || collection[card.id] || 0);
-    if (owned === 0) return false;
+  const filteredCards = CARD_LIBRARY.filter(card => {
+    // Text search
     if (searchTerm && !card.fullName.includes(searchTerm) && !(card.specialName && card.specialName.includes(searchTerm))) return false;
+    
+    // Quick filters
     if (filterRarity && card.rarity !== filterRarity) return false;
     if (filterColor && card.color !== filterColor) return false;
+
+    // Advanced filters
+    if (filters.ac !== '' && card.acValue.toString() !== filters.ac) return false;
+    if (filters.damage !== '' && card.damage?.toString() !== filters.damage) return false;
+    if (filters.power !== '' && card.power?.toString() !== filters.power) return false;
+    if (filters.faction !== '' && !card.faction?.toLocaleLowerCase().includes(filters.faction.toLocaleLowerCase())) return false;
+
+    // Ownership
+    const isOwned = (collection[card.uniqueId] || collection[card.id] || 0) > 0;
+    if (filters.ownership === 'OWNED' && !isOwned) return false;
+    if (filters.ownership === 'NOT_OWNED' && isOwned) return false;
+
     return true;
   });
 
@@ -137,22 +156,88 @@ export const Collection: React.FC = () => {
           </div>
         </div>
 
+        {/* Advanced Filters */}
+        <div className="flex gap-4 mb-8 p-4 bg-zinc-900/30 rounded-2xl border border-zinc-800/50">
+          <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">AC</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white"
+                placeholder="All"
+                value={filters.ac}
+                onChange={e => setFilters({...filters, ac: e.target.value})}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Damage</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white"
+                placeholder="All"
+                value={filters.damage}
+                onChange={e => setFilters({...filters, damage: e.target.value})}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Power</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white"
+                placeholder="All"
+                value={filters.power}
+                onChange={e => setFilters({...filters, power: e.target.value})}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Faction</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white"
+                placeholder="All"
+                value={filters.faction}
+                onChange={e => setFilters({...filters, faction: e.target.value})}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Ownership</label>
+              <select 
+                className="bg-black border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white"
+                value={filters.ownership}
+                onChange={e => setFilters({...filters, ownership: e.target.value})}
+              >
+                <option value="ALL">All Cards</option>
+                <option value="OWNED">Owned</option>
+                <option value="NOT_OWNED">Not Owned</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* Card Grid */}
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-          {ownedCards.map(card => (
-            <div key={card.uniqueId} className="relative">
-              <CardComponent 
-                card={card} 
-                displayMode="deck"
-                onClick={() => { /* Detail view if needed */ }}
-              />
-              <div className="absolute top-0 right-0 p-1.5 z-10">
-                 <span className="bg-black/80 text-[10px] text-white px-2 py-0.5 rounded-md border border-white/10 font-black">
-                   x{collection[card.uniqueId] || collection[card.id] || 0}
-                 </span>
+          {filteredCards.map(card => {
+            const isOwned = (collection[card.uniqueId] || collection[card.id] || 0) > 0;
+            return (
+              <div 
+                key={card.uniqueId} 
+                className={cn(
+                  "relative transition-all",
+                  !isOwned && "opacity-40 grayscale-[0.8]"
+                )}
+              >
+                <CardComponent 
+                  card={card} 
+                  displayMode="deck"
+                  onClick={() => { /* Detail view if needed */ }}
+                />
+                <div className="absolute top-0 right-0 p-1.5 z-10">
+                   <span className={cn(
+                     "bg-black/80 text-[10px] text-white px-2 py-0.5 rounded-md border border-white/10 font-black",
+                     !isOwned && "text-zinc-500"
+                   )}>
+                     x{collection[card.uniqueId] || collection[card.id] || 0}
+                   </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {ownedCards.length === 0 && (

@@ -15,7 +15,7 @@ interface CardProps {
   isExhausted?: boolean;
   disableZoom?: boolean;
   statusBorder?: 'red' | 'blue';
-  displayMode?: 'deck' | 'unit' | 'erosion_item' | 'none';
+  displayMode?: 'deck' | 'unit' | 'erosion_item' | 'hand' | 'none';
 }
 
 const getRarityClass = (rarity: Rarity) => {
@@ -67,8 +67,9 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
   const fullImageUrl = card.fullImageUrl || getCardImageUrl(card.id, card.rarity, false);
 
   const showStats = displayMode !== 'erosion_item' && displayMode !== 'none';
-  const showAC = showStats && displayMode !== 'unit';
-  const showUnitStats = showStats && displayMode !== 'deck' && card.type === 'UNIT';
+  const showAC = showStats && (displayMode === 'hand' || displayMode === 'deck' || displayMode === 'erosion_item');
+  const showUnitStats = showStats && displayMode === 'unit' && card.type === 'UNIT';
+  const isHand = displayMode === 'hand';
 
   return (
     <>
@@ -111,7 +112,9 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
                 : "bg-red-600/90 border-red-200 text-white"
             )}>
               <span className="text-[6px] leading-none opacity-80 uppercase font-black">Ac</span>
-              <span className="text-xs leading-none mt-0.5">{card.acValue >= 0 ? `+${card.acValue}` : card.acValue}</span>
+              <span className="text-xs leading-none mt-0.5">
+                {isHand ? Math.abs(card.acValue) : (card.acValue >= 0 ? `+${card.acValue}` : card.acValue)}
+              </span>
             </div>
           </div>
         )}

@@ -246,7 +246,7 @@ const PlayerHalf: React.FC<{
                     onClick={() => !!player.isHandPublic && onPreviewCard?.(card)}
                   >
                     {!!player.isHandPublic ? (
-                      <CardComponent card={card} disableZoom />
+                      <CardComponent card={card} disableZoom displayMode="hand" />
                     ) : (
                       <CardComponent isBack />
                     )}
@@ -420,6 +420,7 @@ const PlayerHalf: React.FC<{
                       <CardComponent
                         card={card}
                         disableZoom
+                        displayMode="hand"
                         className={cn(
                           "shadow-2xl transition-all duration-300 shadow-black/50",
                           isFeijingSelected && "shadow-[#f27d26]/60 ring-2 ring-[#f27d26]"

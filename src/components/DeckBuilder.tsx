@@ -18,10 +18,34 @@ export const DeckBuilder: React.FC = () => {
   const [isRenaming, setIsRenaming] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [collection, setCollection] = useState<Record<string, number>>({});
+  const [filters, setFilters] = useState({
+    ac: '',
+    damage: '',
+    power: '',
+    color: 'ALL',
+    faction: '',
+    rarity: 'ALL',
+    ownership: 'ALL' // ALL, OWNED, NOT_OWNED
+  });
 
   useEffect(() => {
     loadDecks();
+    loadCollection();
   }, []);
+
+  const loadCollection = async () => {
+    if (!getAuthUser()) return;
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/user/collection`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      setCollection(data.collection || {});
+    } catch (e) {
+      console.error('Failed to load collection:', e);
+    }
+  };
 
   const loadDecks = async () => {
     if (!getAuthUser()) return;
@@ -158,6 +182,13 @@ export const DeckBuilder: React.FC = () => {
         alert('卡组中带有神蚀标记的卡牌不能超过10张！');
         return;
       }
+      
+      const ownedQty = collection[card.uniqueId] || collection[card.id] || 0;
+      if (ownedQty <= count) {
+        alert('你拥有的该卡牌数量不足！');
+        return;
+      }
+
       setDeck([...deck, card]);
     } else if (count >= 4) {
       alert('同名卡牌在卡组中不能超过4张！');
@@ -172,11 +203,28 @@ export const DeckBuilder: React.FC = () => {
     setDeck(newDeck);
   };
 
-  const filteredCards = CARD_LIBRARY.filter(c => 
-    c.fullName.includes(searchTerm) || 
-    (c.specialName && c.specialName.includes(searchTerm)) || 
-    c.effects?.some(e => e.description.includes(searchTerm))
-  );
+  const filteredCards = CARD_LIBRARY.filter(c => {
+    // Text search
+    const matchesSearch = c.fullName.includes(searchTerm) || 
+      (c.specialName && c.specialName.includes(searchTerm)) || 
+      c.effects?.some(e => e.description.includes(searchTerm));
+    if (!matchesSearch) return false;
+
+    // Filters
+    if (filters.ac !== '' && c.acValue.toString() !== filters.ac) return false;
+    if (filters.damage !== '' && c.damage?.toString() !== filters.damage) return false;
+    if (filters.power !== '' && c.power?.toString() !== filters.power) return false;
+    if (filters.color !== 'ALL' && c.color !== filters.color) return false;
+    if (filters.faction !== '' && !c.faction?.toLocaleLowerCase().includes(filters.faction.toLocaleLowerCase())) return false;
+    if (filters.rarity !== 'ALL' && c.rarity !== filters.rarity) return false;
+
+    // Ownership
+    const isOwned = (collection[c.uniqueId] || collection[c.id] || 0) > 0;
+    if (filters.ownership === 'OWNED' && !isOwned) return false;
+    if (filters.ownership === 'NOT_OWNED' && isOwned) return false;
+
+    return true;
+  });
 
   return (
     <div className="flex h-[calc(100vh-64px)] mt-16 overflow-hidden bg-zinc-950">
@@ -324,35 +372,125 @@ export const DeckBuilder: React.FC = () => {
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
+          
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">AC</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
+                placeholder="All"
+                value={filters.ac}
+                onChange={e => setFilters({...filters, ac: e.target.value})}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Damage</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
+                placeholder="All"
+                value={filters.damage}
+                onChange={e => setFilters({...filters, damage: e.target.value})}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Power</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
+                placeholder="All"
+                value={filters.power}
+                onChange={e => setFilters({...filters, power: e.target.value})}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Color</label>
+              <select 
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white appearance-none"
+                value={filters.color}
+                onChange={e => setFilters({...filters, color: e.target.value})}
+              >
+                <option value="ALL">All Colors</option>
+                <option value="RED">Red</option>
+                <option value="BLUE">Blue</option>
+                <option value="GREEN">Green</option>
+                <option value="YELLOW">Yellow</option>
+                <option value="WHITE">White</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Rarity</label>
+              <select 
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white appearance-none"
+                value={filters.rarity}
+                onChange={e => setFilters({...filters, rarity: e.target.value})}
+              >
+                <option value="ALL">All Rarities</option>
+                <option value="C">C</option>
+                <option value="U">U</option>
+                <option value="R">R</option>
+                <option value="SR">SR</option>
+                <option value="UR">UR</option>
+                <option value="SER">SER</option>
+                <option value="PR">PR</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Owned</label>
+              <select 
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white appearance-none"
+                value={filters.ownership}
+                onChange={e => setFilters({...filters, ownership: e.target.value})}
+              >
+                <option value="ALL">All Cards</option>
+                <option value="OWNED">Owned</option>
+                <option value="NOT_OWNED">Not Owned</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">Faction</label>
+              <input 
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
+                placeholder="All"
+                value={filters.faction}
+                onChange={e => setFilters({...filters, faction: e.target.value})}
+              />
+            </div>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {filteredCards.map(card => (
-            <div 
-              key={card.uniqueId}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 hover:border-zinc-600 transition-all group"
-            >
-              <div className="flex gap-3 mb-3">
-                <div 
-                  className="w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 shadow-lg cursor-zoom-in"
-                  onClick={() => setZoomedCard(card)}
-                >
-                  <img src={getCardImageUrl(card.id, card.rarity, true)} className="w-full h-full object-cover" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-black italic text-sm truncate">{card.fullName}</h4>
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">{card.type} - {card.rarity}</p>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => addToDeck(card)}
-                      className="flex-1 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                    >
-                      ADD
-                    </button>
+          {filteredCards.map(card => {
+            const isOwned = (collection[card.uniqueId] || collection[card.id] || 0) > 0;
+            return (
+              <div 
+                key={card.uniqueId}
+                className={cn(
+                  "bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 hover:border-zinc-600 transition-all group relative",
+                  !isOwned && "opacity-60 grayscale-[0.5]"
+                )}
+              >
+                <div className="flex gap-3">
+                  <div 
+                    className="w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 shadow-lg cursor-zoom-in"
+                    onClick={() => setZoomedCard(card)}
+                  >
+                    <img src={getCardImageUrl(card.id, card.rarity, true)} className={cn("w-full h-full object-cover", !isOwned && "brightness-[0.4]")} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-black italic text-sm truncate">{card.fullName}</h4>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">{card.type} - {card.rarity}</p>
+                    <p className="text-[10px] text-zinc-400 font-bold">QTY: {collection[card.uniqueId] || collection[card.id] || 0}</p>
                   </div>
                 </div>
+                {isOwned && (
+                  <button 
+                    onClick={() => addToDeck(card)}
+                    className="absolute top-2 right-2 p-1 bg-red-600 hover:bg-red-700 rounded-full text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all z-10"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

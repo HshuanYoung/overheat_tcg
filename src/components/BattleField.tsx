@@ -12,7 +12,7 @@ import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const BattleField: React.FC = () => {
@@ -1814,44 +1814,176 @@ export const BattleField: React.FC = () => {
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_rgba(242,125,38,0.05)_0%,_transparent_50%)]" />
       </div>
 
-      {/* Full Image Overlay */}
+      {/* Detailed Card Information Overlay */}
       <AnimatePresence>
         {previewCard && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 cursor-pointer"
+            className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 md:p-8 cursor-pointer"
             onClick={() => setPreviewCard(null)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ scale: 0.9, opacity: 0, y: 30 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative flex items-center justify-center max-h-screen"
+              exit={{ scale: 0.9, opacity: 0, y: 30 }}
+              className="relative flex flex-col md:flex-row items-stretch gap-12 max-h-[92vh] w-full max-w-5xl p-10 bg-zinc-900/95 rounded-[3rem] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Full Image Display Only */}
-              <div className="relative aspect-[3/4] h-[85vh] rounded-3xl overflow-hidden border border-white/20 shadow-[0_0_80px_rgba(0,0,0,0.9)] group">
-                <img
-                  src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`}
-                  alt={previewCard.fullName}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
+              {/* Decorative Background Accents */}
+              <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#f27d26]/5 blur-[150px] rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-600/5 blur-[150px] rounded-full translate-y-1/2 -translate-x-1/2" />
 
-                {/* Floating Elegant Close Button */}
-                <button
-                  onClick={() => setPreviewCard(null)}
-                  className="absolute top-6 right-6 p-3 bg-black/60 backdrop-blur-xl rounded-2xl border border-white/10 hover:bg-white/10 hover:scale-105 transition-all shadow-2xl"
-                >
-                  <X className="w-6 h-6 text-white/80 hover:text-white" />
-                </button>
+              {/* Left Column: Name & Image Area */}
+              <div className="relative shrink-0 flex flex-col gap-6 w-[45%]">
+                <div className="text-center">
+                  <h2 className="text-4xl font-black italic text-white uppercase tracking-tighter leading-none mb-1">
+                    {previewCard.fullName}
+                  </h2>
+                  <div className="h-1 w-24 bg-gradient-to-r from-transparent via-[#f27d26] to-transparent mx-auto mt-2 opacity-50" />
+                </div>
+
+                <div className="relative aspect-[3/4] rounded-3xl overflow-hidden border-2 border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] group">
+                  <img
+                    src={previewCard.fullImageUrl || previewCard.imageUrl || `https://picsum.photos/seed/${previewCard.id}/400/600`}
+                    alt={previewCard.fullName}
+                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                    referrerPolicy="no-referrer"
+                  />
+                  {/* Floating Rarity Badge */}
+                  <div className="absolute top-6 left-6 px-4 py-1.5 bg-black/60 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl">
+                    <span className="text-lg font-black italic text-white uppercase tracking-widest">{previewCard.rarity}</span>
+                  </div>
+                </div>
               </div>
+
+              {/* Right Column: Structured Information List */}
+              <div className="flex-1 flex flex-col min-w-0 h-full">
+                <div className="h-full border-2 border-white/5 bg-black/20 rounded-[2.5rem] p-8 flex flex-col gap-6 overflow-hidden relative">
+                  {/* Container Header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-[#f27d26] shadow-[0_0_10px_#f27d26]" />
+                      <span className="text-xs font-black uppercase text-white/40 tracking-[0.4em]">Registry Data</span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-4">
+                    {/* Item: Type */}
+                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                      <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Type</span>
+                      <span className="text-sm font-black italic text-[#f27d26] uppercase">{previewCard.type}</span>
+                    </div>
+
+                    {/* Stats List */}
+                    {[
+                      { label: 'AC VALUE', val: previewCard.acValue, base: previewCard.baseAcValue, icon: Shield, theme: '#3b82f6', show: true },
+                      { label: 'DAMAGE', val: previewCard.damage ?? 0, base: previewCard.baseDamage, icon: Zap, theme: '#ef4444', show: previewCard.type === 'UNIT' },
+                      { label: 'POWER', val: previewCard.power ?? 0, base: previewCard.basePower, icon: Sword, theme: '#facc15', show: previewCard.type === 'UNIT' }
+                    ].filter(s => s.show).map((stat, i) => {
+                      const isIncrease = stat.base !== undefined && stat.val > stat.base;
+                      const isDecrease = stat.base !== undefined && stat.val < stat.base;
+                      return (
+                        <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <stat.icon className="w-4 h-4" style={{ color: stat.theme }} />
+                            <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">{stat.label}</span>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className={cn(
+                              "text-xl font-black italic tabular-nums",
+                              isIncrease ? "text-red-500" : isDecrease ? "text-green-500" : "text-white"
+                            )}>
+                              {stat.val}
+                            </span>
+                            {stat.base !== undefined && stat.val !== stat.base && (
+                              <span className="text-xs font-bold text-white/20 italic">
+                                ({stat.base})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* God Mark */}
+                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <Zap className="w-4 h-4 text-red-500" />
+                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">God Mark</span>
+                      </div>
+                      <span className={cn(
+                        "text-xs font-black uppercase tracking-widest italic",
+                        previewCard.godMark ? "text-red-500" : "text-white/20"
+                      )}>
+                        {previewCard.godMark ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </div>
+
+                    {/* Faction / Influence */}
+                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                      <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Faction / Influence</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black italic text-white uppercase">{previewCard.faction || 'None'}</span>
+                        {previewCard.baseFaction && previewCard.baseFaction !== previewCard.faction && (
+                          <span className="text-xs font-bold text-white/40 italic">({previewCard.baseFaction})</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Influenced By Section */}
+                    <div className="pt-4">
+                      <div className="px-1 mb-4 flex items-center gap-2">
+                        <Layers className="w-3 h-3 text-[#f27d26]" />
+                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Influenced By</span>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 ? (
+                          previewCard.influencingEffects.map((eff, i) => (
+                            <div key={i} className="flex gap-4 p-4 bg-black/40 border border-white/5 rounded-2xl hover:border-white/10 transition-colors">
+                              <span className="text-[10px] font-black text-[#f27d26] opacity-50">{i + 1}.</span>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[9px] font-black uppercase text-white/20 tracking-widest">Source: {eff.sourceCardName}</span>
+                                <p className="text-sm text-zinc-300 leading-relaxed font-semibold">{eff.description}</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="py-8 text-center border border-dashed border-white/5 rounded-2xl opacity-20">
+                            <span className="text-[10px] font-bold uppercase tracking-widest italic">No modifiers active</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Return Button */}
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={() => setPreviewCard(null)}
+                    className="px-10 py-4 bg-white text-black rounded-2xl text-xs font-black uppercase tracking-[0.2em] italic hover:scale-105 transition-all shadow-xl active:scale-95"
+                  >
+                    CLOSE REGISTRY
+                  </button>
+                </div>
+              </div>
+
+              {/* Close Button Icon */}
+              <button
+                onClick={() => setPreviewCard(null)}
+                className="absolute top-8 right-8 p-3 bg-black/40 backdrop-blur-2xl rounded-2xl border border-white/10 hover:bg-white/10 transition-all z-50 group"
+              >
+                <X className="w-6 h-6 text-white/60 group-hover:text-white group-hover:rotate-90 transition-all" />
+              </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+
       {/* Central Phase Action Menu Modal */}
       <AnimatePresence>
         {showPhaseMenu && (

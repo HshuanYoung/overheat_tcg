@@ -41,7 +41,7 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
         )}
         <Link to="/deck-builder" className="flex items-center gap-2 text-zinc-400 hover:text-red-500 transition-colors text-sm font-bold uppercase tracking-wider">
           <LayoutGrid className="w-4 h-4" />
-          卡组构筑
+          我的卡组
         </Link>
         <button 
           onClick={onOpenRulebook}

@@ -198,6 +198,7 @@ export interface Card {
   rarity: Rarity;
   availableRarities?: Rarity[];
   faction: string;
+  baseFaction?: string;
   runtimeFingerprint?: string;
   equipTargetId?: string;
   isEquip?: boolean;

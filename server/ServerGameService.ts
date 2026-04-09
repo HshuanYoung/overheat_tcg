@@ -1817,7 +1817,7 @@ export const ServerGameService = {
 
       // If no cards can be played, try to enter battle or end turn
       const canAttack = bot.unitZone.some(c => {
-        if (!c || c.isExhausted) return false;
+        if (!c || c.isExhausted || c.canAttack === false) return false;
         const isRush = !!c.isrush;
         const wasPlayedThisTurn = c.playedTurn === gameState.turnCount;
         return isRush || !wasPlayedThisTurn;
@@ -1838,7 +1838,7 @@ export const ServerGameService = {
     // Battle Declaration Phase
     if (gameState.phase === 'BATTLE_DECLARATION' && bot.isTurn) {
       const attacker = bot.unitZone.find(c => {
-        if (!c || c.isExhausted) return false;
+        if (!c || c.isExhausted || c.canAttack === false) return false;
         const isRush = !!c.isrush;
         const wasPlayedThisTurn = c.playedTurn === gameState.turnCount;
         return isRush || !wasPlayedThisTurn;

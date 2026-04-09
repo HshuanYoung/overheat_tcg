@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Card as CardType, Rarity } from '../types/game';
 import { clsx } from 'clsx';
 import { Sword, Shield, Zap, Info, Star, X, Plus } from 'lucide-react';
-import { getCardImageUrl } from '../lib/utils';
+import { cn, getCardImageUrl } from '../lib/utils';
 
 interface CardProps {
   card?: CardType;
@@ -42,7 +42,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
         )}
       >
         <img
-          src="assets/card_bg/default_card_bg.jpg"
+          src="/assets/card_bg/default_card_bg.jpg"
           alt="Card Back"
           className="absolute inset-0 w-full h-full object-cover"
           referrerPolicy="no-referrer"
@@ -81,10 +81,10 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
         onClick={handleCardClick}
         className={clsx(
           "relative aspect-[3/4] w-full rounded-xl cursor-pointer group transition-all bg-zinc-900 shadow-xl",
-          statusBorder 
-            ? (statusBorder === 'red' 
-                ? "border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]" 
-                : "border-2 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.6)]")
+          statusBorder
+            ? (statusBorder === 'red'
+              ? "border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]"
+              : "border-2 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.6)]")
             : (getRarityClass(card.rarity) + " border-2"),
           className
         )}
@@ -107,8 +107,8 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
           <div className="absolute top-1 right-1 z-10">
             <div className={clsx(
               "w-7 h-7 rounded-full border-1.5 flex flex-col items-center justify-center font-bold shadow-lg",
-              isNegativeCost 
-                ? "bg-blue-600/90 border-blue-200 text-white" 
+              isNegativeCost
+                ? "bg-blue-600/90 border-blue-200 text-white"
                 : "bg-red-600/90 border-red-200 text-white"
             )}>
               <span className="text-[6px] leading-none opacity-80 uppercase font-black">Ac</span>
@@ -129,7 +129,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
                 <span className="text-xs font-black text-white">{card.damage}</span>
               </div>
             </div>
-            
+
             {/* Lower Right: Strength (Power) */}
             <div className="absolute bottom-1.5 right-1.5">
               <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md border border-blue-400/40 rounded-md px-1.5 py-0.5 shadow-lg">

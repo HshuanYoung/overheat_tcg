@@ -20,13 +20,14 @@ const RAY_CARDS = [
   { id: 'fav_card_2', name: '雷亚卡 02', url: '/assets/fav_card/fav_card_2.jpg' },
   { id: 'fav_card_3', name: '雷亚卡 03', url: '/assets/fav_card/fav_card_3.jpg' },
   { id: 'fav_card_4', name: '雷亚卡 04', url: '/assets/fav_card/fav_card_4.jpg' },
+  { id: 'fav_card_5', name: '雷亚卡 05', url: '/assets/fav_card/fav_card_5.jpg' },
 ];
 
 const CARD_BACKS = [
-  { id: 'default', name: '默认卡背', url: '/assets/card_bg.jpg' },
-  { id: 'back_1', name: '星空轨迹', url: '/assets/card_bg.jpg' }, 
-  { id: 'back_2', name: '深渊之触', url: '/assets/card_bg.jpg' },
-  { id: 'back_3', name: '黄金黎明', url: '/assets/card_bg.jpg' },
+  { id: 'default', name: '默认卡背', url: '/assets/card_bg/default_card_bg.jpg' },
+  { id: 'back_1', name: '萨拉拉', url: '/assets/card_bg/card_bg_1.jpg' },
+  { id: 'back_2', name: '小天使', url: '/assets/card_bg/card_bg_2.jpg' },
+  { id: 'back_3', name: '真理', url: '/assets/card_bg/card_bg_3.jpg' },
 ];
 
 type CollectionTab = 'DECKS' | 'CARDS' | 'BACKS' | 'RAY_CARDS';
@@ -35,7 +36,7 @@ export const Collection: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as CollectionTab) || 'CARDS';
-  
+
   const user = getAuthUser();
   const [activeTab, setActiveTab] = useState<CollectionTab>(initialTab);
   const [collection, setCollection] = useState<Record<string, number>>({});
@@ -44,7 +45,7 @@ export const Collection: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  
+
   // Card Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRarity, setFilterRarity] = useState<string | null>(null);
@@ -80,8 +81,8 @@ export const Collection: React.FC = () => {
 
       setCollection(collData.collection || {});
       setDecks(deckData.decks || []);
-      setProfile({ 
-        favoriteCardId: profData.favoriteCardId, 
+      setProfile({
+        favoriteCardId: profData.favoriteCardId,
         favoriteBackId: profData.favoriteBackId,
         coins: profData.coins,
         cardCrystals: profData.cardCrystals
@@ -159,9 +160,9 @@ export const Collection: React.FC = () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/user/profile`, {
         method: 'PUT',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(updates)
       });
@@ -216,20 +217,20 @@ export const Collection: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4 bg-zinc-900/50 p-2 rounded-2xl border border-white/5">
-             <div className="px-4 py-2 text-center">
-               <p className="text-[10px] text-zinc-500 uppercase font-bold">已拥有种数</p>
-               <p className="text-xl font-black italic">{Object.keys(collection).length}</p>
-             </div>
-             <div className="w-px h-8 bg-white/10" />
-             <div className="px-4 py-2 text-center">
-               <p className="text-[10px] text-zinc-500 uppercase font-bold">金币</p>
-               <p className="text-xl font-black italic text-amber-400">{(profile?.coins || 0).toLocaleString()}</p>
-             </div>
-             <div className="w-px h-8 bg-white/10" />
-             <div className="px-4 py-2 text-center">
-               <p className="text-[10px] text-zinc-500 uppercase font-bold">卡晶</p>
-               <p className="text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
-             </div>
+            <div className="px-4 py-2 text-center">
+              <p className="text-[10px] text-zinc-500 uppercase font-bold">已拥有种数</p>
+              <p className="text-xl font-black italic">{Object.keys(collection).length}</p>
+            </div>
+            <div className="w-px h-8 bg-white/10" />
+            <div className="px-4 py-2 text-center">
+              <p className="text-[10px] text-zinc-500 uppercase font-bold">金币</p>
+              <p className="text-xl font-black italic text-amber-400">{(profile?.coins || 0).toLocaleString()}</p>
+            </div>
+            <div className="w-px h-8 bg-white/10" />
+            <div className="px-4 py-2 text-center">
+              <p className="text-[10px] text-zinc-500 uppercase font-bold">卡晶</p>
+              <p className="text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
+            </div>
           </div>
         </div>
 
@@ -284,7 +285,7 @@ export const Collection: React.FC = () => {
                           c === 'WHITE' && 'bg-zinc-300',
                         )}
                       >
-                         {filterColor === c && <Check className={cn("w-5 h-5", c === 'WHITE' ? 'text-black' : 'text-white')} />}
+                        {filterColor === c && <Check className={cn("w-5 h-5", c === 'WHITE' ? 'text-black' : 'text-white')} />}
                       </button>
                     ))}
                   </div>
@@ -303,20 +304,20 @@ export const Collection: React.FC = () => {
                       {r}
                     </button>
                   ))}
-                  <select 
+                  <select
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
                     value={filters.ownership}
-                    onChange={e => setFilters({...filters, ownership: e.target.value})}
+                    onChange={e => setFilters({ ...filters, ownership: e.target.value })}
                   >
                     <option value="ALL">全部状态</option>
                     <option value="OWNED">已拥有</option>
                     <option value="NOT_OWNED">未拥有</option>
                   </select>
 
-                  <select 
+                  <select
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
                     value={filters.faction}
-                    onChange={e => setFilters({...filters, faction: e.target.value})}
+                    onChange={e => setFilters({ ...filters, faction: e.target.value })}
                   >
                     <option value="ALL">全部势力</option>
                     {FACTIONS.map(f => (
@@ -324,23 +325,23 @@ export const Collection: React.FC = () => {
                     ))}
                   </select>
 
-                  <input 
+                  <input
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
                     placeholder="AC (费用)"
                     value={filters.ac}
-                    onChange={e => setFilters({...filters, ac: e.target.value})}
+                    onChange={e => setFilters({ ...filters, ac: e.target.value })}
                   />
-                  <input 
+                  <input
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
                     placeholder="Damage (伤害)"
                     value={filters.damage}
-                    onChange={e => setFilters({...filters, damage: e.target.value})}
+                    onChange={e => setFilters({ ...filters, damage: e.target.value })}
                   />
-                  <input 
+                  <input
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
                     placeholder="Power (力量)"
                     value={filters.power}
-                    onChange={e => setFilters({...filters, power: e.target.value})}
+                    onChange={e => setFilters({ ...filters, power: e.target.value })}
                   />
                 </div>
               </div>
@@ -351,8 +352,8 @@ export const Collection: React.FC = () => {
                   const qty = collection[card.uniqueId] || collection[card.id] || 0;
                   const isOwned = qty > 0;
                   return (
-                    <motion.div 
-                      key={card.uniqueId} 
+                    <motion.div
+                      key={card.uniqueId}
                       layout
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -392,19 +393,19 @@ export const Collection: React.FC = () => {
                       )}
                     </div>
                     <div className="px-2 text-center">
-                       <h3 className="font-black italic text-lg uppercase tracking-wider">{back.name}</h3>
-                       <button
-                         onClick={() => handleUpdateProfile({ favoriteBackId: back.id })}
-                         disabled={profile?.favoriteBackId === back.id}
-                         className={cn(
-                           "mt-3 w-full py-3 rounded-xl font-bold text-sm transition-all",
-                           profile?.favoriteBackId === back.id 
-                             ? "bg-zinc-900 text-zinc-600 cursor-default" 
-                             : "bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white"
-                         )}
-                       >
-                         {profile?.favoriteBackId === back.id ? '使用中' : '点击使用'}
-                       </button>
+                      <h3 className="font-black italic text-lg uppercase tracking-wider">{back.name}</h3>
+                      <button
+                        onClick={() => handleUpdateProfile({ favoriteBackId: back.id })}
+                        disabled={profile?.favoriteBackId === back.id}
+                        className={cn(
+                          "mt-3 w-full py-3 rounded-xl font-bold text-sm transition-all",
+                          profile?.favoriteBackId === back.id
+                            ? "bg-zinc-900 text-zinc-600 cursor-default"
+                            : "bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white"
+                        )}
+                      >
+                        {profile?.favoriteBackId === back.id ? '使用中' : '点击使用'}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -414,7 +415,7 @@ export const Collection: React.FC = () => {
 
           {activeTab === 'RAY_CARDS' && (
             <motion.div key="ray" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
-               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
                 {RAY_CARDS.map(rc => (
                   <div key={rc.id} className="relative group">
                     <div className={cn(
@@ -430,16 +431,16 @@ export const Collection: React.FC = () => {
                         <p className="text-zinc-500 text-xs text-left">雷亚卡收藏 (背景模式)</p>
                       </div>
                       <button
-                         onClick={() => handleUpdateProfile({ favoriteCardId: rc.id })}
-                         className={cn(
-                           "p-4 rounded-2xl transition-all shadow-xl",
-                           profile?.favoriteCardId === rc.id
-                             ? "bg-red-600 text-white cursor-default scale-110"
-                             : "bg-zinc-900 text-zinc-500 hover:bg-red-600/20 hover:text-red-500"
-                         )}
-                       >
-                         {profile?.favoriteCardId === rc.id ? <Check className="w-6 h-6" /> : <Save className="w-6 h-6" />}
-                       </button>
+                        onClick={() => handleUpdateProfile({ favoriteCardId: rc.id })}
+                        className={cn(
+                          "p-4 rounded-2xl transition-all shadow-xl",
+                          profile?.favoriteCardId === rc.id
+                            ? "bg-red-600 text-white cursor-default scale-110"
+                            : "bg-zinc-900 text-zinc-500 hover:bg-red-600/20 hover:text-red-500"
+                        )}
+                      >
+                        {profile?.favoriteCardId === rc.id ? <Check className="w-6 h-6" /> : <Save className="w-6 h-6" />}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -472,9 +473,9 @@ export const Collection: React.FC = () => {
                       "absolute -inset-4 rounded-[2rem] blur-2xl opacity-20",
                       selectedCard.rarity === 'UR' || selectedCard.rarity === 'SER' ? 'bg-amber-500' : 'bg-red-600'
                     )} />
-                    <img 
-                      src={selectedCard.imageUrl} 
-                      alt={selectedCard.fullName} 
+                    <img
+                      src={selectedCard.imageUrl}
+                      alt={selectedCard.fullName}
                       className="relative w-full rounded-[1.5rem] shadow-2xl border-4 border-white/10"
                     />
                     <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12">
@@ -487,7 +488,7 @@ export const Collection: React.FC = () => {
                 <div className="w-full md:w-1/2 flex flex-col justify-center">
                   <div className="mb-4">
                     <span className={cn("px-4 py-1.5 rounded-full text-xs font-black italic border", RARITY_BADGE[selectedCard.rarity])}>
-                       {selectedCard.rarity} RARITY
+                      {selectedCard.rarity} RARITY
                     </span>
                   </div>
                   <h2 className="text-4xl font-black italic mb-2 tracking-tighter uppercase">{selectedCard.fullName}</h2>
@@ -509,8 +510,8 @@ export const Collection: React.FC = () => {
                         disabled={actionLoading || (collection[selectedCard.uniqueId] || 0) <= 0}
                         className={cn(
                           "px-8 py-3 rounded-2xl font-black italic text-sm transition-all uppercase",
-                          (collection[selectedCard.uniqueId] || 0) > 0 
-                            ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20" 
+                          (collection[selectedCard.uniqueId] || 0) > 0
+                            ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
                             : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
                         )}
                       >
@@ -544,16 +545,16 @@ export const Collection: React.FC = () => {
                   </div>
 
                   <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between">
-                     <div className="flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-cyan-400" />
-                        <div>
-                          <p className="text-[10px] text-zinc-500 font-bold uppercase">Current Crystals</p>
-                          <p className="text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
-                        </div>
-                     </div>
-                     <button onClick={() => setSelectedCard(null)} className="text-zinc-500 hover:text-white font-black italic text-sm uppercase transition-colors">
-                        CLOSE
-                     </button>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-cyan-400" />
+                      <div>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase">Current Crystals</p>
+                        <p className="text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setSelectedCard(null)} className="text-zinc-500 hover:text-white font-black italic text-sm uppercase transition-colors">
+                      CLOSE
+                    </button>
                   </div>
                 </div>
               </motion.div>
@@ -579,12 +580,12 @@ const TabButton = ({ active, onClick, icon, label }: any) => (
 );
 
 const DeckCard = ({ deck, onClick }: { deck: Deck; onClick: () => void }) => (
-  <div 
+  <div
     onClick={onClick}
     className="group relative bg-zinc-900/40 border border-white/5 rounded-3xl p-6 hover:bg-zinc-900/60 hover:border-red-600/50 transition-all cursor-pointer overflow-hidden"
   >
     <div className="absolute -right-8 -bottom-8 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-       <Layout className="w-48 h-48" />
+      <Layout className="w-48 h-48" />
     </div>
     <div className="relative z-10 text-left">
       <div className="flex justify-between items-start mb-4">
@@ -597,7 +598,7 @@ const DeckCard = ({ deck, onClick }: { deck: Deck; onClick: () => void }) => (
       </div>
       <h3 className="text-2xl font-black italic mb-1 uppercase tracking-tighter truncate">{deck.name}</h3>
       <p className="text-zinc-500 text-sm mb-6 flex items-center gap-2 font-bold uppercase">
-         {deck.cards.length} CARDS • {new Date(deck.createdAt).toLocaleDateString()}
+        {deck.cards.length} CARDS • {new Date(deck.createdAt).toLocaleDateString()}
       </p>
       <div className="flex gap-2">
         <button className="flex-1 py-3.5 bg-zinc-800 hover:bg-red-600 text-white font-black rounded-2xl transition-all text-xs uppercase italic">

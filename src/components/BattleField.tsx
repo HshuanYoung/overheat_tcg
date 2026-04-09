@@ -11,9 +11,9 @@ import { hydrateGameState } from '../services/cardLoader';
 import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
-import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Flag, Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers } from 'lucide-react';
+import { cn, getCardImageUrl } from '../lib/utils';
 
 export const BattleField: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
@@ -64,6 +64,7 @@ export const BattleField: React.FC = () => {
   // Universal Visual Timer Logic
   useEffect(() => {
     const interval = setInterval(() => {
+      if (!game) return;
       const now = Date.now();
       const elapsed = now - (game.phaseTimerStart || now);
 
@@ -200,6 +201,22 @@ export const BattleField: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [effectSelection]);
 
+  const handleSurrender = async () => {
+    if (!gameId) return;
+    try {
+      socket.emit('gameAction', { gameId, action: 'SURRENDER', payload: {} });
+      setShowPhaseMenu(false);
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  useEffect(() => {
+    const onSurrender = () => handleSurrender();
+    window.addEventListener('game:surrender', onSurrender);
+    return () => window.removeEventListener('game:surrender', onSurrender);
+  }, [gameId]);
+
   // const authUser = getAuthUser();
   // const myUid = authUser?.uid;
   const me = (game && myUid) ? game.players[myUid] : null;
@@ -295,6 +312,7 @@ export const BattleField: React.FC = () => {
       await GameService.advancePhase(gameId, 'DECLARE_END');
     }
   };
+
 
 
   const handleCardClick = (card: Card, zone: string, index?: number, e?: React.MouseEvent) => {
@@ -562,7 +580,7 @@ export const BattleField: React.FC = () => {
             >
               <div className="relative max-h-[90vh] aspect-[3/4]">
                 <img
-                  src={previewCard.fullImageUrl || previewCard.imageUrl}
+                  src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false)}
                   alt={previewCard.fullName}
                   className="w-full h-full object-contain rounded-2xl shadow-2xl"
                   referrerPolicy="no-referrer"
@@ -586,7 +604,7 @@ export const BattleField: React.FC = () => {
 
   return (
     <div
-      className="h-screen bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative"
+      className="h-screen pt-16 bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative"
       onClick={() => setCardMenu(null)}
     >
       {/* Erosion Phase Overlay */}
@@ -836,90 +854,6 @@ export const BattleField: React.FC = () => {
 
 
 
-      {/* Header */}
-      <div className="h-14 border-b border-white/5 flex items-center justify-between px-8 bg-black/80 backdrop-blur-md z-30">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#f27d26] to-red-600 rounded-lg flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg font-black italic tracking-tighter uppercase text-white">OVERHEAT</span>
-          </div>
-          <div className="h-4 w-px bg-white/10" />
-          <span className="text-white/40 text-[10px] font-bold tracking-widest uppercase">ID: {gameId?.slice(0, 8)}</span>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsRulebookOpen(true)}
-              className="p-2 text-white/40 hover:text-[#f27d26] transition-colors"
-              title="查看规则"
-            >
-              <BookOpen className="w-5 h-5" />
-            </button>
-
-            {me.isTurn && game.phase === 'MAIN' && (
-              <motion.button
-                initial={{ scale: 0.9 }}
-                animate={{ scale: 1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => GameService.advancePhase(gameId, 'DECLARE_BATTLE')}
-                className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-xs font-black uppercase italic tracking-widest transition-all shadow-lg shadow-red-600/20"
-              >
-                START BATTLE
-              </motion.button>
-            )}
-
-            {me.isTurn && (game.phase === 'BATTLE_DECLARATION' || game.phase === 'BATTLE_FREE') && (
-              <div className="flex gap-2">
-                <motion.button
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleDeclareAttack}
-                  disabled={selectedAttackers.length === 0}
-                  className="px-6 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:hover:bg-red-600 rounded-lg text-xs font-black uppercase italic tracking-widest transition-all shadow-lg shadow-red-600/20"
-                >
-                  {selectedAttackers.length === 2 ? 'ALLIANCE' : 'ATTACK'}
-                </motion.button>
-                <motion.button
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => GameService.advancePhase(gameId, 'RETURN_MAIN')}
-                  className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-xs font-black uppercase italic tracking-widest transition-all"
-                >
-                  RETURN MAIN
-                </motion.button>
-              </div>
-            )}
-
-            {me.isTurn && (
-              <motion.button
-                initial={{ scale: 0.9 }}
-                animate={{ scale: 1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleEndTurn}
-                className="px-6 py-2 bg-[#f27d26] hover:bg-[#f27d26]/80 rounded-lg text-xs font-black uppercase italic tracking-widest transition-all shadow-lg shadow-[#f27d26]/20"
-              >
-                END TURN
-              </motion.button>
-            )}
-
-            <button
-              onClick={() => navigate('/')}
-              className="p-2 text-white/20 hover:text-white transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Main Arena */}
       <div className="flex-1 relative flex flex-col overflow-hidden bg-[#050505] p-2">
@@ -986,7 +920,7 @@ export const BattleField: React.FC = () => {
               : "bg-zinc-800 text-white/50"
           )}>
             <div className="w-6 h-6 rounded-full overflow-hidden border border-white/20">
-              {game.playerIds[game.currentTurnPlayer] === myUid 
+              {game.playerIds[game.currentTurnPlayer] === myUid
                 ? <img src={authUser?.photoURL || 'assets/icons/myself.JPG'} className="w-full h-full object-cover" />
                 : <img src="assets/icons/opponent.JPG" className="w-full h-full object-cover" />
               }
@@ -1852,7 +1786,7 @@ export const BattleField: React.FC = () => {
 
                 <div className="relative aspect-[3/4] rounded-3xl overflow-hidden border-2 border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] group">
                   <img
-                    src={previewCard.fullImageUrl || previewCard.imageUrl}
+                    src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false)}
                     alt={previewCard.fullName}
                     className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     referrerPolicy="no-referrer"
@@ -2058,19 +1992,34 @@ export const BattleField: React.FC = () => {
                 )}
 
 
-                {game.phase === 'BATTLE_DECLARATION' && (
-                  <motion.button
-                    whileHover={{ scale: 1.05, y: -5 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="w-full h-18 py-5 px-10 bg-gradient-to-r from-zinc-800 to-zinc-700 hover:from-zinc-700 hover:to-zinc-600 text-white rounded-3xl text-sm font-black uppercase italic tracking-widest transition-all border border-white/10 flex items-center justify-center gap-5 shadow-2xl"
-                    onClick={() => {
-                      GameService.advancePhase(gameId!, 'RETURN_MAIN');
-                      setShowPhaseMenu(false);
-                    }}
-                  >
-                    <ChevronRight className="w-6 h-6 rotate-180" />
-                    RETURN MAIN
-                  </motion.button>
+                {(game.phase === 'BATTLE_DECLARATION' || game.phase === 'BATTLE_FREE') && (
+                  <>
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -5 }}
+                      whileTap={{ scale: 0.95 }}
+                      disabled={selectedAttackers.length === 0}
+                      className="w-full h-18 py-5 px-10 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-3xl text-sm font-black uppercase italic tracking-widest transition-all shadow-[0_20px_40px_rgba(220,38,38,0.4)] disabled:opacity-50 flex items-center justify-center gap-5 border-t border-white/20"
+                      onClick={() => {
+                        handleDeclareAttack();
+                        setShowPhaseMenu(false);
+                      }}
+                    >
+                      <Sword className="w-6 h-6" />
+                      {selectedAttackers.length === 2 ? 'ALLIANCE ATTACK' : 'DECLARE ATTACK'}
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -5 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="w-full h-18 py-5 px-10 bg-gradient-to-r from-zinc-800 to-zinc-700 hover:from-zinc-700 hover:to-zinc-600 text-white rounded-3xl text-sm font-black uppercase italic tracking-widest transition-all border border-white/10 flex items-center justify-center gap-5 shadow-2xl"
+                      onClick={() => {
+                        GameService.advancePhase(gameId!, 'RETURN_MAIN');
+                        setShowPhaseMenu(false);
+                      }}
+                    >
+                      <ChevronRight className="w-6 h-6 rotate-180" />
+                      RETURN MAIN
+                    </motion.button>
+                  </>
                 )}
 
                 {game.phase === 'DEFENSE_DECLARATION' && (
@@ -2204,7 +2153,9 @@ export const BattleField: React.FC = () => {
                 </p>
                 <div className="px-6 py-3 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm">
                   <span className="text-white font-black italic uppercase tracking-widest text-sm">
-                    {winReasonMap[game.winReason || ''] || game.winReason || '未知原因'}
+                    {game.winReason === 'SURRENDER' && game.winnerId === myUid
+                      ? '对方投降'
+                      : (winReasonMap[game.winReason || ''] || game.winReason || '未知原因')}
                   </span>
                 </div>
               </div>
@@ -2233,6 +2184,7 @@ const winReasonMap: Record<string, string> = {
   'DECK_OUT_BATTLE_DAMAGE': '受到战斗伤害时卡组卡牌不足',
   'DECK_OUT_EFFECT_DAMAGE': '受到效果伤害时卡组卡牌不足',
   'DECK_OUT_COST': '支付费用时卡组卡牌不足',
-  'EROSION_BACK_FULL': '侵蚀区背面卡牌达到10张'
+  'EROSION_BACK_FULL': '侵蚀区背面卡牌达到10张',
+  'SURRENDER': '投降'
 };
 

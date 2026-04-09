@@ -46,6 +46,9 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                 case 'SUBMIT_QUERY_CHOICE':
                     gameState = await ServerGameService.handleQueryChoice(gameState, user.userId, payload.queryId, payload.selections);
                     break;
+                case 'SURRENDER':
+                    gameState = await ServerGameService.surrender(gameState, user.userId);
+                    break;
             }
             
             // Save state back to DB

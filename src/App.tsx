@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, Play, History, Heart, Plus, Trash2, Home as HomeIcon, Settings, User } from 'lucide-react';
 import { cn } from './lib/utils';
 

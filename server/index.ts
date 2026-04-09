@@ -1285,6 +1285,8 @@ io.on('connection', (socket) => {
                         await advancePhase(gameState, gameId, myUid, socket, payload);
                         return; // advancePhase already calls syncAndSaveState
                     }
+                } else if (action === 'SURRENDER') {
+                    await ServerGameService.surrender(gameState, myUid);
                 }
 
                 // Final state sync and save

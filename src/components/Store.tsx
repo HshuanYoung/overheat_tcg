@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Coins, Sparkles, ArrowLeft, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '../lib/utils';
+import { cn, getCardImageUrl } from '../lib/utils';
 import { CARD_LIBRARY } from '../data/cards';
 import { Card } from '../types/game';
 
@@ -35,6 +35,8 @@ export const Store: React.FC = () => {
   const [currentPackIndex, setCurrentPackIndex] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [pityInfo, setPityInfo] = useState({ packsSinceSR: 0, packsSinceUR: 0, totalPacks: 0 });
+  const [selectedBasicCount, setSelectedBasicCount] = useState<number | null>(null);
+  const [selectedPrizeCount, setSelectedPrizeCount] = useState<number | null>(null);
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
   const token = localStorage.getItem('token');
@@ -56,7 +58,7 @@ export const Store: React.FC = () => {
     const singleCost = packType === 'prize' ? 20 : 10;
     const totalCost = singleCost * count;
     if (coins < totalCost) { alert('金币不足！'); return; }
-    
+
     setBuying(`${packType}-${count}`);
     setDrawnCards([]);
     setShowResult(false);
@@ -64,9 +66,9 @@ export const Store: React.FC = () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/store/buy-pack`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ packType, count }),
       });
@@ -75,22 +77,22 @@ export const Store: React.FC = () => {
 
       setCoins(data.newCoins);
       setCardCrystals(data.newCardCrystals);
-      
+
       // Group cards into packs (Basic: 5, Prize: 1)
       const packSize = packType === 'prize' ? 1 : 5;
       const packs: { id: string; rarity: string; revealed: boolean }[][] = [];
       for (let i = 0; i < data.cards.length; i += packSize) {
         packs.push(data.cards.slice(i, i + packSize).map((c: any) => ({ ...c, revealed: false })));
       }
-      
+
       setAllDrawnPacks(packs);
       setCurrentPackIndex(0);
       setDrawnCards(packs[0]);
 
-      setPityInfo({ 
-        packsSinceSR: data.packsSinceSR, 
-        packsSinceUR: data.packsSinceUR, 
-        totalPacks: data.totalPacks 
+      setPityInfo({
+        packsSinceSR: data.packsSinceSR,
+        packsSinceUR: data.packsSinceUR,
+        totalPacks: data.totalPacks
       });
       setShowResult(true);
     } catch (e) {
@@ -100,6 +102,25 @@ export const Store: React.FC = () => {
       setBuying(null);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!showResult) return;
+      if (e.key === 'Enter') {
+        // Prevent default behavior to avoid issues if any input has focus
+        e.preventDefault();
+
+        const allRevealed = drawnCards.every(c => c.revealed);
+        if (!allRevealed) {
+          revealAll();
+        } else {
+          nextPack();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showResult, drawnCards, currentPackIndex, allDrawnPacks]);
 
   const revealCard = (index: number) => {
     setDrawnCards(prev => prev.map((c, i) => i === index ? { ...c, revealed: true } : c));
@@ -175,7 +196,7 @@ export const Store: React.FC = () => {
                   <p className="text-zinc-500 text-[10px] font-black tracking-[0.2em] uppercase">Basic Edition</p>
                 </div>
                 <div className="w-full h-px bg-gradient-to-r from-transparent via-red-600/50 to-transparent" />
-                <p className="text-xs text-zinc-400 font-bold leading-relaxed px-4">包含5张卡牌<br/>保底一张R及以上稀有度</p>
+                <p className="text-xs text-zinc-400 font-bold leading-relaxed px-4">包含5张卡牌<br />保底一张R及以上稀有度</p>
               </div>
               {buying?.startsWith('basic') && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/80 backdrop-blur-sm">
@@ -184,27 +205,40 @@ export const Store: React.FC = () => {
                 </div>
               )}
             </motion.div>
-            
+
             <div className="flex gap-2 w-full max-w-[288px]">
               {[1, 10, 50].map(n => (
                 <button
                   key={n}
-                  onClick={() => handleBuyPack('basic', n)}
-                  className="flex-1 py-4 bg-zinc-900 hover:bg-red-600 border border-white/5 hover:border-red-500 rounded-2xl font-black italic text-sm transition-all flex flex-col items-center gap-1 group"
+                  onClick={() => setSelectedBasicCount(n)}
+                  className={cn(
+                    "flex-1 py-4 border rounded-2xl font-black italic text-sm transition-all flex flex-col items-center justify-center gap-1 group",
+                    selectedBasicCount === n
+                      ? "bg-red-600 border-red-500 text-white"
+                      : "bg-zinc-900 border-white/5 text-zinc-400 hover:border-red-500/50"
+                  )}
                 >
-                  <span className="text-zinc-400 group-hover:text-white transition-colors">{n} 包</span>
-                  <div className="flex items-center gap-1">
-                    <Coins className="w-3 h-3 text-amber-400" />
-                    <span className="text-amber-400">{n * 10}</span>
-                  </div>
+                  <span>{n} 包</span>
                 </button>
               ))}
             </div>
-            
-            <div className="text-[10px] text-zinc-600 bg-zinc-900/40 p-4 rounded-2xl border border-white/5 w-full max-w-[288px] text-center">
-              <p className="font-bold uppercase tracking-widest mb-1 opacity-50 text-[8px]">Pity Status</p>
-              <p>SR: <span className="text-purple-400">{10 - pityInfo.packsSinceSR}</span> UR: <span className="text-amber-400">{50 - pityInfo.packsSinceUR}</span></p>
-            </div>
+
+            <AnimatePresence>
+              {selectedBasicCount && (
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  onClick={() => handleBuyPack('basic', selectedBasicCount)}
+                  className="w-full max-w-[288px] py-4 bg-red-600 hover:bg-red-500 rounded-2xl font-black italic text-sm transition-all flex items-center justify-center gap-2 group shadow-[0_0_30px_rgba(220,38,38,0.2)]"
+                >
+                  <Coins className="w-4 h-4" />
+                  <span>BUY {selectedBasicCount} PACKS ({selectedBasicCount * 10} Coins)</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+
           </div>
 
           {/* Prize Pack */}
@@ -217,7 +251,7 @@ export const Store: React.FC = () => {
               )}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-rose-950/40 via-black to-rose-950/20" />
-              <img src="assets/cardpack/basic.JPG" className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" />
+              <img src="assets/cardpack/prize.JPG" className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" />
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 z-10 text-center px-6">
                 {/* <Sparkles className="w-20 h-20 text-rose-500 group-hover:scale-110 transition-transform duration-500" /> */}
                 <div>
@@ -225,7 +259,7 @@ export const Store: React.FC = () => {
                   <p className="text-zinc-500 text-[10px] font-black tracking-[0.2em] uppercase">Prize Collector</p>
                 </div>
                 <div className="w-full h-px bg-gradient-to-r from-transparent via-rose-600/50 to-transparent" />
-                <p className="text-xs text-zinc-400 font-bold leading-relaxed px-4">包含1张卡牌<br/>必得PR稀有度奖品卡</p>
+                <p className="text-xs text-zinc-400 font-bold leading-relaxed px-4">包含1张卡牌<br />必得PR稀有度奖品卡</p>
               </div>
               {buying?.startsWith('prize') && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/80 backdrop-blur-sm">
@@ -239,21 +273,35 @@ export const Store: React.FC = () => {
               {[1, 10, 50].map(n => (
                 <button
                   key={n}
-                  onClick={() => handleBuyPack('prize', n)}
-                  className="flex-1 py-4 bg-zinc-900 hover:bg-rose-600 border border-white/5 hover:border-rose-500 rounded-2xl font-black italic text-sm transition-all flex flex-col items-center gap-1 group"
+                  onClick={() => setSelectedPrizeCount(n)}
+                  className={cn(
+                    "flex-1 py-4 border rounded-2xl font-black italic text-sm transition-all flex flex-col items-center justify-center gap-1 group",
+                    selectedPrizeCount === n
+                      ? "bg-rose-600 border-rose-500 text-white"
+                      : "bg-zinc-900 border-white/5 text-zinc-400 hover:border-rose-500/50"
+                  )}
                 >
-                  <span className="text-zinc-400 group-hover:text-white transition-colors">{n} 包</span>
-                  <div className="flex items-center gap-1">
-                    <Coins className="w-3 h-3 text-amber-400" />
-                    <span className="text-amber-400">{n * 20}</span>
-                  </div>
+                  <span>{n} 包</span>
                 </button>
               ))}
             </div>
 
-            <div className="text-[10px] text-zinc-600 bg-zinc-900/40 p-4 rounded-2xl border border-white/5 w-full max-w-[288px] text-center h-[58px] flex items-center justify-center uppercase font-black italic tracking-widest opacity-40">
-              Top Collector Rewards
-            </div>
+            <AnimatePresence>
+              {selectedPrizeCount && (
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  onClick={() => handleBuyPack('prize', selectedPrizeCount)}
+                  className="w-full max-w-[288px] py-4 bg-rose-600 hover:bg-rose-500 rounded-2xl font-black italic text-sm transition-all flex items-center justify-center gap-2 group shadow-[0_0_30px_rgba(244,63,94,0.2)]"
+                >
+                  <Coins className="w-4 h-4" />
+                  <span>BUY {selectedPrizeCount} PACKS ({selectedPrizeCount * 20} Coins)</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+
           </div>
         </div>
 
@@ -271,7 +319,7 @@ export const Store: React.FC = () => {
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-600/20 blur-[120px] rounded-full animate-pulse" />
               </div>
 
-              <motion.div 
+              <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 className="w-full max-w-7xl flex-1 flex flex-col relative z-10"
@@ -280,7 +328,7 @@ export const Store: React.FC = () => {
                 <div className="flex items-center justify-between mb-8">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                       <Sparkles className="w-6 h-6 text-red-500" />
+                      <Sparkles className="w-6 h-6 text-red-500" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-black italic uppercase tracking-tighter">开包成果 Drawn Result</h2>
@@ -307,16 +355,16 @@ export const Store: React.FC = () => {
                           key={i}
                           layout
                           initial={{ scale: 0.8, opacity: 0 }}
-                          animate={{ 
-                            scale: drawn.revealed ? 1.05 : 1, 
+                          animate={{
+                            scale: drawn.revealed ? 1.05 : 1,
                             opacity: 1,
                             y: drawn.revealed ? -10 : 0
                           }}
-                          transition={{ 
-                            type: 'spring', 
-                            damping: 15, 
+                          transition={{
+                            type: 'spring',
+                            damping: 15,
                             stiffness: 100,
-                            delay: i * 0.05 
+                            delay: i * 0.05
                           }}
                           className="relative w-56 sm:w-64 aspect-[3/4] perspective-1000 group cursor-pointer"
                           onClick={() => revealCard(i)}
@@ -325,7 +373,7 @@ export const Store: React.FC = () => {
                           {!drawn.revealed && (
                             <div className="absolute -inset-2 bg-red-600/0 group-hover:bg-red-600/30 blur-xl rounded-2xl transition-all duration-300 scale-90 group-hover:scale-100" />
                           )}
-                          
+
                           <motion.div
                             animate={{ rotateY: drawn.revealed ? 180 : 0 }}
                             transition={{ type: 'spring', damping: 20, stiffness: 100 }}
@@ -336,7 +384,7 @@ export const Store: React.FC = () => {
                               "absolute inset-0 backface-hidden rounded-2xl border-2 border-white/10 bg-zinc-900 group-hover:border-red-500/50 flex flex-col items-center justify-center p-4 transition-colors",
                               "shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
                             )}>
-                              <img src="assets/card_bg/default_card_bg.jpg" className="absolute inset-0 w-full h-full object-cover opacity-20 rounded-2xl grayscale" />
+                              <img src="/assets/card_bg/default_card_bg.jpg" className="absolute inset-0 w-full h-full object-cover opacity-20 rounded-2xl grayscale" />
                               <div className="relative z-10 flex flex-col items-center gap-2">
                                 <ShoppingBag className="w-10 h-10 text-zinc-700 group-hover:text-red-500 animation-pulse" />
                                 <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">Pack Card</span>
@@ -352,7 +400,10 @@ export const Store: React.FC = () => {
                             )}>
                               {card ? (
                                 <>
-                                  <img src={card.imageUrl} className="w-full h-full object-cover" />
+                                  <img
+                                    src={card.fullImageUrl || getCardImageUrl(drawn.id, drawn.rarity, false)}
+                                    className="w-full h-full object-cover"
+                                  />
                                   <div className={cn("absolute inset-0 bg-gradient-to-t to-transparent", RARITY_BG[drawn.rarity])} />
                                   <div className="absolute bottom-0 left-0 right-0 p-2 text-center">
                                     <p className="text-[9px] font-black truncate text-white uppercase italic tracking-tighter">{card.fullName}</p>
@@ -376,16 +427,16 @@ export const Store: React.FC = () => {
                     onClick={nextPack}
                     className={cn(
                       "px-20 py-5 rounded-full text-xl font-black italic tracking-tighter uppercase transition-all hover:scale-110 active:scale-95",
-                      drawnCards.every(c => c.revealed) 
-                        ? "bg-red-600 shadow-[0_0_50px_rgba(220,38,38,0.4)] text-white" 
+                      drawnCards.every(c => c.revealed)
+                        ? "bg-red-600 shadow-[0_0_50px_rgba(220,38,38,0.4)] text-white"
                         : "bg-zinc-900 text-zinc-500 cursor-not-allowed"
                     )}
                   >
                     {currentPackIndex < allDrawnPacks.length - 1 ? "下一包 Next Pack" : "确认 Confirm"}
                   </button>
                   <p className="text-[10px] text-zinc-600 mt-4 font-bold uppercase tracking-widest transition-opacity duration-300">
-                    {drawnCards.every(c => c.revealed) 
-                      ? (currentPackIndex < allDrawnPacks.length - 1 ? `已揭开第 ${currentPackIndex + 1} 包` : "所有卡牌已入库") 
+                    {drawnCards.every(c => c.revealed)
+                      ? (currentPackIndex < allDrawnPacks.length - 1 ? `已揭开第 ${currentPackIndex + 1} 包` : "所有卡牌已入库")
                       : "请先揭开本包所有卡牌"}
                   </p>
                 </div>
@@ -393,8 +444,47 @@ export const Store: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Extraction Rules */}
+        <div className="mt-24 p-8 rounded-3xl bg-zinc-900/40 border border-white/5 backdrop-blur-md">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-10 h-10 rounded-xl bg-red-600/10 border border-red-600/20 flex items-center justify-center">
+              <ShoppingBag className="w-5 h-5 text-red-500" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black italic tracking-tighter uppercase">抽取规则 Extraction Rules</h3>
+              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">请在购买前仔细阅读</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-6">
+            <div className="flex gap-4 group">
+              <span className="text-red-600 font-black italic">01</span>
+              <p className="text-sm text-zinc-400 font-bold leading-relaxed">
+                基础包每包花费 <span className="text-red-500">10</span> 金币，每包内包含 <span className="text-red-500">5</span> 张卡，每包必得一张 <span className="text-red-500 font-black">R</span> 或以上稀有度的卡牌。
+              </p>
+            </div>
+            <div className="flex gap-4 group">
+              <span className="text-red-600 font-black italic">02</span>
+              <p className="text-sm text-zinc-400 font-bold leading-relaxed">
+                奖品包每包花费 <span className="text-red-500">20</span> 金币，每包内包含 <span className="text-red-500">1</span> 张卡，每包必得一张 <span className="text-red-500 font-black">PR</span> 稀有度得卡牌。
+              </p>
+            </div>
+            <div className="flex gap-4 group">
+              <span className="text-red-600 font-black italic">03</span>
+              <p className="text-sm text-zinc-400 font-bold leading-relaxed">
+                基础包每 <span className="text-red-500">10</span> 包必得一张 <span className="text-red-500 font-black">SR</span> 稀有度的卡牌，当前剩余：<span className="text-red-500 font-black">{Math.max(0, 10 - pityInfo.packsSinceSR)}</span>
+              </p>
+            </div>
+            <div className="flex gap-4 group">
+              <span className="text-red-600 font-black italic">04</span>
+              <p className="text-sm text-zinc-400 font-bold leading-relaxed">
+                基础包每 <span className="text-red-500">50</span> 包必得一张 <span className="text-red-500 font-black">UR/SER</span> 稀有度的卡牌，当前剩余：<span className="text-red-500 font-black">{Math.max(0, 50 - pityInfo.packsSinceUR)}</span>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
-      
+
       <style>{`
         .perspective-1000 { perspective: 1000px; }
         .backface-hidden { backface-visibility: hidden; }

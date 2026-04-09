@@ -1,7 +1,8 @@
 import { getAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X, Sparkles } from 'lucide-react';
+import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X, Sparkles, ArrowLeft, Shuffle, ListFilter } from 'lucide-react';
 import { CARD_LIBRARY } from '../data/cards';
 import { FACTIONS } from '../data/factions';
 import { Card as CardType, Deck } from '../types/game';
@@ -9,6 +10,7 @@ import { CardComponent } from './Card';
 import { cn, getCardImageUrl } from '../lib/utils';
 
 export const DeckBuilder: React.FC = () => {
+  const navigate = useNavigate();
   const [deck, setDeck] = useState<CardType[]>([]);
   const [deckName, setDeckName] = useState('我的新卡组');
   const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
@@ -289,6 +291,39 @@ export const DeckBuilder: React.FC = () => {
     setDeck(newDeck);
   };
 
+  const sortDeck = () => {
+    const rarityOrder: Record<string, number> = { 'SER': 0, 'UR': 1, 'PR': 2, 'SR': 3, 'R': 4, 'U': 5, 'C': 6 };
+    const colorOrder: Record<string, number> = { 'RED': 0, 'WHITE': 1, 'YELLOW': 2, 'BLUE': 3, 'GREEN': 4, 'NONE': 5 };
+    
+    const sorted = [...deck].sort((a, b) => {
+      // Rarity
+      const rA = rarityOrder[a.rarity] ?? 10;
+      const rB = rarityOrder[b.rarity] ?? 10;
+      if (rA !== rB) return rA - rB;
+      
+      // Color
+      const cA = colorOrder[a.color] ?? 10;
+      const cB = colorOrder[b.color] ?? 10;
+      if (cA !== cB) return cA - cB;
+      
+      // AC
+      if (a.acValue !== b.acValue) return a.acValue - b.acValue;
+      
+      // Name
+      return a.fullName.localeCompare(b.fullName);
+    });
+    setDeck(sorted);
+  };
+
+  const shuffleDeck = () => {
+    const shuffled = [...deck];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setDeck(shuffled);
+  };
+
   const filteredCards = CARD_LIBRARY.filter(c => {
     // Text search
     const matchesSearch = c.fullName.includes(searchTerm) || 
@@ -316,11 +351,20 @@ export const DeckBuilder: React.FC = () => {
     <div className="flex h-[calc(100vh-64px)] mt-16 overflow-hidden bg-zinc-950">
       {/* Left: My Decks */}
       <div className="w-72 border-r border-zinc-800 flex flex-col bg-zinc-900/30">
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-          <h3 className="text-sm font-black italic tracking-tighter text-red-500">我的卡组</h3>
-          <button onClick={createNewDeck} className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white">
-            <Plus className="w-5 h-5" />
+        <div className="p-4 border-b border-zinc-800 flex flex-col gap-4">
+          <button 
+            onClick={() => navigate('/')} 
+            className="group flex items-center gap-3 px-4 py-3 bg-zinc-900 hover:bg-zinc-800 rounded-xl border border-white/5 transition-all w-full text-zinc-400 hover:text-white"
+          >
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1" />
+            <span className="font-black italic tracking-tighter uppercase text-sm">返回主界面</span>
           </button>
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-sm font-black italic tracking-tighter text-red-500">我的卡组</h3>
+            <button onClick={createNewDeck} className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white">
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {myDecks.map(d => (
@@ -408,14 +452,34 @@ export const DeckBuilder: React.FC = () => {
               {deck.length} / 50
             </span>
           </div>
-          <button 
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2 bg-red-600 hover:bg-red-700 rounded-full font-black italic text-sm tracking-tighter flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)]"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            保存卡组
-          </button>
+          <div className="flex items-center gap-4">
+            <div className="flex gap-2">
+              <button 
+                onClick={sortDeck}
+                className="flex items-center gap-2 px-6 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400 hover:text-white group"
+                title="排序卡组 Sort"
+              >
+                <ListFilter className="w-4 h-4 group-hover:scale-110" />
+                <span className="text-[10px] font-black uppercase tracking-widest">排序 Sort</span>
+              </button>
+              <button 
+                onClick={shuffleDeck}
+                className="flex items-center gap-2 px-6 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400 hover:text-white group"
+                title="乱序卡组 Shuffle"
+              >
+                <Shuffle className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+                <span className="text-[10px] font-black uppercase tracking-widest">乱序 Shuffle</span>
+              </button>
+            </div>
+            <button 
+              onClick={handleSave}
+              disabled={saving}
+              className="px-8 py-2 bg-red-600 hover:bg-red-700 rounded-full font-black italic text-sm tracking-tighter flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)]"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              保存卡组
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8">

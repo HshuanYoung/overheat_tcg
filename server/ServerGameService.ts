@@ -1021,7 +1021,7 @@ export const ServerGameService = {
         data: { amount: totalDamage, source: 'BATTLE' }
       });
 
-      this.applyDamageToPlayer(gameState, defenderId, totalDamage);
+      this.applyDamageToPlayer(gameState, defenderId, totalDamage, 'BATTLE');
     } else {
       // Unit combat
       const defendingUnit = defender.unitZone.find(c => c?.gamecardId === gameState.battleState!.defender) as Card;
@@ -1082,14 +1082,14 @@ export const ServerGameService = {
     return gameState;
   },
 
-  applyDamageToPlayer(gameState: GameState, playerId: string, damage: number) {
+  applyDamageToPlayer(gameState: GameState, playerId: string, damage: number, source: 'BATTLE' | 'EFFECT' = 'BATTLE') {
     const player = gameState.players[playerId];
 
     // 2. The cards in the damaged deck do not have enough damage value
     if (player.deck.length < damage) {
       gameState.logs.push(`[游戏结束] ${player.displayName} 的卡组中没有足够的卡牌来承受 ${damage} 点伤害，判负。`);
       gameState.gameStatus = 2;
-      gameState.winReason = 'DECK_OUT_DAMAGE';
+      gameState.winReason = source === 'BATTLE' ? 'DECK_OUT_BATTLE_DAMAGE' : 'DECK_OUT_EFFECT_DAMAGE';
       gameState.winnerId = gameState.playerIds.find(id => id !== playerId);
       return;
     }
@@ -1762,6 +1762,18 @@ export const ServerGameService = {
     return this.advancePhase(gameState, 'DECLARE_END');
   },
 
+  async surrender(gameState: GameState, playerUid: string) {
+    const player = gameState.players[playerUid];
+    const opponentId = gameState.playerIds.find(id => id !== playerUid);
+    
+    gameState.gameStatus = 2;
+    gameState.winnerId = opponentId;
+    gameState.winReason = 'SURRENDER';
+    gameState.logs.push(`[游戏结束] ${player.displayName} 选择了投降。`);
+    
+    return gameState;
+  },
+
   // Bot logic
   async botMove(gameState: GameState) {
     const bot = gameState.players['BOT_PLAYER'];
@@ -2028,6 +2040,18 @@ export const ServerGameService = {
     // Correctly set isTurn for the initial player
     const firstPlayerUid = gameState.playerIds[firstIdx];
     gameState.players[firstPlayerUid].isTurn = true;
+
+    return gameState;
+  },
+
+  async surrender(gameState: GameState, playerUid: string) {
+    const player = gameState.players[playerUid];
+    if (!player) return;
+
+    gameState.gameStatus = 2; // Game Over
+    gameState.winnerId = gameState.playerIds.find(id => id !== playerUid);
+    gameState.winReason = 'SURRENDER';
+    gameState.logs.push(`[对局结束] ${player.displayName} 选择了投降。`);
 
     return gameState;
   }

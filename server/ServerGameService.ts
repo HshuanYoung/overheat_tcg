@@ -1,5 +1,5 @@
 // Firebase imports removed - logic is now database-agnostic
-import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackItem, GamePhase } from '../src/types/game';
+import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackItem, GamePhase, GAME_TIMEOUTS } from '../src/types/game';
 import { CARD_LIBRARY } from '../src/data/cards';
 import { EventEngine } from '../src/services/EventEngine';
 import { AtomicEffectExecutor } from '../src/services/AtomicEffectExecutor';
@@ -1190,7 +1190,7 @@ export const ServerGameService = {
     nextPlayer.isTurn = true;
 
     gameState.logs.push(`--- 回合 ${gameState.turnCount}: ${nextPlayer.displayName} ---`);
-    gameState.mainPhaseTimeRemaining = 300000;
+    gameState.mainPhaseTimeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
     this.executeStartPhase(gameState, nextPlayer);
   },
 
@@ -1220,7 +1220,7 @@ export const ServerGameService = {
     // If we are leaving a shared phase (MAIN, BATTLE_DECLARATION, BATTLE_FREE), subtract from turn budget
     const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
     if (sharedPhases.includes(gameState.phase)) {
-      gameState.mainPhaseTimeRemaining = Math.max(0, (gameState.mainPhaseTimeRemaining || 300000) - elapsed);
+      gameState.mainPhaseTimeRemaining = Math.max(0, (gameState.mainPhaseTimeRemaining || GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
     }
 
     gameState.phaseTimerStart = now;
@@ -1386,7 +1386,7 @@ export const ServerGameService = {
       }
     });
 
-    gameState.mainPhaseTimeRemaining = 300000;
+    gameState.mainPhaseTimeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
     const unitsToReset = player.unitZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
 
     const itemsToReset = player.itemZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
@@ -1968,7 +1968,7 @@ export const ServerGameService = {
         'BOT_PLAYER': botState
       },
       phaseTimerStart: Date.now(),
-      mainPhaseTimeRemaining: 300000
+      mainPhaseTimeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL
     };
 
     // Correctly set isTurn for the initial player
@@ -2008,7 +2008,7 @@ export const ServerGameService = {
       playerIds: [uid1, uid2], gameStatus: 1, logs: ['匹配成功。对局开始'],
       players: { [uid1]: p1, [uid2]: p2 },
       phaseTimerStart: Date.now(),
-      mainPhaseTimeRemaining: 300000
+      mainPhaseTimeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL
     };
 
     // Correctly set isTurn for the initial player

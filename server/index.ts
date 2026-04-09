@@ -10,7 +10,7 @@ import { pool, dbInit } from './db';
 import { generateToken, verifyToken } from './auth';
 import { initServerCardLibrary, SERVER_CARD_LIBRARY } from './card_loader';
 import { ServerGameService } from './ServerGameService';
-import { PlayerState, Card } from '../src/types/game';
+import { PlayerState, Card, GAME_TIMEOUTS } from '../src/types/game';
 
 // Initialize Game Library
 // Initialize Game Library will be awaited below.
@@ -167,19 +167,19 @@ setInterval(async () => {
 
                 const now = Date.now();
                 const phaseElapsed = now - (gameState.phaseTimerStart || now);
-                const checkInterval = 2000;
+                const checkInterval = GAME_TIMEOUTS.CHECK_INTERVAL;
 
                 const sharedPhases = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
-                const independentPhases = ['EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN'];
+                const independentPhases = ['INIT', 'START', 'DRAW', 'EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN', 'DAMAGE_CALCULATION', 'DISCARD'];
 
                 if (sharedPhases.includes(gameState.phase)) {
-                    // Shared 300s budget logic
+                    // Shared budget logic
                     const isWaitingForOpponent =
                         (gameState.counterStack && gameState.counterStack.length > 0) ||
                         (gameState.battleState && gameState.battleState.askConfront);
 
                     if (isWaitingForOpponent) {
-                        if (phaseElapsed > 3000) {
+                        if (phaseElapsed > GAME_TIMEOUTS.INDEPENDENT_PHASE) {
                             console.log(`[Timer] Confrontation timeout in ${gameState.phase} for game ${gameId}, auto-advancing.`);
                             gameState.logs.push('响应超时，自动推进。');
                             if (gameState.phase === 'BATTLE_FREE') {
@@ -198,7 +198,7 @@ setInterval(async () => {
                             }
                         }
                     } else {
-                        gameState.mainPhaseTimeRemaining = (gameState.mainPhaseTimeRemaining || 300000) - checkInterval;
+                        gameState.mainPhaseTimeRemaining = (gameState.mainPhaseTimeRemaining || GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - checkInterval;
 
                         if (gameState.mainPhaseTimeRemaining <= 0) {
                             console.log(`[Timer] Shared budget timeout for game ${gameId}, auto-advancing.`);
@@ -208,7 +208,7 @@ setInterval(async () => {
                             } else {
                                 await ServerGameService.advancePhase(gameState, 'DECLARE_END');
                             }
-                            gameState.mainPhaseTimeRemaining = 300000;
+                            gameState.mainPhaseTimeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
                             gameState.phaseTimerStart = Date.now();
                         }
 
@@ -221,17 +221,13 @@ setInterval(async () => {
                         }
                     }
                 } else if (independentPhases.includes(gameState.phase)) {
-                    if (phaseElapsed > 3000) {
+                    if (phaseElapsed > GAME_TIMEOUTS.INDEPENDENT_PHASE) {
                         console.log(`[Timer] Auto-advancing game ${gameId} due to timeout in phase ${gameState.phase}`);
 
-                        if (gameState.phase === 'MULLIGAN') {
+                        if (gameState.phase === 'MULLIGAN' || gameState.phase === 'INIT') {
                             Object.values(gameState.players).forEach((p: any) => { p.mulliganDone = true; });
-                            gameState.phase = 'START';
-                            gameState.turnCount = 1;
-                            const firstUid = gameState.playerIds[gameState.currentTurnPlayer];
-                            gameState.playerIds.forEach((uid: string) => {
-                                gameState.players[uid].isTurn = (uid === firstUid);
-                            });
+                            // Using advancePhase ensures START -> DRAW -> EROSION transition happens correctly
+                            await ServerGameService.advancePhase(gameState);
                             gameState.logs.push('调度超时，自动开始游戏。');
                         } else if (gameState.phase === 'EROSION') {
                             const playerUid = gameState.playerIds[gameState.currentTurnPlayer];
@@ -242,6 +238,16 @@ setInterval(async () => {
                             await ServerGameService.declareDefense(gameState, defenderUid, undefined);
                         } else if (gameState.phase === 'COUNTERING') {
                             await ServerGameService.resolveCounterStack(gameState);
+                        } else if (gameState.phase === 'DAMAGE_CALCULATION') {
+                            await ServerGameService.resolveDamage(gameState);
+                        } else if (gameState.phase === 'DISCARD') {
+                            const playerUid = gameState.playerIds[gameState.currentTurnPlayer];
+                            const player = gameState.players[playerUid];
+                            if (player.hand.length > 6) {
+                                await ServerGameService.discardCard(gameState, playerUid, player.hand[0].gamecardId);
+                            } else {
+                                await ServerGameService.advancePhase(gameState);
+                            }
                         } else {
                             await ServerGameService.advancePhase(gameState);
                         }
@@ -261,7 +267,7 @@ setInterval(async () => {
     } catch (err) {
         console.error('[Timer] Error in auto-advance loop:', err);
     }
-}, 2000); // Check every 2 seconds
+}, GAME_TIMEOUTS.CHECK_INTERVAL); // Check every 2 seconds
 app.use(express.json());
 
 // Initialize MariaDB Connection

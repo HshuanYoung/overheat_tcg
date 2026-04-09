@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Card, PlayerState, StackItem, GameState } from '../types/game';
+import { Card, PlayerState, StackItem, GameState, GAME_TIMEOUTS } from '../types/game';
 import { CardComponent } from './Card';
 import { GameService } from '../services/gameService';
 import { Shield, Sword, Zap, Trash2, LogOut, Layers, AlertTriangle, Search, Play } from 'lucide-react';
@@ -500,7 +500,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
             <div className="flex flex-col">
               <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">{game.phase} Timeout</span>
               <span className="text-xl font-black tabular-nums text-red-500 leading-none">
-                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((GAME_TIMEOUTS.INDEPENDENT_PHASE - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </span>
             </div>
           </div>

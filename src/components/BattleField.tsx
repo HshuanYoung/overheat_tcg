@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
 import { onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation } from '../types/game';
+import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation, GAME_TIMEOUTS } from '../types/game';
 import { socket, getAuthUser, onceAuthenticated, isSocketAuthenticated } from '../socket';
 
 import { GameService } from '../services/gameService';
@@ -68,16 +68,16 @@ export const BattleField: React.FC = () => {
       const elapsed = now - (game.phaseTimerStart || now);
 
       const sharedPhases = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
-      const independentPhases = ['EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN'];
+      const independentPhases = ['INIT', 'START', 'DRAW', 'EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN', 'DAMAGE_CALCULATION', 'DISCARD'];
 
       const isWaiting = (game.counterStack && game.counterStack.length > 0) ||
         (game.battleState && game.battleState.askConfront);
 
-      let remaining = 3000;
+      let remaining = GAME_TIMEOUTS.INDEPENDENT_PHASE;
       if (sharedPhases.includes(game.phase) && !isWaiting) {
-        remaining = Math.max(0, (game.mainPhaseTimeRemaining || 300000) - elapsed);
+        remaining = Math.max(0, (game.mainPhaseTimeRemaining || GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
       } else {
-        remaining = Math.max(0, 3000 - elapsed);
+        remaining = Math.max(0, GAME_TIMEOUTS.INDEPENDENT_PHASE - elapsed);
       }
 
       const newTimerValue = Math.floor(remaining / 1000);
@@ -1436,7 +1436,7 @@ export const BattleField: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="absolute top-4 right-6 text-2xl font-black text-red-500 animate-pulse">
-                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((GAME_TIMEOUTS.INDEPENDENT_PHASE - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter">选择要发动的效果</h3>
               <div className="space-y-4">
@@ -1501,7 +1501,7 @@ export const BattleField: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="absolute top-4 right-6 text-2xl font-black text-red-500 animate-pulse">
-                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((GAME_TIMEOUTS.INDEPENDENT_PHASE - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter flex items-center gap-3">
                 <Zap className="w-6 h-6" />
@@ -1558,7 +1558,7 @@ export const BattleField: React.FC = () => {
           >
             <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)] relative">
               <div className="absolute top-4 right-6 text-2xl font-black text-[#f27d26] animate-pulse">
-                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((GAME_TIMEOUTS.INDEPENDENT_PHASE - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">CONFIRM COUNTER</h2>
               <p className="text-white/80">Your opponent is proposing damage calculation. Would you like to counter first?</p>
@@ -1577,7 +1577,7 @@ export const BattleField: React.FC = () => {
           >
             <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)] relative">
               <div className="absolute top-4 right-6 text-2xl font-black text-[#f27d26] animate-pulse">
-                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((GAME_TIMEOUTS.INDEPENDENT_PHASE - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">CONFIRM COUNTER</h2>
               <p className="text-white/80">Opponent declined counter. Would you like to counter? (Choosing NO moves to damage calculation)</p>

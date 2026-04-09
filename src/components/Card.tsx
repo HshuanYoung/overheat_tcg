@@ -15,6 +15,7 @@ interface CardProps {
   isExhausted?: boolean;
   disableZoom?: boolean;
   statusBorder?: 'red' | 'blue';
+  displayMode?: 'deck' | 'unit' | 'erosion_item' | 'none';
 }
 
 const getRarityClass = (rarity: Rarity) => {
@@ -30,7 +31,7 @@ const getRarityClass = (rarity: Rarity) => {
   }
 };
 
-export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, count, isBack, disableZoom, statusBorder, isExhausted }) => {
+export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, count, isBack, disableZoom, statusBorder, isExhausted, displayMode }) => {
   if (isBack || !card) {
     return (
       <motion.div
@@ -65,6 +66,10 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
   const imageUrl = card.imageUrl || getCardImageUrl(card.id, card.rarity, true);
   const fullImageUrl = card.fullImageUrl || getCardImageUrl(card.id, card.rarity, false);
 
+  const showStats = displayMode !== 'erosion_item' && displayMode !== 'none';
+  const showAC = showStats && displayMode !== 'unit';
+  const showUnitStats = showStats && displayMode !== 'deck' && card.type === 'UNIT';
+
   return (
     <>
       <motion.div
@@ -74,46 +79,62 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
         whileTap={{ scale: 0.98 }}
         onClick={handleCardClick}
         className={clsx(
-          "relative aspect-[3/4] w-full rounded-xl overflow-hidden border-2 cursor-pointer group transition-all bg-zinc-900",
-          statusBorder === 'red' ? "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]" :
-            statusBorder === 'blue' ? "border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]" :
-              getRarityClass(card.rarity),
+          "relative aspect-[3/4] w-full rounded-xl cursor-pointer group transition-all bg-zinc-900 shadow-xl",
+          statusBorder 
+            ? (statusBorder === 'red' 
+                ? "border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]" 
+                : "border-2 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.6)]")
+            : (getRarityClass(card.rarity) + " border-2"),
           className
         )}
       >
-        {/* Card Image - Always show thumbnail in preview */}
-        <img
-          src={imageUrl}
-          alt={fullImageUrl}
-          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          referrerPolicy="no-referrer"
-        />
+        {/* Visual Content Wrapper - Handles clipping of image and overlays */}
+        <div className="absolute inset-0 overflow-hidden rounded-xl">
+          <img
+            src={imageUrl}
+            alt={card.fullName || fullImageUrl}
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            referrerPolicy="no-referrer"
+          />
 
-        {/* Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
-
-        {/* Top Right: Access Cost (Ac值) */}
-        <div className="absolute top-2 right-2">
-          <div className={clsx(
-            "w-10 h-10 rounded-lg border-2 flex flex-col items-center justify-center font-black text-lg shadow-xl",
-            isNegativeCost ? "bg-blue-900/90 border-blue-400 text-blue-100" : "bg-red-900/90 border-red-400 text-red-100"
-          )}>
-            <span className="text-[8px] leading-none opacity-70 uppercase">Ac</span>
-            <span className="leading-none">{card.acValue > 0 ? `+${card.acValue}` : card.acValue}</span>
-          </div>
+          {/* Gradient Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
         </div>
 
-        {/* Bottom Stats: Damage and Power (伤害和力量) */}
-        {card.type === 'UNIT' && (
-          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-            <div className="flex items-center gap-1 bg-blue-900/80 px-2 py-1 rounded border border-blue-400/50 shadow-lg">
-              <span className="text-xs font-black text-blue-100">{card.damage}</span>
-              <Sword className="w-3.5 h-3.5 text-blue-300" />
-            </div>
-            <div className="flex items-center gap-1 bg-zinc-900/90 px-2 py-1 rounded border border-white/20 shadow-lg">
-              <span className="font-mono text-xs font-bold text-white tracking-tighter">{card.power}</span>
+        {/* Top Right: Access Cost (Ac值) */}
+        {showAC && (
+          <div className="absolute top-1 right-1 z-10">
+            <div className={clsx(
+              "w-7 h-7 rounded-full border-1.5 flex flex-col items-center justify-center font-bold shadow-lg",
+              isNegativeCost 
+                ? "bg-blue-600/90 border-blue-200 text-white" 
+                : "bg-red-600/90 border-red-200 text-white"
+            )}>
+              <span className="text-[6px] leading-none opacity-80 uppercase font-black">Ac</span>
+              <span className="text-xs leading-none mt-0.5">{card.acValue >= 0 ? `+${card.acValue}` : card.acValue}</span>
             </div>
           </div>
+        )}
+
+        {/* Bottom Stats: Power and Damage */}
+        {showUnitStats && (
+          <>
+            {/* Lower Left: Damage */}
+            <div className="absolute bottom-1.5 left-1.5">
+              <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md border border-red-500/40 rounded-md px-1.5 py-0.5 shadow-lg">
+                <Sword className="w-3 h-3 text-red-500" />
+                <span className="text-xs font-black text-white">{card.damage}</span>
+              </div>
+            </div>
+            
+            {/* Lower Right: Strength (Power) */}
+            <div className="absolute bottom-1.5 right-1.5">
+              <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md border border-blue-400/40 rounded-md px-1.5 py-0.5 shadow-lg">
+                <Shield className="w-3 h-3 text-blue-400" />
+                <span className="text-xs font-black text-white">{card.power}</span>
+              </div>
+            </div>
+          </>
         )}
 
         {/* God Mark (神蚀标记) */}

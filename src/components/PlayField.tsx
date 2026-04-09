@@ -28,7 +28,6 @@ const CardSlot: React.FC<{
   onClick?: (e: React.MouseEvent) => void;
   onPreview?: (card: Card) => void;
   className?: string;
-  isErosion?: boolean;
   isFaceUp?: boolean;
   isExhausted?: boolean;
   isSelectedForPayment?: boolean;
@@ -39,7 +38,8 @@ const CardSlot: React.FC<{
   isDefending?: boolean;
   isOpponent?: boolean;
   isAllianceInitiator?: boolean;
-}> = ({ card, label, onClick, onPreview, className, isErosion, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent, isAllianceInitiator }) => {
+  displayMode?: 'deck' | 'unit' | 'erosion_item' | 'none';
+}> = ({ card, label, onClick, onPreview, className, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent, isAllianceInitiator, displayMode }) => {
   // Calculate thickness layers (max 8 for visual performance)
   const layers = Math.min(Math.floor(count / 3), 8);
 
@@ -63,7 +63,12 @@ const CardSlot: React.FC<{
           (isAttacking || isDefending) ? "z-10" : "",
           className
         )}
-        onClick={onClick}
+        onClick={(e) => {
+          if (onClick) onClick(e);
+          // If it's a card (even face down), handle preview on click if no other handler or just always?
+          // The user specifically asked for erosion back cards to be clickable for details.
+          if (!isFaceUp && card && onPreview) onPreview(card);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           if (card && onPreview) onPreview(card);
@@ -79,7 +84,7 @@ const CardSlot: React.FC<{
             card.inAllianceGroup && (isOpponent ? "rotate-[270deg]" : "rotate-90")
           )}>
             {isFaceUp ? (
-              <CardComponent card={card} className="border-0" isExhausted={isExhausted} statusBorder={isAttacking ? 'red' : isDefending ? 'blue' : undefined} />
+              <CardComponent card={card} className="border-0" isExhausted={isExhausted} statusBorder={isAttacking ? 'red' : isDefending ? 'blue' : undefined} displayMode={displayMode} />
             ) : (
               <CardComponent isBack className="border-0" isExhausted={isExhausted} />
             )}
@@ -174,20 +179,22 @@ const PlayerHalf: React.FC<{
               className="border-white/20"
             />
             <CardSlot
-              card={null}
+              card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30"
               onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
-              isFaceUp={false}
+              isFaceUp={true}
               isOpponent={isOpponent}
+              displayMode="erosion_item"
             />
             <CardSlot
-              card={null}
+              card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30"
               onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
-              isFaceUp={false}
+              isFaceUp={true}
               isOpponent={isOpponent}
+              displayMode="erosion_item"
             />
           </div>
         ) : (
@@ -204,6 +211,7 @@ const PlayerHalf: React.FC<{
                   isExhausted={item ? item.isExhausted : false}
                   isSelectedForPayment={false}
                   showCount={false}
+                  displayMode="erosion_item"
                 />
               );
             })}
@@ -273,11 +281,16 @@ const PlayerHalf: React.FC<{
                             card={displayCard}
                             isFaceUp={displayCard.isFaceUp}
                             onPreview={onPreviewCard}
-                            onClick={(e) => displayCard.isFaceUp && onCardClick?.(displayCard, 'erosion_front', i, e)}
+                            onClick={(e) => {
+                              if (displayCard.isFaceUp) {
+                                onCardClick?.(displayCard, 'erosion_front', i, e);
+                              }
+                            }}
                             isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             showCount={false}
                             isOpponent={isOpponent}
+                            displayMode="erosion_item"
                           />
                         ) : (
                           <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
@@ -308,6 +321,7 @@ const PlayerHalf: React.FC<{
                     isDefending={unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId) : false}
                     showCount={false}
                     isOpponent={isOpponent}
+                    displayMode="unit"
                   />
                 );
               })}
@@ -332,6 +346,7 @@ const PlayerHalf: React.FC<{
                     isDefending={unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId) : false}
                     isAllianceInitiator={unit && allianceInitiator === unit.gamecardId}
                     showCount={false}
+                    displayMode="unit"
                   />
                 );
               })}
@@ -357,10 +372,15 @@ const PlayerHalf: React.FC<{
                             card={displayCard}
                             isFaceUp={displayCard.isFaceUp}
                             onPreview={onPreviewCard}
-                            onClick={(e) => displayCard.isFaceUp && onCardClick?.(displayCard, 'erosion_front', i, e)}
+                            onClick={(e) => {
+                              if (displayCard.isFaceUp) {
+                                onCardClick?.(displayCard, 'erosion_front', i, e);
+                              }
+                            }}
                             isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             showCount={false}
+                            displayMode="erosion_item"
                           />
                         ) : (
                           <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
@@ -439,6 +459,7 @@ const PlayerHalf: React.FC<{
                   isExhausted={item ? item.isExhausted : false}
                   isSelectedForPayment={false}
                   showCount={false}
+                  displayMode="erosion_item"
                 />
               );
             })}
@@ -447,18 +468,20 @@ const PlayerHalf: React.FC<{
           // Player Right: Exile, Grave, Deck
           <div className="flex flex-col gap-2">
             <CardSlot
-              card={null}
+              card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30"
               onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
-              isFaceUp={false}
+              isFaceUp={true}
+              displayMode="erosion_item"
             />
             <CardSlot
-              card={null}
+              card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30"
               onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
-              isFaceUp={false}
+              isFaceUp={true}
+              displayMode="erosion_item"
             />
             <CardSlot
               card={null} isDeck label="DECK" count={player.deck?.length || 0}

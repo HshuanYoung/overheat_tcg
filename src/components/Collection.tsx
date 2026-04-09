@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { CARD_LIBRARY } from '../data/cards';
 import { Card } from '../types/game';
+import { CardComponent } from './Card';
 
 const RARITY_COLORS: Record<string, string> = {
   C: 'border-zinc-600', U: 'border-emerald-600', R: 'border-blue-600',
@@ -139,28 +140,18 @@ export const Collection: React.FC = () => {
         {/* Card Grid */}
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
           {ownedCards.map(card => (
-            <motion.div
-              key={card.uniqueId}
-              whileHover={{ scale: 1.05 }}
-              className={cn(
-                "relative aspect-[3/4] rounded-xl border-2 overflow-hidden cursor-pointer group",
-                getRarityClass(card.rarity)
-              )}
-            >
-              <img 
-                src={card.imageUrl || getCardImageUrl(card.id, card.rarity, true)} 
-                alt={card.fullName} 
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+            <div key={card.uniqueId} className="relative">
+              <CardComponent 
+                card={card} 
+                displayMode="deck"
+                onClick={() => { /* Detail view if needed */ }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-2">
-                <p className="text-[11px] font-bold truncate">{card.fullName}</p>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded", RARITY_BADGE[card.rarity])}>{card.rarity}</span>
-                  <span className="text-[10px] text-zinc-400">x{collection[card.uniqueId] || collection[card.id] || 0}</span>
-                </div>
+              <div className="absolute top-0 right-0 p-1.5 z-10">
+                 <span className="bg-black/80 text-[10px] text-white px-2 py-0.5 rounded-md border border-white/10 font-black">
+                   x{collection[card.uniqueId] || collection[card.id] || 0}
+                 </span>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
 

@@ -292,7 +292,7 @@ export const DeckBuilder: React.FC = () => {
                   className="transition-transform hover:scale-105 cursor-zoom-in"
                   onClick={() => setZoomedCard(card)}
                 >
-                  <CardComponent card={card} disableZoom={true} />
+                  <CardComponent card={card} disableZoom={true} displayMode="deck" />
                 </div>
                 <button 
                   onClick={() => removeFromDeck(index)}

@@ -179,7 +179,7 @@ setInterval(async () => {
                         (gameState.battleState && gameState.battleState.askConfront);
 
                     if (isWaitingForOpponent) {
-                        if (phaseElapsed > 30000) {
+                        if (phaseElapsed > 3000) {
                             console.log(`[Timer] Confrontation timeout in ${gameState.phase} for game ${gameId}, auto-advancing.`);
                             gameState.logs.push('响应超时，自动推进。');
                             if (gameState.phase === 'BATTLE_FREE') {
@@ -221,7 +221,7 @@ setInterval(async () => {
                         }
                     }
                 } else if (independentPhases.includes(gameState.phase)) {
-                    if (phaseElapsed > 30000) {
+                    if (phaseElapsed > 3000) {
                         console.log(`[Timer] Auto-advancing game ${gameId} due to timeout in phase ${gameState.phase}`);
 
                         if (gameState.phase === 'MULLIGAN') {
@@ -952,6 +952,7 @@ io.on('connection', (socket) => {
         if (!user) return;
 
         const { gameId, action, payload } = data;
+        console.log(`[Socket] received gameAction: ${action} for game ${gameId}`, payload);
 
         await withGameLock(gameId, async () => {
             try {
@@ -1061,6 +1062,11 @@ io.on('connection', (socket) => {
                         await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
                         io.to(gameId).emit('gameStateUpdate', gameState);
                     }
+                } else if (action === 'SUBMIT_QUERY_CHOICE') {
+                    const { queryId, selections } = payload;
+                    await ServerGameService.handleQueryChoice(gameState, myUid, queryId, selections);
+                    await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
+                    io.to(gameId).emit('gameStateUpdate', gameState);
                 } else if (action === 'END_PHASE') {
                     if (player.isTurn || gameState.phase === 'BATTLE_FREE' || gameState.phase === 'COUNTERING') {
                         await advancePhase(gameState, gameId, myUid, socket, payload);

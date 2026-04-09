@@ -41,8 +41,17 @@ export const ServerGameService = {
     if (!card || !card.id) return;
     const masterCard = SERVER_CARD_LIBRARY[card.id];
     if (masterCard && masterCard.effects) {
-      // Re-assign effects to restore functions (condition, execute) lost during JSON serialization
-      card.effects = masterCard.effects;
+      // Re-assign effects to restore functions lost during JSON serialization
+      card.effects = masterCard.effects.map((originalEffect, idx) => {
+        const runtimeEffect = card.effects ? card.effects[idx] : null;
+        return {
+          ...(runtimeEffect || originalEffect),
+          condition: originalEffect.condition,
+          execute: originalEffect.execute,
+          cost: originalEffect.cost,
+          resolve: originalEffect.resolve
+        };
+      });
     }
   },
 
@@ -155,6 +164,12 @@ export const ServerGameService = {
     if (effect.erosionTotalLimit) {
       const totalCount = player.erosionFront.filter(c => c !== null).length + player.erosionBack.filter(c => c !== null).length;
       if (totalCount < effect.erosionTotalLimit[0] || totalCount > effect.erosionTotalLimit[1]) return false;
+    }
+    // 4. Condition Check
+    if (effect.condition) {
+      if (!effect.condition(gameState, player, card)) {
+        return false;
+      }
     }
 
     return true;
@@ -414,7 +429,7 @@ export const ServerGameService = {
       if (feijingCard) {
         this.moveCard(gameState, playerId, 'HAND', playerId, 'GRAVE', feijingCard.gamecardId);
       }
-    for (let i = 0; i < remainingCost; i++) {
+      for (let i = 0; i < remainingCost; i++) {
         // 2. The cards in the damaged deck do not have enough damage value
         if (player.deck.length === 0) {
           gameState.logs.push(`[游戏结束] ${player.displayName} 的卡组中没有足够的卡牌来支付剩余费用，判负。`);
@@ -529,6 +544,13 @@ export const ServerGameService = {
 
     if (!this.checkEffectLimitsAndReqs(gameState, playerId, card, effect, location)) {
       throw new Error('不满足发动条件或已达到使用次数限制');
+    }
+
+    // 3. Payment/Cost Check
+    if (effect.cost) {
+      if (!effect.cost(gameState, player, card)) {
+        throw new Error('发动费用不足或无法支付费用');
+      }
     }
 
     this.recordEffectUsage(gameState, playerId, card, effect);
@@ -721,7 +743,10 @@ export const ServerGameService = {
   },
 
   async handleQueryChoice(gameState: GameState, playerUid: string, queryId: string, selections: string[]) {
+    console.log(`[Server] handleQueryChoice: player=${playerUid}, queryId=${queryId}, selections=`, selections);
+
     if (!gameState.pendingQuery || gameState.pendingQuery.id !== queryId) {
+      console.warn(`[Server] Invalid query choice request: expected ${gameState.pendingQuery?.id}, got ${queryId}`);
       throw new Error('无效的选择请求');
     }
     if (gameState.pendingQuery.playerUid !== playerUid) {
@@ -729,57 +754,73 @@ export const ServerGameService = {
     }
 
     const query = gameState.pendingQuery;
-    gameState.pendingQuery = undefined; // Clear it
-
-    // --- Generic Effect Resolution ---
-    if (query.callbackKey === 'EFFECT_RESOLVE') {
-        const sourceCardId = query.context?.sourceCardId;
-        const effectIndex = query.context?.effectIndex;
-        const card = sourceCardId ? this.findCardById(gameState, sourceCardId) : undefined;
-        const effect = (card && effectIndex !== undefined) ? card.effects?.[effectIndex] : undefined;
-
-        if (effect && effect.resolve) {
-            effect.resolve(card, gameState, gameState.players[playerUid], selections, query.context);
-            EventEngine.recalculateContinuousEffects(gameState);
-            return gameState;
-        }
-    }
-    // ---------------------------------
+    gameState.pendingQuery = undefined;
 
     let afterEffects = query.afterSelectionEffects || [];
     let currentSelections = selections;
     const sourceCardId = query.context?.sourceCardId;
+
+    // Robust source card finding: Check if id exists
     const sourceCard = sourceCardId ? this.findCardById(gameState, sourceCardId) : undefined;
 
-    // Special Case: Handling the response from a SELECT_PAYMENT query
-    if (query.type === 'SELECT_PAYMENT') {
-        try {
-            const paymentSelection = JSON.parse(selections[0]);
-            const result = this.payCost(
-                gameState, 
-                playerUid, 
-                query.paymentCost || 0, 
-                paymentSelection, 
-                query.paymentColor, 
-                query.context.targetCardId
-            );
-            
-            if (!result.success) {
-                // If payment fails, we might need to re-issue the query or cancel
-                // For now, let's throw an error which should be caught by the client
-                throw new Error(result.reason || '支付失败');
-            }
-            
-            // Resume the remaining effects stored in context
-            afterEffects = query.context.remainingEffects || [];
-            currentSelections = query.context.targetSelections || [];
-        } catch (e: any) {
-            // Restore query so player can try again? 
-            // Better to throw so client sees the error message
-            gameState.pendingQuery = query;
-            throw e;
+    const normalizedType = query.type.replace(/-/g, '_').toUpperCase();
+
+    // 1. Process Core Actions (like Payment) first
+    if (normalizedType === 'SELECT_PAYMENT') {
+      try {
+        const paymentSelection = JSON.parse(selections[0]);
+        const result = this.payCost(
+          gameState,
+          playerUid,
+          query.paymentCost || 0,
+          paymentSelection,
+          query.paymentColor,
+          query.context?.targetCardId // Use optional chaining for safety
+        );
+
+        if (!result.success) {
+          gameState.pendingQuery = query; // Restore for retry
+          throw new Error(result.reason || '支付失败');
         }
+
+        gameState.logs.push(`[系统] 支付成功，即将进入后续结算`);
+
+        afterEffects = query.context?.remainingEffects || [];
+        currentSelections = query.context?.targetSelections || [];
+      } catch (e: any) {
+        gameState.pendingQuery = query;
+        throw e;
+      }
     }
+
+    // 2. Generic Effect Resolution (Script-Driven via resolve callback)
+    if (query.callbackKey === 'EFFECT_RESOLVE') {
+      if (!sourceCard) {
+        gameState.logs.push(`[错误] EFFECT_RESOLVE 找不到来源卡 ID: ${sourceCardId}`);
+        return gameState;
+      }
+
+      const effectIndex = query.context?.effectIndex;
+      const effectId = query.context?.effectId;
+
+      // Ensure sourceCard.effects exists and find the effect
+      let effect: CardEffect | undefined;
+      if (effectIndex !== undefined) {
+        effect = sourceCard.effects?.[effectIndex];
+      } else if (effectId) {
+        effect = sourceCard.effects?.find(e => e.id === effectId);
+      }
+
+      if (effect && effect.resolve) {
+        gameState.logs.push(`[系统] 正在执行脚本回调 ${effect.id || effectIndex}`);
+        effect.resolve(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
+        EventEngine.recalculateContinuousEffects(gameState);
+        return gameState;
+      } else {
+        gameState.logs.push(`[错误] EFFECT_RESOLVE 找不到有效回调 (index: ${effectIndex}, id: ${effectId})`);
+      }
+    }
+
 
     if (afterEffects.length > 0) {
       for (let i = 0; i < afterEffects.length; i++) {
@@ -787,31 +828,31 @@ export const ServerGameService = {
 
         // INTERCEPT: If we need payment, "pause" and issue a SELECT_PAYMENT query
         if (effect.type === 'PAY_CARD_COST') {
-            const targetId = currentSelections[0];
-            const targetCard = this.findCardById(gameState, targetId);
-            if (targetCard && targetCard.acValue && targetCard.acValue !== 0) {
-                gameState.pendingQuery = {
-                    id: Math.random().toString(36).substring(7),
-                    type: 'SELECT_PAYMENT',
-                    playerUid,
-                    options: [], // Not used for payment
-                    title: `支付费用: ${targetCard.fullName}`,
-                    description: `请选择如何支付 ${targetCard.acValue} 点费用。`,
-                    minSelections: 1,
-                    maxSelections: 1,
-                    callbackKey: 'GENERIC_RESOLVE',
-                    paymentCost: targetCard.acValue,
-                    paymentColor: targetCard.color,
-                    context: {
-                        ...query.context,
-                        targetCardId: targetId,
-                        targetSelections: currentSelections,
-                        remainingEffects: afterEffects.slice(i + 1)
-                    }
-                };
-                return gameState; // Exit handleQueryChoice, waiting for payment
-            }
-            continue; // No cost to pay
+          const targetId = currentSelections[0];
+          const targetCard = this.findCardById(gameState, targetId);
+          if (targetCard && targetCard.acValue && targetCard.acValue !== 0) {
+            gameState.pendingQuery = {
+              id: Math.random().toString(36).substring(7),
+              type: 'SELECT_PAYMENT',
+              playerUid,
+              options: [], // Not used for payment
+              title: `支付费用: ${targetCard.fullName}`,
+              description: `请选择如何支付 ${targetCard.acValue} 点费用。`,
+              minSelections: 1,
+              maxSelections: 1,
+              callbackKey: 'GENERIC_RESOLVE',
+              paymentCost: targetCard.acValue,
+              paymentColor: targetCard.color,
+              context: {
+                ...query.context,
+                targetCardId: targetId,
+                targetSelections: currentSelections,
+                remainingEffects: afterEffects.slice(i + 1)
+              }
+            };
+            return gameState; // Exit handleQueryChoice, waiting for payment
+          }
+          continue; // No cost to pay
         }
 
         if (query.executionMode === 'ON_STACK') {
@@ -821,9 +862,9 @@ export const ServerGameService = {
             type: 'EFFECT',
             card: queryCard,
             timestamp: Date.now(),
-            data: { 
+            data: {
               afterSelectionEffects: [effect], // Push one by one to stack? 
-              selections: currentSelections 
+              selections: currentSelections
             } as any
           });
         } else {
@@ -1043,7 +1084,7 @@ export const ServerGameService = {
 
   applyDamageToPlayer(gameState: GameState, playerId: string, damage: number) {
     const player = gameState.players[playerId];
-    
+
     // 2. The cards in the damaged deck do not have enough damage value
     if (player.deck.length < damage) {
       gameState.logs.push(`[游戏结束] ${player.displayName} 的卡组中没有足够的卡牌来承受 ${damage} 点伤害，判负。`);
@@ -1054,38 +1095,38 @@ export const ServerGameService = {
     }
 
     for (let i = 0; i < damage; i++) {
-        const card = player.deck.pop()!;
-        card.cardlocation = 'EROSION_FRONT';
-        card.displayState = 'FRONT_UPRIGHT';
+      const card = player.deck.pop()!;
+      card.cardlocation = 'EROSION_FRONT';
+      card.displayState = 'FRONT_UPRIGHT';
 
-        // Find empty spot in erosionFront
-        const emptyIdx = player.erosionFront.findIndex(c => c === null);
-        if (emptyIdx !== -1) {
-          player.erosionFront[emptyIdx] = card;
-        } else {
-          player.erosionFront.push(card);
-        }
+      // Find empty spot in erosionFront
+      const emptyIdx = player.erosionFront.findIndex(c => c === null);
+      if (emptyIdx !== -1) {
+        player.erosionFront[emptyIdx] = card;
+      } else {
+        player.erosionFront.push(card);
+      }
 
-        // Check for goddess mode
-        const totalErosion = player.erosionFront.filter(c => c !== null).length + player.erosionBack.filter(c => c !== null).length;
-        if (totalErosion >= 10) {
-          player.isGoddessMode = true;
-          gameState.logs.push(`${player.displayName} 进入了女神化状态！`);
-        }
+      // Check for goddess mode
+      const totalErosion = player.erosionFront.filter(c => c !== null).length + player.erosionBack.filter(c => c !== null).length;
+      if (totalErosion >= 10) {
+        player.isGoddessMode = true;
+        gameState.logs.push(`${player.displayName} 进入了女神化状态！`);
+      }
 
-        // If more than 10, excess to grave
-        const currentTotal = player.erosionFront.filter(c => c !== null).length;
-        if (currentTotal > 10) {
-          const lastIdx = player.erosionFront.length - 1;
-          const excessCard = player.erosionFront[lastIdx];
-          if (excessCard) {
-            excessCard.cardlocation = 'GRAVE';
-            player.grave.push(excessCard);
-            player.erosionFront[lastIdx] = null;
-          }
+      // If more than 10, excess to grave
+      const currentTotal = player.erosionFront.filter(c => c !== null).length;
+      if (currentTotal > 10) {
+        const lastIdx = player.erosionFront.length - 1;
+        const excessCard = player.erosionFront[lastIdx];
+        if (excessCard) {
+          excessCard.cardlocation = 'GRAVE';
+          player.grave.push(excessCard);
+          player.erosionFront[lastIdx] = null;
         }
+      }
     }
-    
+
     // Check 10 erosion back condition just in case (though it's mostly in moveCard)
     this.checkWinConditions(gameState);
   },
@@ -1501,7 +1542,7 @@ export const ServerGameService = {
 
   // Create a new game and wait for opponent
   async createGame(deck: Card[]) {
-    if (!({ uid: "temp", displayName: "temp" } as any)) throw new Error('Not authenticated');
+    // Auth check placeholder removed (always truthy in temp environment)
 
     const validation = this.validateDeck(deck);
     if (!validation.valid) throw new Error(validation.error);
@@ -1534,6 +1575,7 @@ export const ServerGameService = {
       isFirst: true,
       mulliganDone: false,
       hasExhaustedThisTurn: [],
+      isHandPublic: 0,
     };
 
     // Initial Draw 4
@@ -1562,7 +1604,7 @@ export const ServerGameService = {
 
   // Create a practice game with a bot
   async createPracticeGame(deck: Card[]) {
-    if (!({ uid: "temp", displayName: "temp" } as any)) throw new Error('Not authenticated');
+    // Auth check placeholder removed (always truthy in temp environment)
 
     const validation = this.validateDeck(deck);
     if (!validation.valid) throw new Error(validation.error);
@@ -1595,6 +1637,7 @@ export const ServerGameService = {
       isFirst: false,
       mulliganDone: false,
       hasExhaustedThisTurn: [],
+      isHandPublic: 0,
     };
 
     const botState: PlayerState = {
@@ -1613,6 +1656,7 @@ export const ServerGameService = {
       isFirst: false,
       mulliganDone: true, // Bot skips mulligan
       hasExhaustedThisTurn: [],
+      isHandPublic: 0,
     };
 
     // Initial Draw 4 for both
@@ -1876,6 +1920,7 @@ export const ServerGameService = {
       isFirst: false,
       mulliganDone: false,
       hasExhaustedThisTurn: [],
+      isHandPublic: 0,
     };
 
     const botState: PlayerState = {
@@ -1894,6 +1939,7 @@ export const ServerGameService = {
       isFirst: false,
       mulliganDone: true,
       hasExhaustedThisTurn: [],
+      isHandPublic: 0,
     };
 
     // Draw 4
@@ -1939,10 +1985,12 @@ export const ServerGameService = {
     const p1: PlayerState = {
       uid: uid1, displayName: 'Player 1', deck: init1, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
       isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
+      isHandPublic: 0,
     };
     const p2: PlayerState = {
       uid: uid2, displayName: 'Player 2', deck: init2, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
       isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
+      isHandPublic: 0,
     };
 
     for (let i = 0; i < 4; i++) {

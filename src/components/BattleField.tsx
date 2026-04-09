@@ -6,6 +6,7 @@ import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation } 
 import { socket, getAuthUser, onceAuthenticated, isSocketAuthenticated } from '../socket';
 
 import { GameService } from '../services/gameService';
+import { hydrateGameState } from '../services/cardLoader';
 
 import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
@@ -72,11 +73,11 @@ export const BattleField: React.FC = () => {
       const isWaiting = (game.counterStack && game.counterStack.length > 0) ||
         (game.battleState && game.battleState.askConfront);
 
-      let remaining = 30000;
+      let remaining = 3000;
       if (sharedPhases.includes(game.phase) && !isWaiting) {
         remaining = Math.max(0, (game.mainPhaseTimeRemaining || 300000) - elapsed);
       } else {
-        remaining = Math.max(0, 30000 - elapsed);
+        remaining = Math.max(0, 3000 - elapsed);
       }
 
       const newTimerValue = Math.floor(remaining / 1000);
@@ -128,6 +129,7 @@ export const BattleField: React.FC = () => {
     const joinAndListen = () => {
       console.log('[BattleField] Joining game:', gameId);
       socket.off('gameStateUpdate').on('gameStateUpdate', (newState: any) => {
+        hydrateGameState(newState);
         setGame(newState);
       });
       socket.emit('joinGame', { gameId, deckId });
@@ -437,15 +439,27 @@ export const BattleField: React.FC = () => {
 
   const handleQuerySubmit = async () => {
     if (!gameId || !game?.pendingQuery) return;
+    
+    console.log(`[Query] Submitting choice for ${game.pendingQuery.type}:`, {
+      id: game.pendingQuery.id,
+      selectedIds: selectedQueryIds,
+      payment: paymentSelection
+    });
+
     try {
       let selections = selectedQueryIds;
-      if (game.pendingQuery.type === 'SELECT_PAYMENT') {
+      // Normalize type check to handle potential variations
+      const queryType = game.pendingQuery.type.replace(/-/g, '_').toUpperCase();
+      
+      if (queryType === 'SELECT_PAYMENT') {
         selections = [JSON.stringify(paymentSelection)];
       }
+      
       await GameService.submitQueryChoice(gameId, game.pendingQuery.id, selections);
       setSelectedQueryIds([]);
       setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
     } catch (error: any) {
+      console.error('[Query] Submission error:', error);
       alert(error.message);
     }
   };
@@ -1215,7 +1229,12 @@ export const BattleField: React.FC = () => {
                   const isMyCard = [...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand].some(c => c?.gamecardId === cardMenu.card.gamecardId);
                   if (!isMyCard) return null;
 
-                  const activateEffects = cardMenu.card.effects?.map((effect, index) => ({ effect, index }))
+                  const latestCard = [
+                      ...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand,
+                      ...(opponent?.unitZone || []), ...(opponent?.itemZone || []), ...(opponent?.erosionFront || [])
+                  ].find(c => c?.gamecardId === cardMenu.card.gamecardId) || cardMenu.card;
+
+                  const activateEffects = latestCard.effects?.map((effect, index) => ({ effect, index }))
                     .filter(e => e.effect.type === 'ACTIVATE' || e.effect.type === 'ACTIVATED') || [];
 
                   const zoneMap: Record<string, string> = {
@@ -1224,13 +1243,15 @@ export const BattleField: React.FC = () => {
                     'erosion_front': 'EROSION_FRONT',
                     'hand': 'HAND'
                   };
-                  const triggerZone = zoneMap[cardMenu.zone];
-
-                  const validEffects = activateEffects.filter(e => {
-                    if (!e.effect.triggerLocation || e.effect.triggerLocation.length === 0) {
-                      return cardMenu.zone === 'unit' || cardMenu.zone === 'item';
-                    }
-                    return e.effect.triggerLocation.includes(triggerZone as any);
+                     const validEffects = activateEffects.filter(e => {
+                    const zoneMap: Record<string, string> = {
+                      'unit': 'UNIT',
+                      'item': 'ITEM',
+                      'erosion_front': 'EROSION_FRONT',
+                      'hand': 'HAND'
+                    };
+                    const triggerLocation = zoneMap[cardMenu.zone] as TriggerLocation;
+                    return GameService.checkEffectLimitsAndReqs(game, myUid, latestCard, e.effect, triggerLocation);
                   });
 
                   if (validEffects.length > 0) {
@@ -1242,14 +1263,14 @@ export const BattleField: React.FC = () => {
                           const triggerLocation = (cardMenu.zone === 'unit' ? 'UNIT' : cardMenu.zone === 'item' ? 'ITEM' : cardMenu.zone === 'erosion_front' ? 'EROSION_FRONT' : 'HAND') as TriggerLocation;
                           if (validEffects.length === 1) {
                             setEffectConfirmation({
-                              card: cardMenu.card,
+                              card: latestCard,
                               effect: validEffects[0].effect,
                               effectIndex: validEffects[0].index,
                               triggerLocation
                             });
                           } else {
                             setEffectSelection({
-                              card: cardMenu.card,
+                              card: latestCard,
                               effects: validEffects,
                               triggerLocation
                             });
@@ -1415,7 +1436,7 @@ export const BattleField: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="absolute top-4 right-6 text-2xl font-black text-red-500 animate-pulse">
-                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter">选择要发动的效果</h3>
               <div className="space-y-4">
@@ -1480,7 +1501,7 @@ export const BattleField: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="absolute top-4 right-6 text-2xl font-black text-red-500 animate-pulse">
-                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter flex items-center gap-3">
                 <Zap className="w-6 h-6" />
@@ -1537,7 +1558,7 @@ export const BattleField: React.FC = () => {
           >
             <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)] relative">
               <div className="absolute top-4 right-6 text-2xl font-black text-[#f27d26] animate-pulse">
-                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">CONFIRM COUNTER</h2>
               <p className="text-white/80">Your opponent is proposing damage calculation. Would you like to counter first?</p>
@@ -1556,7 +1577,7 @@ export const BattleField: React.FC = () => {
           >
             <div className="bg-zinc-900 border-2 border-[#f27d26]/50 p-8 rounded-3xl flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(242,125,38,0.3)] relative">
               <div className="absolute top-4 right-6 text-2xl font-black text-[#f27d26] animate-pulse">
-                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </div>
               <h2 className="text-3xl font-black italic text-[#f27d26] uppercase tracking-widest">CONFIRM COUNTER</h2>
               <p className="text-white/80">Opponent declined counter. Would you like to counter? (Choosing NO moves to damage calculation)</p>
@@ -1575,10 +1596,10 @@ export const BattleField: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-8"
+            className="fixed inset-0 z-[600] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-8"
           >
             {/* Background Accent for Discard */}
-            { (game.pendingQuery.title.includes('舍弃') || game.pendingQuery.title.includes('Discard')) && (
+            {(game.pendingQuery.title.includes('舍弃') || game.pendingQuery.title.includes('Discard')) && (
               <div className="absolute inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-red-600/10 blur-[120px] rounded-full" />
               </div>
@@ -1599,30 +1620,30 @@ export const BattleField: React.FC = () => {
                     {game.pendingQuery.title}
                   </h2>
                 </div>
-                
+
                 <p className="text-zinc-400 uppercase tracking-[0.4em] text-sm max-w-2xl mx-auto leading-relaxed">
                   {game.pendingQuery.description}
                 </p>
-                {game.pendingQuery.type === 'SELECT_CARD' && (
+                {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' && (
                   <div className="mt-4 px-6 py-2 bg-white/5 rounded-full border border-white/10 inline-block font-mono text-xs text-zinc-500">
                     SELECTIONS REQUIRED: {game.pendingQuery.minSelections} - {game.pendingQuery.maxSelections}
                   </div>
                 )}
-                {game.pendingQuery.type === 'SELECT_PAYMENT' && (
+                {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_PAYMENT' && (
                   <div className="mt-4 flex items-center justify-center gap-6">
                     <div className="flex items-center gap-2">
-                       <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Required:</span>
-                       <span className="text-3xl font-black text-red-500">{game.pendingQuery.paymentCost}</span>
+                      <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Required:</span>
+                      <span className="text-3xl font-black text-red-500">{game.pendingQuery.paymentCost}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                       <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Selected:</span>
-                       <span className="text-3xl font-black text-white">{(paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length}</span>
+                      <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Selected:</span>
+                      <span className="text-3xl font-black text-white">{(paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length}</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {game.pendingQuery.type === 'SELECT_CARD' ? (
+              {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-10 max-h-[55vh] overflow-y-auto p-6 custom-scrollbar w-full">
                   {game.pendingQuery.options.map((option, i) => {
                     const isSelected = selectedQueryIds.includes(option.card.gamecardId);
@@ -1652,11 +1673,11 @@ export const BattleField: React.FC = () => {
                             )}
                           >
                             <CardComponent card={option.card} disableZoom={true} />
-                            
+
                             {/* Selected Badge */}
                             <AnimatePresence>
                               {isSelected && (
-                                <motion.div 
+                                <motion.div
                                   initial={{ scale: 0, opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
                                   exit={{ scale: 0, opacity: 0 }}
@@ -1667,8 +1688,8 @@ export const BattleField: React.FC = () => {
                                     isDiscardQuery ? "bg-red-600 text-white" : "bg-[#f27d26] text-black"
                                   )}>
                                     {isDiscardQuery ? <Trash2 className="w-8 h-8" /> : <Zap className="w-8 h-8 fill-current" />}
-                                    <motion.div 
-                                      animate={{ scale: [1, 1.2, 1] }} 
+                                    <motion.div
+                                      animate={{ scale: [1, 1.2, 1] }}
                                       transition={{ repeat: Infinity, duration: 2 }}
                                       className="absolute inset-0 rounded-full border-2 border-current opacity-30"
                                     />
@@ -1677,13 +1698,22 @@ export const BattleField: React.FC = () => {
                               )}
                             </AnimatePresence>
                           </motion.div>
-                          
+
                           <div className={cn(
                             "absolute -top-3 -right-3 px-3 py-1 bg-black border rounded-lg text-[10px] font-black uppercase tracking-widest shadow-2xl z-20",
                             isDiscardQuery ? "border-red-500/50 text-red-500" : "border-white/10 text-[#f27d26]"
                           )}>
                             {option.source}
                           </div>
+
+                          {(option.isMine !== undefined || option.ownerName) && (
+                            <div className={cn(
+                              "absolute -bottom-2 -left-2 px-3 py-1 bg-zinc-900 border rounded-lg text-[9px] font-black uppercase tracking-widest shadow-2xl z-20",
+                              option.isMine ? "border-blue-500/50 text-blue-400" : "border-red-400/50 text-red-400"
+                            )}>
+                              {option.isMine ? 'YOU' : (option.ownerName || 'OPPONENT')}
+                            </div>
+                          )}
                         </div>
                         <div className="text-center">
                           <p className="text-white text-[13px] font-black uppercase tracking-tight truncate max-w-[192px]">{option.card.fullName}</p>
@@ -1753,7 +1783,7 @@ export const BattleField: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  
+
                   <p className="text-zinc-500 text-xs italic text-center px-8">
                     Note: Any remaining cost will be automatically deducted from your deck as Erosion Damage.
                   </p>
@@ -1763,10 +1793,10 @@ export const BattleField: React.FC = () => {
               <div className="flex flex-col items-center gap-6">
                 <button
                   onClick={handleQuerySubmit}
-                  disabled={game.pendingQuery.type === 'SELECT_CARD' && selectedQueryIds.length < game.pendingQuery.minSelections}
+                  disabled={game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' && selectedQueryIds.length < game.pendingQuery.minSelections}
                   className="px-16 py-5 bg-[#f27d26] text-white font-black italic uppercase tracking-[0.2em] rounded-2xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_20px_50px_rgba(242,125,38,0.3)] hover:scale-105 active:scale-95"
                 >
-                  {game.pendingQuery.type === 'SELECT_CARD' ? 'CONFIRM SELECTION' : 'CONFIRM PAYMENT'}
+                  {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? 'CONFIRM SELECTION' : 'CONFIRM PAYMENT'}
                 </button>
                 <div className="flex items-center gap-2 text-zinc-600 uppercase text-[10px] font-black tracking-widest">
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -1997,15 +2027,15 @@ export const BattleField: React.FC = () => {
                 "absolute -top-24 -right-24 w-48 h-48 blur-[80px] rounded-full opacity-20",
                 game.winnerId === myUid ? "bg-orange-500" : "bg-blue-600"
               )} />
-              
+
               <motion.div
                 initial={{ rotate: -10, scale: 0.8 }}
                 animate={{ rotate: 0, scale: 1 }}
                 transition={{ type: "spring", damping: 12 }}
                 className={cn(
                   "w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl relative z-10",
-                  game.winnerId === myUid 
-                    ? "bg-gradient-to-br from-orange-400 to-red-600 shadow-orange-500/40" 
+                  game.winnerId === myUid
+                    ? "bg-gradient-to-br from-orange-400 to-red-600 shadow-orange-500/40"
                     : "bg-gradient-to-br from-zinc-700 to-zinc-900 shadow-black/40"
                 )}
               >

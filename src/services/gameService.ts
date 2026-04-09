@@ -151,8 +151,69 @@ export const GameService = {
   },
 
 
-  checkEffectLimitsAndReqs(game: GameState | null, playerUid: string, card: Card, effect: CardEffect, triggerLocation: TriggerLocation) {
-    return true; // Simplified for UI
+  checkEffectLimitsAndReqs(gameState: GameState | null, playerUid: string, card: Card, effect: CardEffect, triggerLocation: TriggerLocation): boolean {
+    if (!gameState || !gameState.players) return true;
+    const player = gameState.players[playerUid];
+    if (!player) return false;
+
+    // 1. Trigger Location
+    if (effect.triggerLocation && triggerLocation) {
+      if (!effect.triggerLocation.includes(triggerLocation)) {
+        return false;
+      }
+    }
+
+    // 2. Limits
+    if (effect.limitCount) {
+      const usageMap = gameState.effectUsage || {};
+      let key = '';
+      if (effect.limitGlobal) {
+        if (effect.limitNameType) {
+          key = `game_${playerUid}_name_${card.id}_${effect.id}`;
+        } else {
+          key = `game_${playerUid}_instance_${card.gamecardId}_${effect.id}`;
+        }
+      } else {
+        if (effect.limitNameType) {
+          key = `turn_${gameState.turnCount}_${playerUid}_name_${card.id}_${effect.id}`;
+        } else {
+          key = `turn_${gameState.turnCount}_${playerUid}_instance_${card.gamecardId}_${effect.id}`;
+        }
+      }
+
+      const currentUsage = usageMap[key] || 0;
+      if (currentUsage >= effect.limitCount) {
+        return false;
+      }
+    }
+
+    // 3. Erosion Limits
+    if (effect.erosionFrontLimit) {
+      const frontCount = player.erosionFront.filter(c => c !== null).length;
+      if (frontCount < effect.erosionFrontLimit[0] || frontCount > effect.erosionFrontLimit[1]) return false;
+    }
+    if (effect.erosionBackLimit) {
+      const backCount = player.erosionBack.filter(c => c !== null).length;
+      if (backCount < effect.erosionBackLimit[0] || backCount > effect.erosionBackLimit[1]) return false;
+    }
+    if (effect.erosionTotalLimit) {
+      const totalCount = player.erosionFront.filter(c => c !== null).length + player.erosionBack.filter(c => c !== null).length;
+      if (totalCount < effect.erosionTotalLimit[0] || totalCount > effect.erosionTotalLimit[1]) return false;
+    }
+
+    // 4. Condition Check (Simplified for UI, only if no async needed)
+    if (effect.condition) {
+      try {
+        if (!effect.condition(gameState, player, card)) {
+          return false;
+        }
+      } catch (e) {
+        // Condition might fail if it relies on server-only properties
+        return false;
+      }
+    }
+
+    return true;
   },
 
   recordEffectUsage(game: GameState | null, playerUid: string, card: Card, effect: CardEffect) {

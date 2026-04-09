@@ -279,7 +279,9 @@ export class AtomicEffectExecutor {
 
   private static destroyCards(gameState: GameState, playerUid: string, effect: AtomicEffect, sourceCard?: Card, querySelections?: string[]) {
     const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
-    targets.forEach(card => {
+    const finalTargets = effect.targetCount ? targets.slice(0, effect.targetCount) : targets;
+    
+    finalTargets.forEach(card => {
       // Find which player owns the card
       for (const pUid of Object.keys(gameState.players)) {
         const p = gameState.players[pUid];

@@ -1,5 +1,5 @@
 import { Card, GameState, PlayerState } from '../types/game';
-
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
 const card: Card = {
   id: '10401005',
@@ -7,12 +7,14 @@ const card: Card = {
   specialName: '',
   type: 'UNIT',
   color: 'BLUE',
-  gamecardId: null,
+  gamecardId: null as any,
   colorReq: {},
-  faction: '无',
+  faction: '百濑之水城',
   acValue: 3,
   power: 3500,
+  basePower: 3500,
   damage: 1,
+  baseDamage: 1,
   godMark: false,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
@@ -20,6 +22,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: true,
   canResetCount: 0,
+  effects: [],
   imageUrl: '/pics/10401005_thumb.jpg',
   fullImageUrl: '/pics/10401005_full.jpg',
   rarity: 'C',

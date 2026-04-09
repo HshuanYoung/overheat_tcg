@@ -58,20 +58,19 @@ const card: Card = {
       limitGlobal: true,
       description: '【启动】[一局一次][战场] 侵蚀区存在4-6张卡牌时，将此卡横置，选择场上一个[非红色][非侵蚀区]且[费用<3][力量<3000]的单位破坏。',
       condition: (gameState: GameState, playerState: PlayerState, card: Card) => {
-        // Check erosion zone card total count (4-6)
-        const erosionCards = [...playerState.erosionFront, ...playerState.erosionBack].filter(c => c !== null);
-        const erosionCountInRange = erosionCards.length >= 4 && erosionCards.length <= 6;
+        // Manually check erosion count to avoid circular deps in UI
+        const erosionCount = playerState.erosionFront.filter(c => c !== null).length + 
+                             playerState.erosionBack.filter(c => c !== null).length;
+        if (erosionCount < 4 || erosionCount > 6) return false;
 
-        if (!erosionCountInRange) return false;
-
-        // Check if there is a valid target on field
-        const hasTarget = AtomicEffectExecutor.findTargets(gameState, {
-          type: 'UNIT',
-          excludeColor: 'RED',
-          maxAc: 2,
-          maxPower: 3000,
-          onField: true
-        }, card).length > 0;
+        // Manual target search to avoid AtomicEffectExecutor circular dep in frontend
+        const hasTarget = Object.values(gameState.players).some(p => {
+            return p.unitZone.some(u => {
+                if (!u) return false;
+                // [非红色] [费用<3] [力量<3000]
+                return u.color !== 'RED' && u.acValue < 3 && u.power < 3000;
+            });
+        });
 
         return hasTarget;
       },
@@ -80,19 +79,50 @@ const card: Card = {
         card.isExhausted = true;
         return true;
       },
-      atomicEffects: [
-        {
-          type: 'DESTROY_CARD',
-          targetFilter: {
-            type: 'UNIT',
-            excludeColor: 'RED',
-            maxAc: 2,
-            maxPower: 3000,
-            onField: true
-          },
-          targetCount: 1
+      execute: (instance: Card, gameState: GameState, playerState: PlayerState) => {
+        // Step 1: Find valid targets on field
+        const options: any[] = [];
+        Object.keys(gameState.players).forEach(uid => {
+          const p = gameState.players[uid];
+          const isMine = uid === playerState.uid;
+          p.unitZone.forEach(u => {
+            if (u && u.color !== 'RED' && u.acValue < 3 && u.power < 3000) {
+              options.push({ 
+                card: u, 
+                source: u.cardlocation as any,
+                isMine: isMine,
+                ownerName: p.displayName
+              });
+            }
+          });
+        });
+
+        if (options.length > 0) {
+          gameState.pendingQuery = {
+            id: Math.random().toString(36).substring(7),
+            type: 'SELECT_CARD',
+            playerUid: playerState.uid,
+            options,
+            title: '选择破坏目标',
+            description: '请选择场上一个费用<3且力量<3000的非红色单位破坏',
+            minSelections: 1,
+            maxSelections: 1,
+            callbackKey: 'EFFECT_RESOLVE',
+            context: {
+              sourceCardId: instance.gamecardId,
+              effectIndex: 1
+            }
+          };
         }
-      ]
+      },
+      resolve: (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[]) => {
+        const targetId = selections[0];
+        AtomicEffectExecutor.execute(gameState, playerState.uid, {
+          type: 'DESTROY_CARD',
+          targetFilter: { gamecardId: targetId }
+        }, instance);
+        gameState.logs.push(`[实验巨龙] 破坏效果已结算`);
+      }
     },
     {
       id: 'testdragon_effect_3',
@@ -101,14 +131,16 @@ const card: Card = {
       isMandatory: true,
       description: '【诱发】这张卡进入战场时，场上除这张卡以外的所有卡牌返回持有者手牌。',
       condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
-        // Absolute Identification Check
-        const isSelf = event?.type === 'CARD_ENTERED_ZONE' &&
-          ((event?.sourceCard === instance && !!instance.runtimeFingerprint) ||
-            (event?.sourceCard?.runtimeFingerprint && event?.sourceCard?.runtimeFingerprint === instance.runtimeFingerprint) ||
-            (event?.sourceCardId && event?.sourceCardId === instance.gamecardId && !!instance.gamecardId));
+        const isOnBattlefield = instance.cardlocation === 'UNIT' || instance.cardlocation === 'ITEM';
+        // If event is missing, it's a generic check for limits, return status
+        if (!event) return isOnBattlefield;
 
-        const isOnBattlefield = event?.data?.zone === 'UNIT' || event?.data?.zone === 'ITEM';
-        return isSelf && isOnBattlefield;
+        // Simple and robust identification for trigger
+        const isSelf = event.type === 'CARD_ENTERED_ZONE' && 
+                       (event.sourceCardId === instance.gamecardId || event.sourceCard === instance);
+        
+        const isTargetZone = event.data?.zone === 'UNIT' || event.data?.zone === 'ITEM';
+        return isSelf && isTargetZone && isOnBattlefield;
       },
       atomicEffects: [
         {

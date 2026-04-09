@@ -1,6 +1,12 @@
 import { Card, GameState, PlayerState, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
+const isNonCombat = (gameState: GameState, cardId: string) => {
+    const isAttacking = (gameState.battleState?.attackers || []).includes(cardId);
+    const isDefending = gameState.battleState?.defender === cardId;
+    return !isAttacking && !isDefending;
+};
+
 const universalEquipEffect: CardEffect = {
   id: 'equip_universal',
   type: 'ACTIVATED',
@@ -11,10 +17,17 @@ const universalEquipEffect: CardEffect = {
   condition: (gameState) => gameState.phase === 'MAIN',
   execute: (card, gameState, playerState) => {
     const currentHostId = card.equipTargetId;
-    const units = playerState.unitZone.filter(u => u && u.gamecardId !== currentHostId) as Card[];
+    const otherUnits = playerState.unitZone.filter(u => u && u.gamecardId !== currentHostId) as Card[];
     
+    // BUG FIX 4: If already equipped and no other units, skip query and just unequip
+    if (currentHostId && otherUnits.length === 0) {
+      gameState.logs.push(`${card.fullName} 解除了装备状态 (无其他可装备目标)`);
+      card.equipTargetId = undefined;
+      return;
+    }
+
     // Construct options: other units + self (if equipped)
-    const options = units.map(u => ({ card: u, source: 'UNIT' as any }));
+    const options = otherUnits.map(u => ({ card: u, source: 'UNIT' as any }));
     if (currentHostId) {
       options.push({ card: card, source: 'ITEM' as any });
     }
@@ -61,8 +74,11 @@ const handActivationEffect: CardEffect = {
   description: '【起】：我方场上存在2个或以上蓝色单位。支付2费用，在手牌中发动：选择我方2个非神蚀单位（不能是战斗中的单位）返回持有者手牌。之后，将这张卡放置在战场上，并选择我方场上一个单位装备。',
   triggerLocation: ['HAND'],
   condition: (gameState, playerState) => {
-    const blueUnitsCount = playerState.unitZone.filter(u => u && u.color === 'BLUE').length;
-    return blueUnitsCount >= 2;
+    // BUG FIX 1 & 2: Only trigger if there are 2+ non-combat blue units
+    const eligibleBlueUnits = playerState.unitZone.filter(u => 
+        u && u.color === 'BLUE' && isNonCombat(gameState, u.gamecardId)
+    );
+    return eligibleBlueUnits.length >= 2;
   },
   execute: (card, gameState, playerState) => {
     const queryId = Math.random().toString(36).substring(7);
@@ -86,15 +102,21 @@ const handActivationEffect: CardEffect = {
     };
   },
   resolve: (card, gameState, playerState, selections, context) => {
-    // Note: handleQueryChoice in ServerGameService handles SELECT_PAYMENT special case
-    // and resumes the 'remainingEffects' if using structured effects. 
-    // However, when using 'resolve', SELECT_PAYMENT choice is passed back here.
-
+    gameState.logs.push(`[脚本] 30401001 resolve 开始, step: ${context.step}`);
+    
     if (context.step === 1) {
       // Step 1: After payment, select 2 units to return to hand
-      const targets = playerState.unitZone.filter(u => u && !u.godMark && 
-          !(gameState.battleState?.attackers || []).includes(u.gamecardId) && 
-          gameState.battleState?.defender !== u.gamecardId) as Card[];
+      gameState.logs.push(`[脚本] Step 1: 正在选择返回手牌的目标`);
+      const targets = playerState.unitZone.filter(u => 
+          u && !u.godMark && isNonCombat(gameState, u.gamecardId)
+      ) as Card[];
+      
+      gameState.logs.push(`[脚本] 符合条件的目标数量: ${targets.length}`);
+      
+      if (targets.length < 2) {
+        gameState.logs.push(`[错误] 符合条件的非神蚀非战斗单位不足2个`);
+        return;
+      }
       
       gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
@@ -108,7 +130,9 @@ const handActivationEffect: CardEffect = {
           callbackKey: 'EFFECT_RESOLVE',
           context: { ...context, step: 2 }
       };
+      gameState.logs.push(`[脚本] Step 1 完成, 已发送选择卡牌请求`);
     } else if (context.step === 2) {
+      gameState.logs.push(`[脚本] Step 2: 正在处理单位返回并移动装备`);
       // Step 2: Return units to hand, move self to field, then select equip target
       for (const id of selections) {
           const targetCard = playerState.unitZone.find(c => c?.gamecardId === id);
@@ -156,6 +180,7 @@ const handActivationEffect: CardEffect = {
     }
   }
 };
+
 
 // Continuous Effect helper
 const applyContinuousBonus = (gameState: GameState, card: Card) => {

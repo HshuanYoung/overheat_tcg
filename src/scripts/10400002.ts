@@ -18,7 +18,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,
-  canAttack: false,
+  canAttack: true,
   feijingMark: false,
   canResetCount: 0,
   effects: [

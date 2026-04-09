@@ -228,16 +228,16 @@ const PlayerHalf: React.FC<{
               </div>
               <div className="flex-1 h-24 flex items-center justify-center gap-1 overflow-x-auto px-4 bg-black/20 rounded-xl border border-white/5 custom-scrollbar">
                 {player.hand?.map((card, i) => (
-                  <div 
-                    key={i} 
+                  <div
+                    key={i}
                     className={cn(
                       "w-12 aspect-[3/4] -ml-8 first:ml-0 shadow-lg drop-shadow-md transition-all",
-                      player.isHandPublic !== 0 ? "cursor-pointer hover:scale-110 hover:-translate-y-2 z-10" : "",
+                      !!player.isHandPublic ? "cursor-pointer hover:scale-110 hover:-translate-y-2 z-10" : "",
                       isOpponent && "rotate-180"
                     )}
-                    onClick={() => player.isHandPublic !== 0 && onPreviewCard?.(card)}
+                    onClick={() => !!player.isHandPublic && onPreviewCard?.(card)}
                   >
-                    {player.isHandPublic !== 0 ? (
+                    {!!player.isHandPublic ? (
                       <CardComponent card={card} disableZoom />
                     ) : (
                       <CardComponent isBack />
@@ -500,7 +500,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
             <div className="flex flex-col">
               <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">{game.phase} Timeout</span>
               <span className="text-xl font-black tabular-nums text-red-500 leading-none">
-                {Math.max(0, Math.ceil((30000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
+                {Math.max(0, Math.ceil((3000 - (Date.now() - (game.phaseTimerStart || Date.now()))) / 1000))}s
               </span>
             </div>
           </div>

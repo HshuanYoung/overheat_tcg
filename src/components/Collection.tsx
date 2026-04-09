@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Search, Loader2, Filter, Layout, CreditCard, Image as ImageIcon, Copy, Trash2, Plus, Check, Save } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, Filter, Layout, CreditCard, Image as ImageIcon, Copy, Trash2, Plus, Check, Save, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { CARD_LIBRARY } from '../data/cards';
@@ -39,8 +39,10 @@ export const Collection: React.FC = () => {
   const [activeTab, setActiveTab] = useState<CollectionTab>(initialTab);
   const [collection, setCollection] = useState<Record<string, number>>({});
   const [decks, setDecks] = useState<Deck[]>([]);
-  const [profile, setProfile] = useState<{ favoriteCardId: string; favoriteBackId: string } | null>(null);
+  const [profile, setProfile] = useState<{ favoriteCardId: string; favoriteBackId: string; coins: number; cardCrystals: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   
   // Card Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,29 +55,104 @@ export const Collection: React.FC = () => {
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
   const token = localStorage.getItem('token');
 
+  const CRYSTAL_VALUES: Record<string, { decompose: number, produce: number }> = {
+    C: { decompose: 1, produce: 5 },
+    U: { decompose: 1, produce: 5 },
+    R: { decompose: 5, produce: 20 },
+    SR: { decompose: 20, produce: 80 },
+    UR: { decompose: 100, produce: 400 },
+    SER: { decompose: 400, produce: 1600 },
+    PR: { decompose: 100, produce: 400 },
+  };
+
+  const fetchData = async () => {
+    try {
+      const [collRes, deckRes, profRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/user/collection`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${BACKEND_URL}/api/user/decks`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${BACKEND_URL}/api/user/profile`, { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+
+      const collData = await collRes.json();
+      const deckData = await deckRes.json();
+      const profData = await profRes.json();
+
+      setCollection(collData.collection || {});
+      setDecks(deckData.decks || []);
+      setProfile({ 
+        favoriteCardId: profData.favoriteCardId, 
+        favoriteBackId: profData.favoriteBackId,
+        coins: profData.coins,
+        cardCrystals: profData.cardCrystals
+      });
+    } catch (e) {
+      console.error('Failed to fetch collection data:', e);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [collRes, deckRes, profRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/api/user/collection`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${BACKEND_URL}/api/user/decks`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${BACKEND_URL}/api/user/profile`, { headers: { Authorization: `Bearer ${token}` } })
-        ]);
-
-        const collData = await collRes.json();
-        const deckData = await deckRes.json();
-        const profData = await profRes.json();
-
-        setCollection(collData.collection || {});
-        setDecks(deckData.decks || []);
-        setProfile({ favoriteCardId: profData.favoriteCardId, favoriteBackId: profData.favoriteBackId });
-      } catch (e) {
-        console.error('Failed to fetch collection data:', e);
-      }
-      setLoading(false);
-    };
     fetchData();
   }, [BACKEND_URL, token]);
+
+  const handleDecompose = async (cardId: string) => {
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/user/decompose`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ cardId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfile({ ...profile, cardCrystals: data.newCardCrystals });
+        setCollection(prev => {
+          const next = { ...prev };
+          if (next[cardId] > 1) next[cardId]--;
+          else delete next[cardId];
+          return next;
+        });
+      } else {
+        alert(data.error || '分解失败');
+      }
+    } catch (e) { console.error(e); }
+    setActionLoading(false);
+  };
+
+  const handleCraft = async (cardId: string) => {
+    if (!profile) return;
+    const card = CARD_LIBRARY.find(c => c.uniqueId === cardId || c.id === cardId);
+    if (!card) return;
+    const cost = CRYSTAL_VALUES[card.rarity]?.produce || 0;
+    if (profile.cardCrystals < cost) { alert('卡晶不足'); return; }
+
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/user/craft`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ cardId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfile({ ...profile, cardCrystals: data.newCardCrystals });
+        setCollection(prev => ({
+          ...prev,
+          [cardId]: (prev[cardId] || 0) + 1
+        }));
+      } else {
+        alert(data.error || '制作失败');
+      }
+    } catch (e) { console.error(e); }
+    setActionLoading(false);
+  };
 
   const handleUpdateProfile = async (updates: Partial<{ favoriteCardId: string; favoriteBackId: string }>) => {
     try {
@@ -144,8 +221,13 @@ export const Collection: React.FC = () => {
              </div>
              <div className="w-px h-8 bg-white/10" />
              <div className="px-4 py-2 text-center">
-               <p className="text-[10px] text-zinc-500 uppercase font-bold">总收藏张数</p>
-               <p className="text-xl font-black italic">{Object.values(collection).reduce((a, b) => a + b, 0)}</p>
+               <p className="text-[10px] text-zinc-500 uppercase font-bold">金币</p>
+               <p className="text-xl font-black italic text-amber-400">{(profile?.coins || 0).toLocaleString()}</p>
+             </div>
+             <div className="w-px h-8 bg-white/10" />
+             <div className="px-4 py-2 text-center">
+               <p className="text-[10px] text-zinc-500 uppercase font-bold">卡晶</p>
+               <p className="text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
              </div>
           </div>
         </div>
@@ -243,12 +325,13 @@ export const Collection: React.FC = () => {
                       layout
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className={cn("relative group transition-all duration-300", !isOwned && "opacity-40 grayscale-[0.8] hover:grayscale-0 hover:opacity-80")}
+                      onClick={() => setSelectedCard(card)}
+                      className={cn("relative group transition-all duration-300 cursor-pointer", !isOwned && "opacity-40 grayscale-[0.8] hover:grayscale-0 hover:opacity-80")}
                     >
                       <CardComponent card={card} displayMode="deck" />
                       <div className="absolute -top-2 -right-2 z-10">
                         <div className={cn(
-                          "px-2.5 py-1 rounded-lg border font-black italic text-xs shadow-xl",
+                          "px-2.5 py-1 rounded-lg border font-black italic text-xs shadow-xl min-w-[30px] text-center",
                           isOwned ? "bg-red-600 border-red-400 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-500"
                         )}>
                           x{qty}
@@ -330,6 +413,119 @@ export const Collection: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Synthesis Modal */}
+        <AnimatePresence>
+          {selectedCard && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+              onClick={() => setSelectedCard(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-zinc-900 border border-white/10 rounded-[3rem] p-10 max-w-4xl w-full flex flex-col md:flex-row gap-12 relative overflow-hidden shadow-2xl"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Large Card Image */}
+                <div className="w-full md:w-1/2 flex items-center justify-center">
+                  <div className="relative group w-full max-w-[320px]">
+                    <div className={cn(
+                      "absolute -inset-4 rounded-[2rem] blur-2xl opacity-20",
+                      selectedCard.rarity === 'UR' || selectedCard.rarity === 'SER' ? 'bg-amber-500' : 'bg-red-600'
+                    )} />
+                    <img 
+                      src={selectedCard.imageUrl} 
+                      alt={selectedCard.fullName} 
+                      className="relative w-full rounded-[1.5rem] shadow-2xl border-4 border-white/10"
+                    />
+                    <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12">
+                      x{collection[selectedCard.uniqueId] || 0}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Synthesis Console */}
+                <div className="w-full md:w-1/2 flex flex-col justify-center">
+                  <div className="mb-4">
+                    <span className={cn("px-4 py-1.5 rounded-full text-xs font-black italic border", RARITY_BADGE[selectedCard.rarity])}>
+                       {selectedCard.rarity} RARITY
+                    </span>
+                  </div>
+                  <h2 className="text-4xl font-black italic mb-2 tracking-tighter uppercase">{selectedCard.fullName}</h2>
+                  <p className="text-zinc-500 font-bold mb-8 uppercase tracking-widest text-sm">{selectedCard.specialName || '---'}</p>
+
+                  <div className="space-y-6">
+                    {/* Decompose */}
+                    <div className="p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
+                      <div>
+                        <p className="text-xs font-black text-zinc-500 uppercase italic mb-1">DECOMPOSE 分解</p>
+                        <div className="flex items-center gap-2">
+                          <Trash2 className="w-5 h-5 text-red-500" />
+                          <span className="text-2xl font-black italic text-cyan-400">+{CRYSTAL_VALUES[selectedCard.rarity]?.decompose || 0}</span>
+                          <Sparkles className="w-4 h-4 text-cyan-400" />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDecompose(selectedCard.uniqueId)}
+                        disabled={actionLoading || (collection[selectedCard.uniqueId] || 0) <= 0}
+                        className={cn(
+                          "px-8 py-3 rounded-2xl font-black italic text-sm transition-all uppercase",
+                          (collection[selectedCard.uniqueId] || 0) > 0 
+                            ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20" 
+                            : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                        )}
+                      >
+                        {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '分解'}
+                      </button>
+                    </div>
+
+                    {/* Craft */}
+                    <div className="p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
+                      <div>
+                        <p className="text-xs font-black text-zinc-500 uppercase italic mb-1">CRAFT 制作</p>
+                        <div className="flex items-center gap-2">
+                          <Plus className="w-5 h-5 text-green-500" />
+                          <span className="text-2xl font-black italic text-red-500">-{CRYSTAL_VALUES[selectedCard.rarity]?.produce || 0}</span>
+                          <Sparkles className="w-4 h-4 text-cyan-400" />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleCraft(selectedCard.uniqueId)}
+                        disabled={actionLoading || (profile?.cardCrystals || 0) < (CRYSTAL_VALUES[selectedCard.rarity]?.produce || 0)}
+                        className={cn(
+                          "px-8 py-3 rounded-2xl font-black italic text-sm transition-all uppercase font-black",
+                          (profile?.cardCrystals || 0) >= (CRYSTAL_VALUES[selectedCard.rarity]?.produce || 0)
+                            ? "bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/20"
+                            : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                        )}
+                      >
+                        {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '制作'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between">
+                     <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-cyan-400" />
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase">Current Crystals</p>
+                          <p className="text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setSelectedCard(null)} className="text-zinc-500 hover:text-white font-black italic text-sm uppercase transition-colors">
+                        CLOSE
+                     </button>
+                  </div>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>

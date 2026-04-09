@@ -1,7 +1,7 @@
 import { getAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X } from 'lucide-react';
+import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X, Sparkles } from 'lucide-react';
 import { CARD_LIBRARY } from '../data/cards';
 import { Card as CardType, Deck } from '../types/game';
 import { CardComponent } from './Card';
@@ -19,6 +19,8 @@ export const DeckBuilder: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [collection, setCollection] = useState<Record<string, number>>({});
+  const [cardCrystals, setCardCrystals] = useState(0);
+  const [actionLoading, setActionLoading] = useState(false);
   const [filters, setFilters] = useState({
     ac: '',
     damage: '',
@@ -29,9 +31,20 @@ export const DeckBuilder: React.FC = () => {
     ownership: 'ALL' // ALL, OWNED, NOT_OWNED
   });
 
+  const CRYSTAL_VALUES: Record<string, { decompose: number, produce: number }> = {
+    C: { decompose: 1, produce: 5 },
+    U: { decompose: 1, produce: 5 },
+    R: { decompose: 5, produce: 20 },
+    SR: { decompose: 20, produce: 80 },
+    UR: { decompose: 100, produce: 400 },
+    SER: { decompose: 400, produce: 1600 },
+    PR: { decompose: 100, produce: 400 },
+  };
+
   useEffect(() => {
     loadDecks();
     loadCollection();
+    loadProfile();
   }, []);
 
   const loadCollection = async () => {
@@ -45,6 +58,78 @@ export const DeckBuilder: React.FC = () => {
     } catch (e) {
       console.error('Failed to load collection:', e);
     }
+  };
+
+  const loadProfile = async () => {
+    if (!getAuthUser()) return;
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      setCardCrystals(data.cardCrystals || 0);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDecompose = async (cardId: string) => {
+    setActionLoading(true);
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/user/decompose`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ cardId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCardCrystals(data.newCardCrystals);
+        setCollection(prev => {
+          const next = { ...prev };
+          if (next[cardId] > 1) next[cardId]--;
+          else delete next[cardId];
+          return next;
+        });
+      } else {
+        alert(data.error || '分解失败');
+      }
+    } catch (e) { console.error(e); }
+    setActionLoading(false);
+  };
+
+  const handleCraft = async (cardId: string) => {
+    const card = CARD_LIBRARY.find(c => c.uniqueId === cardId || c.id === cardId);
+    if (!card) return;
+    const cost = CRYSTAL_VALUES[card.rarity]?.produce || 0;
+    if (cardCrystals < cost) { alert('卡晶不足'); return; }
+
+    setActionLoading(true);
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/user/craft`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ cardId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCardCrystals(data.newCardCrystals);
+        setCollection(prev => ({
+          ...prev,
+          [cardId]: (prev[cardId] || 0) + 1
+        }));
+      } else {
+        alert(data.error || '制作失败');
+      }
+    } catch (e) { console.error(e); }
+    setActionLoading(false);
   };
 
   const loadDecks = async () => {
@@ -494,7 +579,7 @@ export const DeckBuilder: React.FC = () => {
         </div>
       </div>
 
-      {/* Zoom Modal */}
+      {/* Zoom Modal (Synthesis Console) */}
       <AnimatePresence>
         {zoomedCard && (
           <motion.div 
@@ -502,27 +587,106 @@ export const DeckBuilder: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setZoomedCard(null)}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-12 cursor-zoom-out"
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 cursor-default"
           >
             <motion.div 
-              initial={{ scale: 0.8, y: 20 }}
+              initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.8, y: 20 }}
-              className="max-w-md w-full aspect-[3/4] rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl relative"
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-6 md:p-10 max-w-4xl w-full flex flex-col md:flex-row gap-8 md:gap-12 relative overflow-hidden shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              <img 
-                src={getCardImageUrl(zoomedCard.id, zoomedCard.rarity, false)} 
-                alt={zoomedCard.fullName}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <button 
-                onClick={() => setZoomedCard(null)}
-                className="absolute top-4 right-4 p-2 bg-black/60 hover:bg-black/80 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              {/* Large Card Image */}
+              <div className="w-full md:w-1/2 flex items-center justify-center">
+                <div className="relative group w-full max-w-[280px] md:max-w-[320px]">
+                  <div className={cn(
+                    "absolute -inset-4 rounded-[2rem] blur-2xl opacity-20",
+                    zoomedCard.rarity === 'UR' || zoomedCard.rarity === 'SER' ? 'bg-amber-500' : 'bg-red-600'
+                  )} />
+                  <img 
+                    src={getCardImageUrl(zoomedCard.id, zoomedCard.rarity, false)} 
+                    alt={zoomedCard.fullName} 
+                    className="relative w-full rounded-[1.5rem] shadow-2xl border-4 border-white/10"
+                  />
+                  <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12">
+                    x{collection[zoomedCard.uniqueId] || 0}
+                  </div>
+                </div>
+              </div>
+
+              {/* Console */}
+              <div className="w-full md:w-1/2 flex flex-col justify-center">
+                <div className="mb-4">
+                  <span className="px-4 py-1.5 rounded-full text-xs font-black italic border bg-zinc-800 border-zinc-700 text-zinc-300">
+                     {zoomedCard.rarity} RARITY
+                  </span>
+                </div>
+                <h2 className="text-3xl md:text-4xl font-black italic mb-2 tracking-tighter uppercase">{zoomedCard.fullName}</h2>
+                <p className="text-zinc-500 font-bold mb-6 md:mb-8 uppercase tracking-widest text-sm">{zoomedCard.specialName || '---'}</p>
+
+                <div className="space-y-4 md:space-y-6">
+                  {/* Decompose */}
+                  <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
+                    <div>
+                      <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">DECOMPOSE 分解</p>
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="w-5 h-5 text-red-500" />
+                        <span className="text-xl md:text-2xl font-black italic text-cyan-400">+{CRYSTAL_VALUES[zoomedCard.rarity]?.decompose || 0}</span>
+                        <X className="w-4 h-4 text-cyan-400" />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDecompose(zoomedCard.uniqueId)}
+                      disabled={actionLoading || (collection[zoomedCard.uniqueId] || 0) <= 0}
+                      className={cn(
+                        "px-6 md:px-8 py-2 md:py-3 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase",
+                        (collection[zoomedCard.uniqueId] || 0) > 0 
+                          ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20" 
+                          : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                      )}
+                    >
+                      {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '分解'}
+                    </button>
+                  </div>
+
+                  {/* Craft */}
+                  <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
+                    <div>
+                      <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">CRAFT 制作</p>
+                      <div className="flex items-center gap-2">
+                        <Plus className="w-5 h-5 text-green-500" />
+                        <span className="text-xl md:text-2xl font-black italic text-red-500">-{CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0}</span>
+                        <X className="w-4 h-4 text-cyan-400" />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleCraft(zoomedCard.uniqueId)}
+                      disabled={actionLoading || cardCrystals < (CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0)}
+                      className={cn(
+                        "px-6 md:px-8 py-2 md:py-3 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase",
+                        cardCrystals >= (CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0)
+                          ? "bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/20"
+                          : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                      )}
+                    >
+                      {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '制作'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-white/5 flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                      <Plus className="w-5 h-5 text-cyan-400" />
+                      <div>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase">Current Crystals</p>
+                        <p className="text-lg md:text-xl font-black italic text-cyan-400">{(cardCrystals || 0).toLocaleString()}</p>
+                      </div>
+                   </div>
+                   <button onClick={() => setZoomedCard(null)} className="text-zinc-500 hover:text-white font-black italic text-sm uppercase transition-colors">
+                      CLOSE
+                   </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

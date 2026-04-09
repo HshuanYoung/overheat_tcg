@@ -27,8 +27,9 @@ const RARITY_TEXT: Record<string, string> = {
 export const Store: React.FC = () => {
   const navigate = useNavigate();
   const [coins, setCoins] = useState(0);
+  const [cardCrystals, setCardCrystals] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState(false);
+  const [buying, setBuying] = useState<string | null>(null);
   const [drawnCards, setDrawnCards] = useState<{ id: string; rarity: string }[]>([]);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showResult, setShowResult] = useState(false);
@@ -38,20 +39,23 @@ export const Store: React.FC = () => {
   const token = localStorage.getItem('token');
 
   useEffect(() => {
-    const loadCoins = async () => {
+    const loadProfile = async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
         setCoins(data.coins || 0);
+        setCardCrystals(data.cardCrystals || 0);
       } catch (e) { console.error(e); }
       setLoading(false);
     };
-    loadCoins();
+    loadProfile();
   }, []);
 
-  const handleBuyPack = async () => {
-    if (coins < 10) { alert('金币不足！'); return; }
-    setBuying(true);
+  const handleBuyPack = async (packType: 'basic' | 'prize') => {
+    const cost = packType === 'prize' ? 20 : 10;
+    if (coins < cost) { alert('金币不足！'); return; }
+    
+    setBuying(packType);
     setDrawnCards([]);
     setRevealedCount(0);
     setShowResult(false);
@@ -59,14 +63,23 @@ export const Store: React.FC = () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/store/buy-pack`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ packType }),
       });
       const data = await res.json();
-      if (data.error) { alert(data.error); setBuying(false); return; }
+      if (data.error) { alert(data.error); setBuying(null); return; }
 
       setCoins(data.newCoins);
+      setCardCrystals(data.newCardCrystals);
       setDrawnCards(data.cards);
-      setPityInfo({ packsSinceSR: data.packsSinceSR, packsSinceUR: data.packsSinceUR, totalPacks: data.totalPacks });
+      setPityInfo({ 
+        packsSinceSR: data.packsSinceSR, 
+        packsSinceUR: data.packsSinceUR, 
+        totalPacks: data.totalPacks 
+      });
       setShowResult(true);
 
       // Reveal cards one by one
@@ -78,7 +91,7 @@ export const Store: React.FC = () => {
       console.error(e);
       alert('购买失败');
     } finally {
-      setBuying(false);
+      setBuying(null);
     }
   };
 
@@ -102,49 +115,93 @@ export const Store: React.FC = () => {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-3xl font-black italic tracking-tighter">卡牌商店</h1>
+              <h1 className="text-3xl font-black italic tracking-tighter uppercase">Card Store</h1>
               <p className="text-zinc-500 text-sm">购买卡包，扩充你的收藏</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-amber-900/30 to-amber-800/10 border border-amber-500/30 rounded-full px-6 py-2">
-            <Coins className="w-5 h-5 text-amber-400" />
-            <span className="text-amber-300 font-black text-lg">{coins.toLocaleString()}</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-gradient-to-r from-amber-900/30 to-amber-800/10 border border-amber-500/30 rounded-full px-5 py-2">
+              <Coins className="w-5 h-5 text-amber-400" />
+              <span className="text-amber-300 font-bold text-lg">{coins.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-gradient-to-r from-cyan-900/30 to-cyan-800/10 border border-cyan-500/30 rounded-full px-5 py-2">
+              <Sparkles className="w-5 h-5 text-cyan-400" />
+              <span className="text-cyan-300 font-bold text-lg">{cardCrystals.toLocaleString()}</span>
+            </div>
           </div>
         </div>
 
-        {/* Pack Purchase */}
-        <div className="flex flex-col items-center gap-8 mb-12">
-          <motion.div
-            whileHover={{ scale: 1.03, rotateY: 5 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={handleBuyPack}
-            className={cn(
-              "relative w-64 h-80 rounded-2xl border-2 cursor-pointer overflow-hidden transition-all group",
-              buying ? "opacity-50 pointer-events-none" : "border-red-600/50 hover:border-red-500 hover:shadow-[0_0_40px_rgba(220,38,38,0.3)]"
-            )}
-          >
-            <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 via-black to-red-950/30" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10">
-              <ShoppingBag className="w-16 h-16 text-red-500 group-hover:scale-110 transition-transform" />
-              <div className="text-center">
-                <p className="text-2xl font-black italic tracking-tighter">神蚀卡包</p>
-                <p className="text-zinc-400 text-xs mt-1">5张卡牌 · 保底R以上</p>
+        {/* Pack Purchase Options */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12 max-w-4xl mx-auto">
+          {/* Basic Pack */}
+          <div className="flex flex-col items-center gap-6">
+            <motion.div
+              whileHover={{ scale: 1.05, rotateY: 5 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => handleBuyPack('basic')}
+              className={cn(
+                "relative w-64 h-80 rounded-2xl border-2 cursor-pointer overflow-hidden transition-all group",
+                buying ? "opacity-50 pointer-events-none" : "border-red-600/50 hover:border-red-500 hover:shadow-[0_0_40px_rgba(220,38,38,0.3)]"
+              )}
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 via-black to-red-950/30" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10">
+                <ShoppingBag className="w-16 h-16 text-red-500 group-hover:scale-110 transition-transform" />
+                <div className="text-center">
+                  <p className="text-2xl font-black italic tracking-tighter">基础包</p>
+                  <p className="text-zinc-400 text-xs mt-1 font-bold uppercase tracking-wider">Basic Pack</p>
+                </div>
+                <div className="flex items-center gap-1 bg-black/60 rounded-full px-4 py-1.5 border border-amber-500/30">
+                  <Coins className="w-4 h-4 text-amber-400" />
+                  <span className="text-amber-300 font-bold">10</span>
+                </div>
+                <p className="text-[10px] text-zinc-500 font-bold">5张卡牌 · 保底R以上</p>
               </div>
-              <div className="flex items-center gap-1 bg-black/60 rounded-full px-4 py-1.5 border border-amber-500/30">
-                <Coins className="w-4 h-4 text-amber-400" />
-                <span className="text-amber-300 font-bold">10</span>
-              </div>
+              {buying === 'basic' && (
+                <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/60">
+                  <Loader2 className="w-10 h-10 animate-spin text-red-500" />
+                </div>
+              )}
+            </motion.div>
+            <div className="text-[10px] text-zinc-600 text-center space-y-1 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800 w-full">
+              <p>保底: 10包SR / 50包UR/SER</p>
+              <p>SR保底还差: <span className="text-purple-400 font-bold">{10 - pityInfo.packsSinceSR}</span> · UR保底还差: <span className="text-amber-400 font-bold">{50 - pityInfo.packsSinceUR}</span></p>
             </div>
-            {buying && (
-              <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/60">
-                <Loader2 className="w-10 h-10 animate-spin text-red-500" />
-              </div>
-            )}
-          </motion.div>
+          </div>
 
-          <div className="text-xs text-zinc-600 text-center space-y-1">
-            <p>每包保底1张R及以上 · 10包保底SR及以上 · 50包保底UR/SER</p>
-            <p>距离SR保底: <span className="text-purple-400">{10 - pityInfo.packsSinceSR}</span>包 · 距离UR保底: <span className="text-amber-400">{50 - pityInfo.packsSinceUR}</span>包</p>
+          {/* Prize Pack */}
+          <div className="flex flex-col items-center gap-6">
+            <motion.div
+              whileHover={{ scale: 1.05, rotateY: -5 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => handleBuyPack('prize')}
+              className={cn(
+                "relative w-64 h-80 rounded-2xl border-2 cursor-pointer overflow-hidden transition-all group",
+                buying ? "opacity-50 pointer-events-none" : "border-rose-600/50 hover:border-rose-500 hover:shadow-[0_0_40px_rgba(244,63,94,0.3)]"
+              )}
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-rose-900/40 via-black to-rose-950/30" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10">
+                <Sparkles className="w-16 h-16 text-rose-500 group-hover:scale-110 transition-transform" />
+                <div className="text-center">
+                  <p className="text-2xl font-black italic tracking-tighter">奖品包</p>
+                  <p className="text-zinc-400 text-xs mt-1 font-bold uppercase tracking-wider">Prize Pack</p>
+                </div>
+                <div className="flex items-center gap-1 bg-black/60 rounded-full px-4 py-1.5 border border-amber-500/30">
+                  <Coins className="w-4 h-4 text-amber-400" />
+                  <span className="text-amber-300 font-bold">20</span>
+                </div>
+                <p className="text-[10px] text-zinc-500 font-bold">1张卡牌 · 必得PR稀有度</p>
+              </div>
+              {buying === 'prize' && (
+                <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/60">
+                  <Loader2 className="w-10 h-10 animate-spin text-rose-500" />
+                </div>
+              )}
+            </motion.div>
+            <div className="text-[10px] text-zinc-600 text-center flex items-center justify-center bg-zinc-900/50 p-3 rounded-lg border border-zinc-800 w-full h-[54px]">
+              <p>专为收集者准备的顶级奖励卡包</p>
+            </div>
           </div>
         </div>
 
@@ -160,7 +217,10 @@ export const Store: React.FC = () => {
               <h2 className="text-center text-sm font-bold text-zinc-500 uppercase tracking-widest mb-6">
                 <Sparkles className="inline w-4 h-4 mr-2" />开包结果
               </h2>
-              <div className="grid grid-cols-5 gap-4 max-w-3xl mx-auto">
+              <div className={cn(
+                "grid gap-4 mx-auto",
+                drawnCards.length === 1 ? "grid-cols-1 max-w-[200px]" : "grid-cols-5 max-w-3xl"
+              )}>
                 {drawnCards.map((drawn, i) => {
                   const card = getCardInfo(drawn.id);
                   const isRevealed = i < revealedCount;
@@ -194,12 +254,12 @@ export const Store: React.FC = () => {
                   );
                 })}
               </div>
-              <div className="text-center mt-6">
+              <div className="text-center mt-8">
                 <button
                   onClick={() => setShowResult(false)}
-                  className="px-6 py-2 bg-zinc-900 hover:bg-zinc-800 rounded-lg text-sm font-bold transition-colors"
+                  className="px-12 py-3 bg-red-600 hover:bg-red-500 rounded-full text-sm font-black italic tracking-tighter uppercase transition-all hover:scale-110 active:scale-95 shadow-lg shadow-red-900/20"
                 >
-                  确认
+                  继续 Confirm
                 </button>
               </div>
             </motion.div>

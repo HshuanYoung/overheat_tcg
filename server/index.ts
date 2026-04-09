@@ -505,11 +505,12 @@ app.get('/api/user/profile', async (req, res): Promise<void> => {
     if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
 
     try {
-        const rows = await pool.query('SELECT favorite_card_id, favorite_back_id, coins FROM users WHERE id = ?', [user.userId]);
+        const rows = await pool.query('SELECT favorite_card_id, favorite_back_id, coins, card_crystals FROM users WHERE id = ?', [user.userId]);
         res.json({ 
             favoriteCardId: rows.length > 0 ? rows[0].favorite_card_id : null, 
             favoriteBackId: rows.length > 0 ? rows[0].favorite_back_id : 'default',
-            coins: rows.length > 0 ? Number(rows[0].coins) : 0 
+            coins: rows.length > 0 ? Number(rows[0].coins) : 0,
+            cardCrystals: rows.length > 0 ? Number(rows[0].card_crystals) : 0
         });
     } catch (err) {
         res.status(500).json({ error: 'DB Error' });
@@ -698,6 +699,16 @@ const CARD_RARITIES: Record<string, string> = {
     '30401001': 'R', '99999999': 'UR',
 };
 
+const CRYSTAL_VALUES: Record<string, { decompose: number, produce: number }> = {
+    C: { decompose: 1, produce: 5 },
+    U: { decompose: 1, produce: 5 },
+    R: { decompose: 5, produce: 20 },
+    SR: { decompose: 20, produce: 80 },
+    UR: { decompose: 100, produce: 400 },
+    SER: { decompose: 400, produce: 1600 },
+    PR: { decompose: 100, produce: 400 },
+};
+
 function pickRandom<T>(arr: T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -708,6 +719,10 @@ app.post('/api/store/buy-pack', async (req, res): Promise<void> => {
     const user = verifyToken(authHeader.split(' ')[1]);
     if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
 
+    const { packType } = req.body; // 'basic' or 'prize'
+    const isPrizePack = packType === 'prize';
+    const cost = isPrizePack ? 20 : 10;
+
     let conn;
     try {
         conn = await pool.getConnection();
@@ -716,68 +731,83 @@ app.post('/api/store/buy-pack', async (req, res): Promise<void> => {
         // Check coins
         const userRows = await conn.query('SELECT coins FROM users WHERE id = ?', [user.userId]);
         const coins = Number(userRows[0].coins);
-        if (coins < 10) {
+        if (coins < cost) {
             await conn.rollback();
             res.status(400).json({ error: '金币不足' });
             return;
         }
 
-        // Get pity counters
-        let pityRows = await conn.query('SELECT * FROM pack_history WHERE user_id = ?', [user.userId]);
-        if (pityRows.length === 0) {
-            await conn.query('INSERT INTO pack_history (user_id, total_packs, packs_since_sr, packs_since_ur) VALUES (?, 0, 0, 0)', [user.userId]);
-            pityRows = [{ total_packs: 0, packs_since_sr: 0, packs_since_ur: 0 }];
-        }
-        let packsSinceSR = Number(pityRows[0].packs_since_sr) + 1;
-        let packsSinceUR = Number(pityRows[0].packs_since_ur) + 1;
-        const totalPacks = Number(pityRows[0].total_packs) + 1;
-
-        // Build rarity pools using the dynamic library
+        // Build pools
         const allCards = Object.values(SERVER_CARD_LIBRARY).filter(c => !c.uniqueId.includes(':legacy'));
-        
-        const cuPool = allCards.filter(c => c.rarity === 'C' || c.rarity === 'U');
-        const rPool = allCards.filter(c => c.rarity === 'R');
-        const srPool = allCards.filter(c => c.rarity === 'SR');
-        const urPool = allCards.filter(c => c.rarity === 'UR' || c.rarity === 'SER');
-        const prPool = allCards.filter(c => c.rarity === 'PR');
-
-        // Pick 4 C/U cards
         const drawnCards: Card[] = [];
-        for (let i = 0; i < 4; i++) {
-            drawnCards.push(pickRandom(cuPool));
-        }
 
-        // Pick 1 R+ card with pity
-        let guaranteedCard: Card;
-        if (packsSinceUR >= 50 && urPool.length > 0) {
-            guaranteedCard = pickRandom(urPool);
-        } else if (packsSinceSR >= 10 && srPool.length > 0) {
-            guaranteedCard = pickRandom(srPool);
-            packsSinceSR = 0;
+        if (isPrizePack) {
+            const prPool = allCards.filter(c => c.rarity === 'PR');
+            if (prPool.length === 0) {
+                await conn.rollback();
+                res.status(400).json({ error: '奖品包暂无可抽卡牌' });
+                return;
+            }
+            drawnCards.push(pickRandom(prPool));
         } else {
-            const roll = Math.random();
-            if (roll < 0.02 && urPool.length > 0) {
+            // Basic Pack Logic
+            // Get pity counters
+            let pityRows = await conn.query('SELECT * FROM pack_history WHERE user_id = ?', [user.userId]);
+            if (pityRows.length === 0) {
+                await conn.query('INSERT INTO pack_history (user_id, total_packs, packs_since_sr, packs_since_ur) VALUES (?, 0, 0, 0)', [user.userId]);
+                pityRows = [{ total_packs: 0, packs_since_sr: 0, packs_since_ur: 0 }];
+            }
+            let packsSinceSR = Number(pityRows[0].packs_since_sr) + 1;
+            let packsSinceUR = Number(pityRows[0].packs_since_ur) + 1;
+            const totalPacks = Number(pityRows[0].total_packs) + 1;
+
+            const cuPool = allCards.filter(c => c.rarity === 'C' || c.rarity === 'U');
+            const rPool = allCards.filter(c => c.rarity === 'R');
+            const srPool = allCards.filter(c => c.rarity === 'SR');
+            const urPool = allCards.filter(c => c.rarity === 'UR' || c.rarity === 'SER');
+
+            // Pick 4 C/U cards
+            for (let i = 0; i < 4; i++) {
+                drawnCards.push(pickRandom(cuPool));
+            }
+
+            // Pick 1 R+ card with pity
+            let guaranteedCard: Card;
+            if (packsSinceUR >= 50 && urPool.length > 0) {
                 guaranteedCard = pickRandom(urPool);
                 packsSinceUR = 0;
                 packsSinceSR = 0;
-            } else if (roll < 0.05 && prPool.length > 0) { // PR rarity
-                guaranteedCard = pickRandom(prPool);
-                packsSinceSR = 0;
-            } else if (roll < 0.15 && srPool.length > 0) {
+            } else if (packsSinceSR >= 10 && srPool.length > 0) {
                 guaranteedCard = pickRandom(srPool);
                 packsSinceSR = 0;
-            } else if (rPool.length > 0) {
-                guaranteedCard = pickRandom(rPool);
             } else {
-                guaranteedCard = pickRandom(cuPool);
+                const roll = Math.random();
+                if (roll < 0.02 && urPool.length > 0) {
+                    guaranteedCard = pickRandom(urPool);
+                    packsSinceUR = 0;
+                    packsSinceSR = 0;
+                } else if (roll < 0.15 && srPool.length > 0) {
+                    guaranteedCard = pickRandom(srPool);
+                    packsSinceSR = 0;
+                } else if (rPool.length > 0) {
+                    guaranteedCard = pickRandom(rPool);
+                } else {
+                    guaranteedCard = pickRandom(cuPool);
+                }
             }
+            drawnCards.push(guaranteedCard);
+
+            // Update pity counters
+            await conn.query(
+                'UPDATE pack_history SET total_packs = ?, packs_since_sr = ?, packs_since_ur = ? WHERE user_id = ?',
+                [totalPacks, packsSinceSR, packsSinceUR, user.userId]
+            );
         }
-        drawnCards.push(guaranteedCard);
 
         // Deduct coins
-        await conn.query('UPDATE users SET coins = coins - 10 WHERE id = ?', [user.userId]);
+        await conn.query('UPDATE users SET coins = coins - ? WHERE id = ?', [cost, user.userId]);
 
-        // Add cards to collection using uniqueId
+        // Add cards to collection
         for (const card of drawnCards) {
             await conn.query(
                 `INSERT INTO user_cards (user_id, card_id, quantity) VALUES (?, ?, 1)
@@ -786,26 +816,122 @@ app.post('/api/store/buy-pack', async (req, res): Promise<void> => {
             );
         }
 
-        // Update pity counters
-        await conn.query(
-          'UPDATE pack_history SET total_packs = ?, packs_since_sr = ?, packs_since_ur = ? WHERE user_id = ?',
-          [totalPacks, packsSinceSR, packsSinceUR, user.userId]
-        );
-
         await conn.commit();
 
-        const newCoinsRow = await pool.query('SELECT coins FROM users WHERE id = ?', [user.userId]);
+        const newBalanceRow = await pool.query('SELECT coins, card_crystals FROM users WHERE id = ?', [user.userId]);
+        const pityRows = await pool.query('SELECT * FROM pack_history WHERE user_id = ?', [user.userId]);
 
         res.json({
             cards: drawnCards.map(c => ({ id: c.id, uniqueId: c.uniqueId, rarity: c.rarity })),
-            newCoins: Number(newCoinsRow[0].coins),
-            totalPacks,
-            packsSinceSR,
-            packsSinceUR,
+            newCoins: Number(newBalanceRow[0].coins),
+            newCardCrystals: Number(newBalanceRow[0].card_crystals),
+            totalPacks: pityRows.length > 0 ? Number(pityRows[0].total_packs) : 0,
+            packsSinceSR: pityRows.length > 0 ? Number(pityRows[0].packs_since_sr) : 0,
+            packsSinceUR: pityRows.length > 0 ? Number(pityRows[0].packs_since_ur) : 0,
         });
     } catch (err) {
         if (conn) await conn.rollback();
         console.error('Buy pack error:', err);
+        res.status(500).json({ error: 'Internal error' });
+    } finally {
+        if (conn) conn.release();
+    }
+});
+
+// Card Crystallization Endpoints
+app.post('/api/user/decompose', async (req, res): Promise<void> => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const user = verifyToken(authHeader.split(' ')[1]);
+    if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
+
+    const { cardId, quantity = 1 } = req.body;
+    const card = (SERVER_CARD_LIBRARY as any)[cardId];
+    if (!card) { res.status(404).json({ error: '卡牌未找到' }); return; }
+
+    const values = CRYSTAL_VALUES[card.rarity];
+    if (!values) { res.status(400).json({ error: '该稀有度无法分解' }); return; }
+
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        // Check ownership
+        const cardRows = await conn.query('SELECT quantity FROM user_cards WHERE user_id = ? AND card_id = ?', [user.userId, cardId]);
+        if (cardRows.length === 0 || Number(cardRows[0].quantity) < quantity) {
+            await conn.rollback();
+            res.status(400).json({ error: '持有数量不足' });
+            return;
+        }
+
+        const crystalsGained = values.decompose * quantity;
+
+        // Update cards
+        if (Number(cardRows[0].quantity) === quantity) {
+            await conn.query('DELETE FROM user_cards WHERE user_id = ? AND card_id = ?', [user.userId, cardId]);
+        } else {
+            await conn.query('UPDATE user_cards SET quantity = quantity - ? WHERE user_id = ? AND card_id = ?', [quantity, user.userId, cardId]);
+        }
+
+        // Update crystals
+        await conn.query('UPDATE users SET card_crystals = card_crystals + ? WHERE id = ?', [crystalsGained, user.userId]);
+
+        await conn.commit();
+        const newBalanceRow = await pool.query('SELECT coins, card_crystals FROM users WHERE id = ?', [user.userId]);
+        res.json({ success: true, newCardCrystals: Number(newBalanceRow[0].card_crystals), crystalsGained });
+    } catch (err) {
+        if (conn) await conn.rollback();
+        console.error('Decompose error:', err);
+        res.status(500).json({ error: 'Internal error' });
+    } finally {
+        if (conn) conn.release();
+    }
+});
+
+app.post('/api/user/craft', async (req, res): Promise<void> => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const user = verifyToken(authHeader.split(' ')[1]);
+    if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
+
+    const { cardId } = req.body;
+    const card = (SERVER_CARD_LIBRARY as any)[cardId];
+    if (!card) { res.status(404).json({ error: '卡牌未找到' }); return; }
+
+    const values = CRYSTAL_VALUES[card.rarity];
+    if (!values) { res.status(400).json({ error: '该稀有度无法制作' }); return; }
+
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        // Check crystals
+        const userRows = await conn.query('SELECT card_crystals FROM users WHERE id = ?', [user.userId]);
+        const currentCrystals = Number(userRows[0].card_crystals);
+        if (currentCrystals < values.produce) {
+            await conn.rollback();
+            res.status(400).json({ error: '卡晶不足' });
+            return;
+        }
+
+        // Deduct crystals
+        await conn.query('UPDATE users SET card_crystals = card_crystals - ? WHERE id = ?', [values.produce, user.userId]);
+
+        // Add card
+        await conn.query(
+            `INSERT INTO user_cards (user_id, card_id, quantity) VALUES (?, ?, 1)
+             ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
+            [user.userId, cardId]
+        );
+
+        await conn.commit();
+        const newBalanceRow = await pool.query('SELECT coins, card_crystals FROM users WHERE id = ?', [user.userId]);
+        res.json({ success: true, newCardCrystals: Number(newBalanceRow[0].card_crystals) });
+    } catch (err) {
+        if (conn) await conn.rollback();
+        console.error('Craft error:', err);
         res.status(500).json({ error: 'Internal error' });
     } finally {
         if (conn) conn.release();

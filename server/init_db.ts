@@ -15,7 +15,10 @@ async function initDB() {
                 password_hash VARCHAR(255) NOT NULL,
                 display_name VARCHAR(50) NOT NULL,
                 role VARCHAR(20) DEFAULT 'user',
+                coins BIGINT DEFAULT 100000,
+                card_crystals BIGINT DEFAULT 100000,
                 favorite_card_id VARCHAR(50) DEFAULT 'fav_card',
+                favorite_back_id VARCHAR(50) DEFAULT 'default',
                 created_at BIGINT
             )
         `);
@@ -64,8 +67,8 @@ async function initDB() {
             if (existing.length === 0) {
                 const hash = await bcrypt.hash(account.password, 10);
                 await conn.query(
-                    'INSERT INTO users (id, username, password_hash, display_name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-                    [account.id, account.username, hash, account.name, account.role, Date.now()]
+                    'INSERT INTO users (id, username, password_hash, display_name, role, coins, card_crystals, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    [account.id, account.username, hash, account.name, account.role, 100000, 100000, Date.now()]
                 );
                 console.log(`✅ Seeded user: ${account.username}`);
             } else {

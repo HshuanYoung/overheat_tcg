@@ -1331,7 +1331,6 @@ export const ServerGameService = {
       }
     });
 
-    gameState.mainPhaseTimeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
     this.executeStartPhase(gameState, nextPlayer);
   },
 
@@ -1399,7 +1398,13 @@ export const ServerGameService = {
   },
 
   async advancePhase(gameState: GameState, action?: string, playerId?: string) {
-    // console.log(`[ServerGameService] advancePhase call, action: ${action}, phase: ${gameState.phase}, playerId: ${playerId}`);
+    // Identity of the player performing the action
+    const actingPlayerId = playerId || gameState.playerIds[gameState.currentTurnPlayer];
+    const actingPlayer = gameState.players[actingPlayerId];
+
+    // Identity of the current turn player (for phase transitions)
+    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+    const turnPlayer = gameState.players[turnPlayerId];
 
     // Standardized Shared Timer Docking
     const now = Date.now();
@@ -1409,21 +1414,11 @@ export const ServerGameService = {
       (gameState.battleState && gameState.battleState.askConfront);
 
     if (sharedPhases.includes(gameState.phase) && !isWaiting) {
-      const activeId = actingPlayerId;
-      const activePlayer = gameState.players[activeId];
-      if (activePlayer) {
-        activePlayer.timeRemaining = Math.max(0, (activePlayer.timeRemaining ?? GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
+      if (actingPlayer) {
+        actingPlayer.timeRemaining = Math.max(0, (actingPlayer.timeRemaining ?? GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
       }
     }
     gameState.phaseTimerStart = now;
-
-    // Identity of the player performing the action
-    const actingPlayerId = playerId || gameState.playerIds[gameState.currentTurnPlayer];
-    const actingPlayer = gameState.players[actingPlayerId];
-
-    // Identity of the current turn player (for phase transitions)
-    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-    const turnPlayer = gameState.players[turnPlayerId];
 
     switch (gameState.phase) {
       case 'INIT':

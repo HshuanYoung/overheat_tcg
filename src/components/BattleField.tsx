@@ -387,7 +387,12 @@ export const BattleField: React.FC = () => {
   };
 
   const playCardFromHand = async (card: Card) => {
-    if (!me.isTurn || !gameId || game.phase !== 'MAIN') return;
+    const isCounteringTurn = game.phase === 'COUNTERING' && game.priorityPlayerId === myUid;
+    const isMainTurn = me.isTurn && game.phase === 'MAIN';
+    const isBattleFreeTurn = me.isTurn && game.phase === 'BATTLE_FREE' && card.type === 'STORY';
+
+    if (!gameId || (!isMainTurn && !isBattleFreeTurn && !isCounteringTurn)) return;
+    if (isCounteringTurn && card.type !== 'STORY') return;
 
     const playEffect = card.effects?.find(e => e.type === 'ACTIVATE' || e.type === 'TRIGGER' || e.type === 'ALWAYS');
     const cost = card.acValue;
@@ -987,15 +992,17 @@ export const BattleField: React.FC = () => {
             >
               <div className={cn(
                 "bg-zinc-900/90 border border-red-500/50 px-8 py-4 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.3)] backdrop-blur-sm flex items-center gap-6",
-                game.priorityPlayerId === myUid && "border-red-500 animate-pulse ring-2 ring-red-500/20"
+                game.priorityPlayerId === myUid && "border-red-500 animate-pulse ring-2 ring-red-500/20 shadow-[0_0_40px_rgba(239,68,68,0.5)]"
               )}>
                 <div className="flex flex-col items-center">
                   <p className="text-red-500 font-black tracking-widest uppercase flex items-center gap-3 text-lg italic">
                     <ShieldCheck className="w-6 h-6 animate-pulse" />
-                    CONFRONTATION PHASE
+                    CONFRONTATION / 对抗阶段
                   </p>
-                  <p className="text-zinc-500 text-[10px] uppercase tracking-[0.3em] font-bold">
-                    {game.priorityPlayerId === myUid ? "YOUR TURN TO RESPOND" : `WAITING FOR ${game.players[game.priorityPlayerId!].displayName.toUpperCase()}`}
+                  <p className="text-white text-[11px] uppercase tracking-[0.2em] font-black">
+                    {game.priorityPlayerId === myUid 
+                      ? `RESPOND AS LINK ${game.counterStack.length + 1} / 请响应 (Link ${game.counterStack.length + 1})` 
+                      : `WAITING FOR ${game.players[game.priorityPlayerId!].displayName.toUpperCase()}`}
                   </p>
                 </div>
 
@@ -1003,39 +1010,41 @@ export const BattleField: React.FC = () => {
                   <div className="flex items-center gap-3 pointer-events-auto">
                     <button
                       onClick={handleResolve}
-                      className="px-8 py-2 bg-red-600 hover:bg-red-700 text-white font-black italic uppercase tracking-widest rounded-full transition-all flex items-center gap-2 border border-red-400 group"
+                      className="px-10 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black italic uppercase tracking-widest rounded-full transition-all flex items-center gap-2 border border-red-400 group shadow-lg shadow-red-600/40"
                     >
-                      <X className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-                      PASS
+                      <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+                      PASS & SETTLE / 不对抗直接结算
                     </button>
                   </div>
                 )}
               </div>
 
               {/* Stack Visualization */}
-              <div className="flex gap-4 mt-8">
+              <div className="flex gap-6 mt-8">
                 {game.counterStack.map((item, idx) => (
                   <motion.div
                     key={`${idx}-${item.timestamp}`}
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
+                    initial={{ y: 20, opacity: 0, scale: 0.8 }}
+                    animate={{ y: 0, opacity: 1, scale: idx === game.counterStack.length - 1 ? 1.15 : 1 }}
                     className={cn(
-                      "w-32 h-44 rounded-lg overflow-hidden border-2 shadow-2xl relative",
-                      idx === game.counterStack.length - 1 ? "border-red-500 scale-110 z-10" : "border-white/10 opacity-50 grayscale"
+                      "w-36 h-52 rounded-xl overflow-hidden border-2 shadow-2xl relative transition-all duration-300",
+                      idx === game.counterStack.length - 1 
+                        ? "border-red-500 z-10 ring-4 ring-red-500/20" 
+                        : "border-white/10 opacity-60 grayscale-[0.5]"
                     )}
                   >
                     {item.card ? (
                       <CardComponent card={item.card} disableZoom />
                     ) : (
-                      <div className="w-full h-full bg-zinc-900 flex flex-col items-center justify-center p-4 text-center">
-                        <Sword className="w-8 h-8 text-white/20 mb-2" />
-                        <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
-                          {item.type.replace(/_/g, ' ')}
+                      <div className="w-full h-full bg-zinc-900 flex flex-col items-center justify-center p-4 text-center border-t-4 border-red-500/50">
+                        <Sword className="w-10 h-10 text-red-500/40 mb-3" />
+                        <span className="text-[12px] font-black text-white uppercase tracking-widest leading-tight">
+                          {item.type === 'PHASE_END' ? "PHASE END REQUEST" : item.type.replace(/_/g, ' ')}
                         </span>
                       </div>
                     )}
-                    <div className="absolute top-2 left-2 w-5 h-5 bg-black/80 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-black italic text-white shadow-lg">
-                      {idx + 1}
+                    <div className="absolute top-2 left-2 px-2 py-0.5 bg-red-600 rounded-full border border-white/40 flex items-center justify-center text-[11px] font-black italic text-white shadow-xl z-20">
+                      LINK {idx + 1}
                     </div>
                   </motion.div>
                 ))}
@@ -1189,8 +1198,13 @@ export const BattleField: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               {/* Action: Play (Yellow) */}
-              {cardMenu.zone === 'hand' && me.isTurn && (game.phase === 'MAIN' || (game.phase === 'BATTLE_FREE' && cardMenu.card.type === 'STORY')) && (
-                (() => {
+              {(() => {
+                const isCounteringTurn = game.phase === 'COUNTERING' && game.priorityPlayerId === myUid;
+                const isMainTurn = me.isTurn && game.phase === 'MAIN';
+                const isBattleFreeTurn = me.isTurn && game.phase === 'BATTLE_FREE' && cardMenu.card.type === 'STORY';
+                const canPlayInPhase = isMainTurn || isBattleFreeTurn || (isCounteringTurn && cardMenu.card.type === 'STORY');
+
+                if (cardMenu.zone === 'hand' && canPlayInPhase) {
                   const check = GameService.canPlayCard(me, cardMenu.card);
                   if (check.canPlay) {
                     return (
@@ -1206,72 +1220,69 @@ export const BattleField: React.FC = () => {
                       </motion.button>
                     );
                   }
-                  return null;
-                })()
-              )}
+                }
+                return null;
+              })()}
 
               {/* Action: Activate Effect (Green) */}
-              {me.isTurn && (['MAIN', 'BATTLE_FREE'].includes(game.phase)) && (
-                (() => {
-                  const isMyCard = [...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand].some(c => c?.gamecardId === cardMenu.card.gamecardId);
-                  if (!isMyCard) return null;
+              {(() => {
+                const isCounteringTurn = game.phase === 'COUNTERING' && game.priorityPlayerId === myUid;
+                const isActivePhase = ['MAIN', 'BATTLE_FREE'].includes(game.phase);
+                const canActivateInPhase = (me.isTurn && isActivePhase) || isCounteringTurn;
 
-                  const latestCard = [
-                    ...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand,
-                    ...(opponent?.unitZone || []), ...(opponent?.itemZone || []), ...(opponent?.erosionFront || [])
-                  ].find(c => c?.gamecardId === cardMenu.card.gamecardId) || cardMenu.card;
+                if (!canActivateInPhase) return null;
+                const isMyCard = [...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand].some(c => c?.gamecardId === cardMenu.card.gamecardId);
+                if (!isMyCard) return null;
 
-                  const activateEffects = latestCard.effects?.map((effect, index) => ({ effect, index }))
-                    .filter(e => e.effect.type === 'ACTIVATE' || e.effect.type === 'ACTIVATED') || [];
+                const latestCard = [
+                  ...me.unitZone, ...me.itemZone, ...me.erosionFront, ...me.hand,
+                  ...(opponent?.unitZone || []), ...(opponent?.itemZone || []), ...(opponent?.erosionFront || [])
+                ].find(c => c?.gamecardId === cardMenu.card.gamecardId) || cardMenu.card;
 
-                  const zoneMap: Record<string, string> = {
-                    'unit': 'UNIT_ZONE',
-                    'item': 'ITEM_ZONE',
-                    'erosion_front': 'EROSION_FRONT',
-                    'hand': 'HAND'
-                  };
-                  const validEffects = activateEffects.filter(e => {
-                    const zoneMap: Record<string, string> = {
-                      'unit': 'UNIT',
-                      'item': 'ITEM',
-                      'erosion_front': 'EROSION_FRONT',
-                      'hand': 'HAND'
-                    };
-                    const triggerLocation = zoneMap[cardMenu.zone] as TriggerLocation;
-                    return GameService.checkEffectLimitsAndReqs(game, myUid, latestCard, e.effect, triggerLocation);
-                  });
+                const activateEffects = latestCard.effects?.map((effect, index) => ({ effect, index }))
+                  .filter(e => e.effect.type === 'ACTIVATE' || e.effect.type === 'ACTIVATED') || [];
 
-                  if (validEffects.length > 0) {
-                    return (
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#22c55e] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
-                        onClick={() => {
-                          const triggerLocation = (cardMenu.zone === 'unit' ? 'UNIT' : cardMenu.zone === 'item' ? 'ITEM' : cardMenu.zone === 'erosion_front' ? 'EROSION_FRONT' : 'HAND') as TriggerLocation;
-                          if (validEffects.length === 1) {
-                            setEffectConfirmation({
-                              card: latestCard,
-                              effect: validEffects[0].effect,
-                              effectIndex: validEffects[0].index,
-                              triggerLocation
-                            });
-                          } else {
-                            setEffectSelection({
-                              card: latestCard,
-                              effects: validEffects,
-                              triggerLocation
-                            });
-                          }
-                          setCardMenu(null);
-                        }}
-                      >
-                        ACTIVATE
-                      </motion.button>
-                    );
-                  }
-                  return null;
-                })()
-              )}
+                const zoneMap: Record<string, string> = {
+                  'unit': 'UNIT',
+                  'item': 'ITEM',
+                  'erosion_front': 'EROSION_FRONT',
+                  'hand': 'HAND'
+                };
+                const validEffects = activateEffects.filter(e => {
+                  const triggerLocation = zoneMap[cardMenu.zone] as TriggerLocation;
+                  return GameService.checkEffectLimitsAndReqs(game, myUid, latestCard, e.effect, triggerLocation);
+                });
+
+                if (validEffects.length > 0) {
+                  return (
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#22c55e] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
+                      onClick={() => {
+                        const triggerLocation = (cardMenu.zone === 'unit' ? 'UNIT' : cardMenu.zone === 'item' ? 'ITEM' : cardMenu.zone === 'erosion_front' ? 'EROSION_FRONT' : 'HAND') as TriggerLocation;
+                        if (validEffects.length === 1) {
+                          setEffectConfirmation({
+                            card: latestCard,
+                            effect: validEffects[0].effect,
+                            effectIndex: validEffects[0].index,
+                            triggerLocation
+                          });
+                        } else {
+                          setEffectSelection({
+                            card: latestCard,
+                            effects: validEffects,
+                            triggerLocation
+                          });
+                        }
+                        setCardMenu(null);
+                      }}
+                    >
+                      ACTIVATE
+                    </motion.button>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Action: Attack (Red) */}
               {game.phase === 'BATTLE_DECLARATION' && me.isTurn && cardMenu.zone === 'unit' && (

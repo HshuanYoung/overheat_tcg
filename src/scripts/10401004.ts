@@ -24,7 +24,7 @@ const card: Card = {
     {
       id: 'jianxianzi_activate',
       type: 'ACTIVATE',
-      description: '【启动】[名称一回合一次] 我方场上存在3个蓝色单位时，0费：此卡在单位区时可以启动，将此卡返回持有者手牌。之后，选择我方侵蚀区前排一张正面向上的卡牌，返回持有者卡组并洗牌。',
+      description: '【启动】[名称一回合一次] 我方场上存在3个蓝色单位时，0费：此卡在单位区时可以启动（对抗阶段亦可），将此卡返回持有者手牌。之后，选择我方侵蚀区前排一张正面向上的卡牌，返回持有者卡组并洗牌。',
       triggerLocation: ['UNIT'],
       limitCount: 1,
       limitNameType: true,

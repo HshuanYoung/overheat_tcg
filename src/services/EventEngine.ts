@@ -66,6 +66,13 @@ export class EventEngine {
 
     // 2. Execute mandatory effects first, then optional (or add to stack)
     for (const { card, effect, playerUid } of triggeredEffects) {
+      if (gameState.isCountering === 1 || gameState.isResolvingStack) {
+        if (!gameState.triggeredEffectsQueue) gameState.triggeredEffectsQueue = [];
+        gameState.triggeredEffectsQueue.push({ card, effect, playerUid, event });
+        gameState.logs.push(`[诱发入队] ${card.fullName} 的效果已入队，待结算后处理。`);
+        continue;
+      }
+
       const player = gameState.players[playerUid];
 
       // Execute Atomic Effects if present

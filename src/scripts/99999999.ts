@@ -30,7 +30,7 @@ const card: Card = {
       limitCount: 1,
       limitGlobal: false,
       limitNameType: true,
-      description: '【启动】[一回合一次][手牌] 将这张卡丢弃，抽1张卡。',
+      description: '【启动】[一回合一次][手牌]（对抗阶段亦可） 将这张卡丢弃，抽1张卡。',
       cost: (gameState: GameState, playerState: PlayerState, card: Card) => {
         // Discard self - more robust implementation for engine
         const idx = playerState.hand.findIndex(c => c.gamecardId === card.gamecardId);
@@ -56,7 +56,7 @@ const card: Card = {
       triggerLocation: ['UNIT'],
       limitCount: 1,
       limitGlobal: true,
-      description: '【启动】[一局一次][战场] 侵蚀区存在4-6张卡牌时，将此卡横置，选择场上一个[非红色][非侵蚀区]且[费用<3][力量<3000]的单位破坏。',
+      description: '【启动】[一局一次][战场]（对抗阶段亦可） 侵蚀区存在4-6张卡牌时，将此卡横置，选择场上一个[非红色][非侵蚀区]且[费用<3][力量<3000]的单位破坏。',
       condition: (gameState: GameState, playerState: PlayerState, card: Card) => {
         // Manually check erosion count to avoid circular deps in UI
         const erosionCount = playerState.erosionFront.filter(c => c !== null).length +

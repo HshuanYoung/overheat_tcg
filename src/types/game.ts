@@ -287,6 +287,13 @@ export type GamePhase =
   | 'INIT'
   | 'SHENYI_CHOICE';
 
+export interface TriggeredEffectRecord {
+  card: Card;
+  effect: CardEffect;
+  playerUid: string;
+  event?: GameEvent;
+}
+
 export interface PendingShenyi {
   playerUid: string;
   cardIds: string[];
@@ -300,6 +307,8 @@ export interface GameState {
   isCountering: 0 | 1; // 1 if countering
   counterStack: StackItem[]; // LIFO
   priorityPlayerId?: string; // Player who currently has the option to respond
+  isResolvingStack?: boolean; // True when chain is resolving
+  triggeredEffectsQueue: TriggeredEffectRecord[]; // Queue of effects met conditions during chain/resolution
   passCount: number; // Number of consecutive passes during identification
   playerIds: [string, string]; // [FirstPlayerID, SecondPlayerID]
   gameStatus: 1 | 2; // 1: Normal, 2: Interrupted

@@ -425,7 +425,7 @@ export const ServerGameService = {
     return { success: false, reason: '未知错误' };
   },
 
-  enterCountering(gameState: GameState, sourcePlayerId: string, stackItem: StackItem, initialPassCount: number = 0) {
+  enterCountering(gameState: GameState, sourcePlayerId: string, stackItem: StackItem) {
     const now = Date.now();
     const elapsed = now - (gameState.phaseTimerStart || now);
 
@@ -438,18 +438,19 @@ export const ServerGameService = {
 
       gameState.previousPhase = gameState.phase;
       gameState.phase = 'COUNTERING';
-      gameState.phaseTimerStart = now; // Independent 30s starts now
+      gameState.phaseTimerStart = now; // Independent 15/30s starts now
     }
 
     gameState.isCountering = 1;
     gameState.counterStack.push(stackItem);
-    gameState.passCount = initialPassCount;
-
-    // In TCGs, usually the non-active player gets the first chance to respond
+    
+    // Combo Link Numbering (Link 1 is the trigger, Link 2 is the first response, etc.)
+    const linkNumber = gameState.counterStack.length;
     const opponentId = gameState.playerIds.find(id => id !== sourcePlayerId);
     gameState.priorityPlayerId = opponentId;
 
-    gameState.logs.push(`[对抗开始] 等待 ${gameState.players[opponentId!].displayName} 响应。`);
+    const actionDesc = stackItem.type === 'PHASE_END' ? "请求结束阶段" : (stackItem.card ? `发动 ${stackItem.card.fullName}` : "执行动作");
+    gameState.logs.push(`[连锁 Link ${linkNumber}] ${gameState.players[sourcePlayerId].displayName} ${actionDesc}。等待 ${gameState.players[opponentId!].displayName} 响应 (Link ${linkNumber + 1})。`);
   },
 
   async playCard(gameState: GameState, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }) {
@@ -459,6 +460,11 @@ export const ServerGameService = {
 
     const canPlay = this.canPlayCard(player, card);
     if (!canPlay.canPlay) throw new Error(canPlay.reason);
+
+    // RULE 2: During countering phase, only story cards can be played
+    if (gameState.phase === 'COUNTERING' && card.type !== 'STORY') {
+      throw new Error('对抗阶段只能打出故事卡');
+    }
 
     const cost = card.acValue;
     const paymentResult = this.payCost(gameState, playerId, cost, paymentSelection, card.color, cardId);
@@ -515,6 +521,11 @@ export const ServerGameService = {
       throw new Error('不满足发动条件或已达到使用次数限制');
     }
 
+    // RULE 2: During countering phase, only ACTIVATE/ACTIVATED effects can be used
+    if (gameState.phase === 'COUNTERING' && effect.type !== 'ACTIVATE' && effect.type !== 'ACTIVATED') {
+      throw new Error('对抗阶段只能发动主动效果');
+    }
+
     // 3. Payment/Cost Check
     if (effect.cost) {
       if (!effect.cost(gameState, player, card)) {
@@ -540,42 +551,19 @@ export const ServerGameService = {
     if (gameState.phase !== 'COUNTERING') return;
     if (gameState.priorityPlayerId !== playerId) throw new Error('尚未轮到你进行响应');
 
-    gameState.passCount += 1;
-    gameState.logs.push(`${gameState.players[playerId].displayName} 选择不进行对抗`);
-
-    // Special Case: Phase End (Clean Pass)
-    const isPhaseEndOnly = gameState.counterStack.length === 1 && gameState.counterStack[0].type === 'PHASE_END';
-    const phaseEndItem = isPhaseEndOnly ? gameState.counterStack[0] : null;
-    const isOpponentPassing = phaseEndItem && playerId !== phaseEndItem.ownerUid;
-
-    // Resolve immediately if:
-    // 1. Both players passed (passCount >= 2)
-    // 2. OR it's a PHASE_END and the opponent just passed (passCount >= 1)
-    if (isPhaseEndOnly && (gameState.passCount >= 2 || (isOpponentPassing && gameState.passCount >= 1))) {
-      gameState.counterStack.pop();
-      gameState.isCountering = 0;
-      gameState.priorityPlayerId = undefined;
-      gameState.passCount = 0;
-
-      // CRITICAL: Restore the phase we are transitioning FROM
-      // This ensures advancePhase's switch(gameState.phase) hits the correct case.
-      if (gameState.previousPhase) {
-        gameState.phase = gameState.previousPhase;
-        gameState.previousPhase = undefined;
-      }
-
-      if (phaseEndItem!.nextPhase) {
-        return this.advancePhase(gameState, phaseEndItem!.nextPhase);
-      }
-    }
-
-    if (gameState.passCount >= 2) {
-      await this.resolveCounterStack(gameState);
+    const player = gameState.players[playerId];
+    const topItem = gameState.counterStack[gameState.counterStack.length - 1];
+    
+    if (topItem.type === 'PHASE_END') {
+      gameState.logs.push(`${player.displayName} 接受了阶段结束请求 (Pass)。`);
+    } else if (topItem.type === 'ATTACK') {
+      gameState.logs.push(`${player.displayName} 接受了攻击宣告 (Pass)。`);
     } else {
-      // Switch priority
-      const nextId = gameState.playerIds.find(id => id !== playerId);
-      gameState.priorityPlayerId = nextId;
+      gameState.logs.push(`${player.displayName} 选择不进行对抗 (Pass)。`);
     }
+
+    // RULE 4 & Note 1: Once either side no longer confronts, settlement begins.
+    await this.resolveCounterStack(gameState);
 
     return gameState;
   },
@@ -583,31 +571,41 @@ export const ServerGameService = {
   async resolveCounterStack(gameState: GameState) {
     if (gameState.counterStack.length === 0) return;
 
-    // Special Case: If it's just a PHASE_END and we are resolving (likely due to a timeout)
-    // AND it's the ONLY item, we should ADVANCE.
-    if (gameState.counterStack.length === 1 && gameState.counterStack[0].type === 'PHASE_END') {
-      const item = gameState.counterStack.pop()!;
+    gameState.isResolvingStack = true;
+    const isPhaseEndOnly = gameState.counterStack.length === 1 && gameState.counterStack[0].type === 'PHASE_END';
+    const phaseEndItem = isPhaseEndOnly ? gameState.counterStack[0] : null;
+
+    if (isPhaseEndOnly) {
+      gameState.counterStack.pop();
       gameState.isCountering = 0;
-      gameState.passCount = 0;
+      gameState.isResolvingStack = false;
       gameState.priorityPlayerId = undefined;
 
+      const nextPhase = phaseEndItem!.nextPhase;
       if (gameState.previousPhase) {
         gameState.phase = gameState.previousPhase;
         gameState.previousPhase = undefined;
       }
 
-      if (item.nextPhase) {
-        return this.advancePhase(gameState, item.nextPhase);
+      if (nextPhase) {
+        return this.advancePhase(gameState, nextPhase);
       }
       return gameState;
     }
 
-    gameState.logs.push(`[连锁结算] 开始处理对抗请求...`);
+    gameState.logs.push(`[连锁结算] 开始逆向结算 (LIFO)...`);
 
     // Resolve the entire stack from top to bottom (LIFO)
     while (gameState.counterStack.length > 0) {
       const stackItem = gameState.counterStack.pop();
       if (!stackItem) continue;
+
+      // If we encounter a PHASE_END in a multi-item stack, it means the phase end was interrupted.
+      // RULE 3: after confrontation is over, return to 'main' or 'battle_free'.
+      if (stackItem.type === 'PHASE_END') {
+        gameState.logs.push(`[连锁结算] Link ${gameState.counterStack.length + 1} (阶段请求) 被后续动作中断，取消该请求。`);
+        continue; 
+      }
 
       const card = stackItem.card;
       const owner = gameState.players[stackItem.ownerUid];
@@ -680,18 +678,17 @@ export const ServerGameService = {
             isAlliance: !!stackItem.isAlliance
           };
           gameState.phase = 'DEFENSE_DECLARATION';
-          gameState.logs.push(`[攻击宣告] 进入防御宣言阶段`);
-          // Special return: if an attack was responded to, we go to defense declaration instead of previousPhase
+          gameState.logs.push(`[攻击宣告] 连锁结算完成，进入防御宣言阶段`);
+          // Clear previous phase so we don't return to MAIN
           gameState.previousPhase = undefined;
-          break;
-
-        case 'PHASE_END':
-          // A confrontation occurred (stack length was > 1 or something else was resolved first)
-          // Yu-Gi-Oh rule: If a chain happens on Phase End, the phase does not end automatically.
-          gameState.logs.push(`[阶段请求] 受到对抗影响，结算完毕后将返回原阶段。`);
           break;
       }
     }
+
+    gameState.isResolvingStack = false;
+    gameState.isCountering = 0;
+    gameState.priorityPlayerId = undefined;
+    gameState.phaseTimerStart = Date.now();
 
     // After resolving the stack, return to previous phase if it exists
     if (gameState.previousPhase) {
@@ -699,10 +696,25 @@ export const ServerGameService = {
       gameState.previousPhase = undefined;
     }
 
-    gameState.isCountering = 0;
-    gameState.priorityPlayerId = undefined;
-    gameState.passCount = 0;
-    gameState.phaseTimerStart = Date.now();
+    // RULE 6: Process triggered effects that were queued during confrontation
+    if (gameState.triggeredEffectsQueue && gameState.triggeredEffectsQueue.length > 0) {
+       gameState.logs.push(`[诱发结算] 开始处理对抗期间触发的 ${gameState.triggeredEffectsQueue.length} 个诱发效果...`);
+       while (gameState.triggeredEffectsQueue && gameState.triggeredEffectsQueue.length > 0) {
+         const record = gameState.triggeredEffectsQueue.shift()!;
+         const player = gameState.players[record.playerUid];
+         
+         if (record.effect.atomicEffects) {
+           record.effect.atomicEffects.forEach(atomic => {
+             AtomicEffectExecutor.execute(gameState, record.playerUid, atomic, record.card, record.event);
+           });
+         }
+         if (record.effect.execute) {
+           record.effect.execute(record.card, gameState, player, record.event);
+         }
+         this.recordEffectUsage(gameState, record.playerUid, record.card, record.effect);
+         gameState.logs.push(`[诱发结果] ${record.card.fullName} 的诱发效果已执行。`);
+       }
+    }
 
     this.checkBattleInterruption(gameState);
     return gameState;
@@ -1446,7 +1458,7 @@ export const ServerGameService = {
               type: 'PHASE_END',
               nextPhase: 'BATTLE_DECLARATION',
               timestamp: Date.now()
-            }, 1); // Start with 1 pass (the proposer)
+            });
           }
         } else if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
@@ -1459,7 +1471,7 @@ export const ServerGameService = {
               type: 'PHASE_END',
               nextPhase: 'DISCARD', // Transition to discard/end
               timestamp: Date.now()
-            }, 1); // Start with 1 pass (the proposer)
+            });
           }
         }
         break;
@@ -1475,7 +1487,7 @@ export const ServerGameService = {
               type: 'PHASE_END',
               nextPhase: 'DISCARD',
               timestamp: Date.now()
-            }, 1);
+            });
           }
         } else if (action === 'RETURN_MAIN' || action === 'MAIN') {
           if (action === 'MAIN') {
@@ -1495,7 +1507,6 @@ export const ServerGameService = {
         break;
       case 'BATTLE_FREE':
         if (!gameState.battleState) {
-          // console.warn('[ServerGameService] BATTLE_FREE without battleState, returning to MAIN');
           gameState.phase = 'MAIN';
           gameState.logs.push(`[阶段切换] 战斗状态缺失，返回主要阶段`);
           return gameState;
@@ -1504,36 +1515,16 @@ export const ServerGameService = {
         if (action === 'PROPOSE_DAMAGE_CALCULATION' || action === 'DAMAGE_CALCULATION') {
           if (action === 'DAMAGE_CALCULATION') {
             gameState.phase = 'DAMAGE_CALCULATION';
-            gameState.battleState.askConfront = undefined;
             gameState.logs.push(`[阶段切换] 进入伤害计算阶段`);
             await this.resolveDamage(gameState);
           } else {
-            // Propose calculation - ask opponent first
-            gameState.battleState.askConfront = 'ASKING_OPPONENT';
-            gameState.phaseTimerStart = Date.now();
-            gameState.logs.push(`[进行对抗] 等待对手确认是否进行对抗`);
-          }
-        } else if (action === 'CONFIRM_CONFRONTATION') {
-          gameState.battleState.askConfront = undefined;
-          gameState.logs.push(`[进行对抗] 确认在自由阶段展开对抗！`);
-          this.enterCountering(gameState, actingPlayerId, {
-            ownerUid: actingPlayerId,
-            type: 'PHASE_END',
-            nextPhase: 'DAMAGE_CALCULATION',
-            timestamp: Date.now()
-          }, 1);
-        } else if (action === 'DECLINE_CONFRONTATION') {
-          if (gameState.battleState.askConfront === 'ASKING_OPPONENT') {
-            // Opponent declined, ask turn player if they want to counter? 
-            gameState.battleState.askConfront = 'ASKING_TURN_PLAYER';
-            gameState.phaseTimerStart = Date.now();
-            gameState.logs.push(`[进行对抗] 对手选择拒绝，等待当前玩家确认`);
-          } else {
-            // Both declined or turn player declined
-            gameState.phase = 'DAMAGE_CALCULATION';
-            gameState.battleState.askConfront = undefined;
-            gameState.logs.push(`[阶段切换] 对抗结束，进入伤害判定`);
-            await this.resolveDamage(gameState);
+            // Use the standard countering system for ending the battle free phase
+            this.enterCountering(gameState, actingPlayerId, {
+              ownerUid: actingPlayerId,
+              type: 'PHASE_END',
+              nextPhase: 'DAMAGE_CALCULATION',
+              timestamp: Date.now()
+            });
           }
         } else if (action === 'RETURN_MAIN') {
           gameState.phase = 'MAIN';

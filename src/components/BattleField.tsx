@@ -67,18 +67,19 @@ export const BattleField: React.FC = () => {
       const now = Date.now();
       const elapsed = now - (game.phaseTimerStart || now);
 
-      const sharedPhases = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
-      const independentPhases = ['INIT', 'START', 'DRAW', 'EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN', 'DAMAGE_CALCULATION', 'DISCARD'];
+      let activePlayerUid: string | undefined;
 
-      const isWaiting = (game.counterStack && game.counterStack.length > 0) ||
-        (game.battleState && game.battleState.askConfront);
-
-      let remaining = GAME_TIMEOUTS.INDEPENDENT_PHASE;
-      if (sharedPhases.includes(game.phase) && !isWaiting) {
-        remaining = Math.max(0, (game.mainPhaseTimeRemaining || GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
+      if (game.pendingQuery) {
+        activePlayerUid = game.pendingQuery.playerUid;
+      } else if (game.priorityPlayerId) {
+        activePlayerUid = game.priorityPlayerId;
       } else {
-        remaining = Math.max(0, GAME_TIMEOUTS.INDEPENDENT_PHASE - elapsed);
+        // currentTurnPlayer is an index 0 or 1, map to uid
+        activePlayerUid = game.playerIds[game.currentTurnPlayer];
       }
+
+      const activePlayer = activePlayerUid ? game.players[activePlayerUid] : null;
+      let remaining = activePlayer ? Math.max(0, (activePlayer.timeRemaining || 0) - elapsed) : 0;
 
       const newTimerValue = Math.ceil(remaining / 1000);
       setTimer(newTimerValue);
@@ -93,7 +94,7 @@ export const BattleField: React.FC = () => {
     const interval = setInterval(updateTimer, 500);
 
     return () => clearInterval(interval);
-  }, [game?.phase, game?.phaseTimerStart, game?.mainPhaseTimeRemaining, game?.priorityPlayerId, myUid]);
+  }, [game?.phase, game?.phaseTimerStart, game?.priorityPlayerId, game?.pendingQuery?.id, game?.playerIds, game?.currentTurnPlayer, myUid]);
 
   useEffect(() => {
     const audio = new Audio('/assets/music_bg.wav');

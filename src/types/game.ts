@@ -2,7 +2,7 @@ import { Faction } from '../data/factions';
 
 export const GAME_TIMEOUTS = {
   MAIN_PHASE_TOTAL: 300000, // 300 seconds (5 minutes)
-  INDEPENDENT_PHASE: 15000,  // 15 seconds
+  INDEPENDENT_PHASE: 30000,  // 30 seconds
   CHECK_INTERVAL: 1000      // 1 seconds
 };
 
@@ -232,6 +232,7 @@ export interface PlayerState {
   hasExhaustedThisTurn: string[];
   isGoddessMode?: boolean;
   isHandPublic?: number;
+  timeRemaining: number;
 }
 
 export type StackItemType = 'PLAY' | 'EFFECT' | 'ATTACK' | 'PHASE_END';

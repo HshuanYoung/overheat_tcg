@@ -433,7 +433,10 @@ export const ServerGameService = {
       // If we are leaving a shared phase (MAIN, BATTLE_DECLARATION, BATTLE_FREE), subtract from turn budget
       const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
       if (sharedPhases.includes(gameState.phase)) {
-        gameState.mainPhaseTimeRemaining = Math.max(0, (gameState.mainPhaseTimeRemaining || 300000) - elapsed);
+        const actingPlayer = gameState.players[sourcePlayerId];
+        if (actingPlayer) {
+          actingPlayer.timeRemaining = Math.max(0, (actingPlayer.timeRemaining ?? GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
+        }
       }
 
       gameState.previousPhase = gameState.phase;
@@ -1406,7 +1409,11 @@ export const ServerGameService = {
       (gameState.battleState && gameState.battleState.askConfront);
 
     if (sharedPhases.includes(gameState.phase) && !isWaiting) {
-      gameState.mainPhaseTimeRemaining = Math.max(0, (gameState.mainPhaseTimeRemaining || GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
+      const activeId = actingPlayerId;
+      const activePlayer = gameState.players[activeId];
+      if (activePlayer) {
+        activePlayer.timeRemaining = Math.max(0, (activePlayer.timeRemaining ?? GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
+      }
     }
     gameState.phaseTimerStart = now;
 
@@ -1590,7 +1597,7 @@ export const ServerGameService = {
       }
     });
 
-    gameState.mainPhaseTimeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
+    player.timeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
     const unitsToReset = player.unitZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
 
     const itemsToReset = player.itemZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
@@ -1789,6 +1796,7 @@ export const ServerGameService = {
       mulliganDone: false,
       hasExhaustedThisTurn: [],
       isHandPublic: 0,
+      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     // Initial Draw 4
@@ -1859,6 +1867,7 @@ export const ServerGameService = {
       mulliganDone: false,
       hasExhaustedThisTurn: [],
       isHandPublic: 0,
+      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     const botState: PlayerState = {
@@ -1878,6 +1887,7 @@ export const ServerGameService = {
       mulliganDone: true, // Bot skips mulligan
       hasExhaustedThisTurn: [],
       isHandPublic: 0,
+      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     // Initial Draw 4 for both
@@ -2168,6 +2178,7 @@ export const ServerGameService = {
       mulliganDone: false,
       hasExhaustedThisTurn: [],
       isHandPublic: 0,
+      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     const botState: PlayerState = {
@@ -2187,6 +2198,7 @@ export const ServerGameService = {
       mulliganDone: true,
       hasExhaustedThisTurn: [],
       isHandPublic: 0,
+      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     // Draw 4
@@ -2215,8 +2227,7 @@ export const ServerGameService = {
         'BOT_PLAYER': botState
       },
       mode: 'practice',
-      phaseTimerStart: 0,
-      mainPhaseTimeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL
+      phaseTimerStart: Date.now()
     };
 
     // Correctly set isTurn for the initial player
@@ -2234,11 +2245,13 @@ export const ServerGameService = {
       uid: uid1, displayName: 'Player 1', deck: init1, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
       isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
       isHandPublic: 0,
+      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
     const p2: PlayerState = {
       uid: uid2, displayName: 'Player 2', deck: init2, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
       isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
       isHandPublic: 0,
+      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     for (let i = 0; i < 4; i++) {

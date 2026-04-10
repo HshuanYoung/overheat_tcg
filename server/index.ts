@@ -249,123 +249,77 @@ async function advancePhase(gameState: any, gameId: string, playerId?: string, s
 
 app.use(cors());
 
-// Background Timer for 30s Auto-Advance
+// Background Unified Timer Loop
 setInterval(async () => {
     try {
         const games = await pool.query('SELECT id FROM games WHERE status = 0');
         for (const row of games) {
             const gameId = row.id;
 
-            // Use the lock to ensure we don't conflict with player actions
             await withGameLock(gameId, async () => {
-                // Re-fetch state inside the lock to get the most recent version
                 const stateRows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
                 if (stateRows.length === 0) return;
 
                 const gameState = typeof stateRows[0].state === 'string' ? JSON.parse(stateRows[0].state) : stateRows[0].state;
-                if (!gameState) return;
+                if (!gameState || gameState.gameStatus === 2) return;
                 ServerGameService.hydrateGameState(gameState);
-                if (!gameState.phaseTimerStart) return;
 
                 const now = Date.now();
-                const phaseElapsed = now - (gameState.phaseTimerStart || now);
-                const checkInterval = GAME_TIMEOUTS.CHECK_INTERVAL;
+                const elapsedSinceLastUpdate = now - (gameState.phaseTimerStart || now);
+                
+                // Identify active player(s) for the timer
+                let activePlayerUid: string | undefined;
 
-                const sharedPhases = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
-                const independentPhases = ['INIT', 'START', 'DRAW', 'EROSION', 'DEFENSE_DECLARATION', 'COUNTERING', 'MULLIGAN', 'DAMAGE_CALCULATION', 'DISCARD'];
-
-                if (sharedPhases.includes(gameState.phase)) {
-                    // Shared budget logic
-                    const isWaitingForOpponent =
-                        (gameState.counterStack && gameState.counterStack.length > 0) ||
-                        (gameState.battleState && gameState.battleState.askConfront);
-
-                    if (isWaitingForOpponent) {
-                        if (phaseElapsed > GAME_TIMEOUTS.INDEPENDENT_PHASE) {
-                            // console.log(`[Timer] Confrontation timeout in ${gameState.phase} for game ${gameId}, auto-advancing.`);
-                            gameState.logs.push('响应超时，自动推进。');
-                            if (gameState.phase === 'BATTLE_FREE') {
-                                await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION');
-                            } else if (gameState.counterStack && gameState.counterStack.length > 0) {
-                                await ServerGameService.resolveCounterStack(gameState);
-                            }
-
-                            gameState.phaseTimerStart = Date.now();
-                            await syncAndSaveState(gameId, gameState);
-
-                            const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-                            if (currentPlayerId === 'BOT_PLAYER' || gameState.priorityPlayerId === 'BOT_PLAYER') {
-                                handleBotMove(gameState, gameId);
-                            }
+                if (gameState.pendingQuery) {
+                    activePlayerUid = gameState.pendingQuery.playerUid;
+                } else if (gameState.priorityPlayerId) {
+                    activePlayerUid = gameState.priorityPlayerId;
+                } else if (gameState.phase === 'DISCARD') {
+                    activePlayerUid = gameState.playerIds[gameState.currentTurnPlayer];
+                } else if (gameState.phase === 'MULLIGAN') {
+                    // Special case: decrement for all who haven't finished
+                    Object.values(gameState.players).forEach((p: any) => {
+                        if (!p.mulliganDone) {
+                            p.timeRemaining = Math.max(0, (p.timeRemaining ?? 300000) - elapsedSinceLastUpdate);
                         }
-                    } else {
-                        const remaining = (gameState.mainPhaseTimeRemaining || GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - phaseElapsed;
+                    });
+                } else {
+                    activePlayerUid = gameState.playerIds[gameState.currentTurnPlayer];
+                }
 
-                        if (remaining <= 0) {
-                            // console.log(`[Timer] Shared budget timeout for game ${gameId}, auto-advancing.`);
-                            gameState.logs.push('阶段时间耗尽，强制推进。');
-                            if (gameState.phase === 'BATTLE_FREE') {
-                                await ServerGameService.advancePhase(gameState, 'PROPOSE_DAMAGE_CALCULATION');
-                            } else {
-                                await ServerGameService.advancePhase(gameState, 'DECLARE_END');
-                            }
-                            gameState.mainPhaseTimeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
-                            gameState.phaseTimerStart = Date.now();
-                            await syncAndSaveState(gameId, gameState);
-                        }
-
-                        const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-                        if (currentPlayerId === 'BOT_PLAYER' || gameState.priorityPlayerId === 'BOT_PLAYER') {
-                            handleBotMove(gameState, gameId);
-                        }
-                    }
-                } else if (independentPhases.includes(gameState.phase)) {
-                    if (phaseElapsed > GAME_TIMEOUTS.INDEPENDENT_PHASE) {
-                        // console.log(`[Timer] Auto-advancing game ${gameId} due to timeout in phase ${gameState.phase}`);
-
-                        if (gameState.phase === 'MULLIGAN' || gameState.phase === 'INIT') {
-                            Object.values(gameState.players).forEach((p: any) => { p.mulliganDone = true; });
-                            // Using advancePhase ensures START -> DRAW -> EROSION transition happens correctly
-                            await ServerGameService.advancePhase(gameState);
-                            gameState.logs.push('调度超时，自动开始游戏。');
-                        } else if (gameState.phase === 'EROSION') {
-                            const playerUid = gameState.playerIds[gameState.currentTurnPlayer];
-                            gameState.logs.push(`侵蚀阶段超时，自动选择方案 A。`);
-                            await ServerGameService.handleErosionChoice(gameState, playerUid, 'A');
-                        } else if (gameState.phase === 'DEFENSE_DECLARATION') {
-                            const defenderUid = gameState.playerIds[gameState.currentTurnPlayer === 0 ? 1 : 0];
-                            await ServerGameService.declareDefense(gameState, defenderUid, undefined);
-                        } else if (gameState.phase === 'COUNTERING') {
-                            await ServerGameService.resolveCounterStack(gameState);
-                        } else if (gameState.phase === 'DAMAGE_CALCULATION') {
-                            await ServerGameService.resolveDamage(gameState);
-                        } else if (gameState.phase === 'DISCARD') {
-                            const playerUid = gameState.playerIds[gameState.currentTurnPlayer];
-                            const player = gameState.players[playerUid];
-                            if (player.hand.length > 6) {
-                                await ServerGameService.discardCard(gameState, playerUid, player.hand[0].gamecardId);
-                            } else {
-                                await ServerGameService.advancePhase(gameState);
-                            }
-                        } else {
-                            await ServerGameService.advancePhase(gameState);
-                        }
-
-                        gameState.phaseTimerStart = Date.now();
+                if (activePlayerUid && gameState.players[activePlayerUid]) {
+                    const player = gameState.players[activePlayerUid];
+                    player.timeRemaining = Math.max(0, (player.timeRemaining ?? 300000) - elapsedSinceLastUpdate);
+                    
+                    if (player.timeRemaining <= 0) {
+                        // TIMEOUT LOSS
+                        gameState.gameStatus = 2;
+                        gameState.winnerId = gameState.playerIds.find(id => id !== activePlayerUid);
+                        gameState.winReason = 'TIMEOUT_LOSS';
+                        gameState.logs.push(`[对局结束] ${player.displayName} 时间已耗尽，判负。`);
+                        
                         await syncAndSaveState(gameId, gameState);
-
-                        const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-                        if (currentPlayerId === 'BOT_PLAYER' || gameState.priorityPlayerId === 'BOT_PLAYER') {
-                            handleBotMove(gameState, gameId);
-                        }
+                        return;
                     }
+                }
+                
+                gameState.phaseTimerStart = now;
+
+                // Sync the deducted time back to DB
+                await syncAndSaveState(gameId, gameState);
+
+                // Bot action check
+                const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+                if (currentPlayerId === 'BOT_PLAYER' || gameState.priorityPlayerId === 'BOT_PLAYER') {
+                    handleBotMove(gameState, gameId);
                 }
             });
         }
     } catch (err) {
-        console.error('[Timer] Error in auto-advance loop:', err);
+        console.error('[Timer] Error in unified timer loop:', err);
     }
-}, GAME_TIMEOUTS.CHECK_INTERVAL); // Check every 2 seconds
+}, GAME_TIMEOUTS.CHECK_INTERVAL);
+
 app.use(express.json());
 
 // Initialize MariaDB Connection

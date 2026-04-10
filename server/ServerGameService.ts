@@ -1818,7 +1818,7 @@ export const ServerGameService = {
       players: {
         [({ uid: "temp", displayName: "temp" } as any).uid]: initialPlayerState
       },
-      phaseTimerStart: Date.now()
+      phaseTimerStart: 0
     };
     return gameState;
   },
@@ -1920,7 +1920,7 @@ export const ServerGameService = {
         [({ uid: "temp", displayName: "temp" } as any).uid]: myState,
         'BOT_PLAYER': botState
       },
-      phaseTimerStart: Date.now()
+      phaseTimerStart: 0
     };
     return gameState;
   },
@@ -2227,7 +2227,7 @@ export const ServerGameService = {
         'BOT_PLAYER': botState
       },
       mode: 'practice',
-      phaseTimerStart: Date.now()
+      phaseTimerStart: 0
     };
 
     // Correctly set isTurn for the initial player
@@ -2269,8 +2269,7 @@ export const ServerGameService = {
       playerIds: [uid1, uid2], gameStatus: 1, logs: ['匹配成功。对局开始'],
       players: { [uid1]: p1, [uid2]: p2 },
       mode: 'match',
-      phaseTimerStart: 0,
-      mainPhaseTimeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL
+      phaseTimerStart: 0
     };
 
     // Correctly set isTurn for the initial player

@@ -1143,7 +1143,7 @@ io.on('connection', (socket) => {
             // Start the phase timer if it hasn't started yet and players are ready
             const initializedCount = Object.keys(gameState.players).length;
             const isInitial = gameState.phase === 'INIT' || gameState.phase === 'MULLIGAN';
-            if (isInitial && initializedCount >= 2 && (!gameState.phaseTimerStart || gameState.phaseTimerStart === 0)) {
+            if (isInitial && initializedCount >= 2 && (gameState.phase === 'INIT' || !gameState.phaseTimerStart || gameState.phaseTimerStart === 0)) {
                 if (gameState.phase === 'INIT') {
                     gameState.phase = 'MULLIGAN';
                     gameState.status = 'ACTIVE';

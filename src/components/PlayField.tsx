@@ -499,10 +499,6 @@ const PlayerHalf: React.FC<{
 export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers, selectedDefender, allianceInitiator, timer }) => {
   return (
     <div className="relative w-full h-full max-w-7xl mx-auto bg-[#0a0a0a] border-2 border-[#1a1a1a] rounded-xl shadow-2xl font-mono text-white select-none flex flex-col">
-      {/* Grid Pattern Background */}
-      <div className="absolute inset-0 opacity-10 pointer-events-none"
-        style={{ backgroundImage: 'radial-gradient(circle, #f27d26 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
-
       {/* Background Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
 
@@ -547,32 +543,6 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
         />
       </div>
 
-      {/* STACK AREA */}
-      <div className="h-10 shrink-0 border-y border-white/10 bg-white/5 flex items-center justify-center px-6 relative z-10">
-        <div className="flex items-center gap-3">
-          {stack.length === 0 && <span className="text-[8px] text-white/10 uppercase font-bold italic tracking-widest">Stack Empty</span>}
-          {stack.map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ scale: 0.8, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              className="w-8 relative group cursor-pointer"
-              onContextMenu={(e) => {
-                e.preventDefault();
-                onPreviewCard?.(item.card);
-              }}
-            >
-              <CardComponent card={item.card} disableZoom />
-              <div className={cn(
-                "absolute -top-1.5 -left-1.5 px-1 py-0.5 rounded text-[6px] font-black uppercase italic shadow-lg",
-                item.ownerUid === myUid ? "bg-[#f27d26] text-black" : "bg-red-600 text-white"
-              )}>
-                {item.ownerUid === myUid ? "Me" : "Opp"}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
 
       {/* Player Half */}
       <div className="flex-1 min-h-0">

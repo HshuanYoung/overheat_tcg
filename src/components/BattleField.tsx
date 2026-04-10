@@ -11,7 +11,7 @@ import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flag, Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers, Sparkles } from 'lucide-react';
+import { Flag, Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers, Sparkles, Flame } from 'lucide-react';
 import { cn, getCardImageUrl } from '../lib/utils';
 
 export const BattleField: React.FC = () => {
@@ -352,13 +352,6 @@ export const BattleField: React.FC = () => {
       }
     }
 
-    // Direct Defense Selection
-    if (game.phase === 'DEFENSE_DECLARATION' && !me.isTurn) {
-      if (zone === 'unit' && me.unitZone.some(u => u?.gamecardId === card.gamecardId) && !card.isExhausted) {
-        handleDeclareDefense(card.gamecardId);
-        return;
-      }
-    }
 
     // Default: Show Action Menu
     if (e) {
@@ -910,8 +903,14 @@ export const BattleField: React.FC = () => {
                         <span className="inline-block w-2 h-2 rounded-full animate-pulse bg-orange-500" />
                       )}
                     </span>
-                    <span className="text-xl font-black italic text-white uppercase tracking-wider">
-                      {game.phase.replace(/_/g, ' ')}
+                    <span className="text-xl font-black italic text-white uppercase tracking-wider flex items-center gap-3">
+                      {game.phase === 'BATTLE_DECLARATION' && <Sword className="w-6 h-6 text-red-500" />}
+                      {game.phase === 'BATTLE_FREE' && <Sword className="w-6 h-6 text-orange-500" />}
+                      {game.phase === 'END' && <LogOut className="w-6 h-6 text-zinc-400" />}
+                      {(game.phase === 'BATTLE_DECLARATION' || game.phase === 'BATTLE_FREE' || game.currentTurnPlayer === (game.playerIds[0] === myUid ? 0 : 1)) && game.battleState?.attackers.length > 0 && <Flame className="w-6 h-6 text-red-500 animate-pulse" />}
+                      {game.phase === 'COUNTERING' 
+                        ? `${game.previousPhase?.replace(/_/g, ' ') || 'MAIN'}|COUNTERING` 
+                        : game.phase.replace(/_/g, ' ')}
                     </span>
                   </div>
                 </div>
@@ -935,6 +934,43 @@ export const BattleField: React.FC = () => {
               }
             </div>
             {game.playerIds[game.currentTurnPlayer] === myUid ? "YOUR ACTION" : "OPPONENT ACTION"}
+          </div>
+        </div>
+
+        {/* Global Stack Display at the Top */}
+        <div className="h-20 bg-black/60 border-b border-white/5 flex items-center px-6 gap-4 overflow-x-auto custom-scrollbar">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#f27d26]" />
+            <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">Stack / 对抗链</span>
+          </div>
+          <div className="h-8 w-px bg-white/10" />
+          <div className="flex items-center gap-3 h-full py-2">
+            {game.counterStack.map((item, i) => (
+              <motion.div
+                key={`${i}-${item.timestamp}`}
+                initial={{ scale: 0.8, opacity: 0, x: -20 }}
+                animate={{ scale: 1, opacity: 1, x: 0 }}
+                className="h-full aspect-[3/4] relative group cursor-pointer"
+                onClick={() => setPreviewCard(item.card || null)}
+              >
+                {item.card ? (
+                  <CardComponent card={item.card} disableZoom />
+                ) : (
+                  <div className="w-full h-full bg-zinc-900 border border-red-500/30 rounded flex items-center justify-center">
+                    <Zap className="w-4 h-4 text-red-500/50" />
+                  </div>
+                )}
+                <div className={cn(
+                  "absolute -top-1 -left-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg z-10",
+                  item.ownerUid === myUid ? "bg-[#f27d26] text-black" : "bg-red-600 text-white"
+                )}>
+                  {item.ownerUid === myUid ? "ME" : "OPP"}
+                </div>
+              </motion.div>
+            ))}
+            {game.counterStack.length === 0 && (
+              <span className="text-[10px] text-white/10 uppercase font-bold italic tracking-widest">No active effects in stack</span>
+            )}
           </div>
         </div>
 
@@ -2077,7 +2113,7 @@ export const BattleField: React.FC = () => {
                 )}
 
 
-                {(game.phase === 'BATTLE_DECLARATION' || game.phase === 'BATTLE_FREE') && (
+                {game.phase === 'BATTLE_DECLARATION' && (
                   <>
                     <motion.button
                       whileHover={{ scale: 1.05, y: -5 }}
@@ -2135,21 +2171,9 @@ export const BattleField: React.FC = () => {
                         }}
                       >
                         <ShieldCheck className="w-6 h-6" />
-                        END FREE BATTLE
+                        END BATTLE FREE
                       </motion.button>
                     )}
-                    <motion.button
-                      whileHover={{ scale: 1.05, y: -5 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="w-full h-18 py-5 px-10 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-3xl text-sm font-black uppercase italic tracking-widest transition-all shadow-[0_20px_40px_rgba(220,38,38,0.4)] flex items-center justify-center gap-5 border-t border-white/20"
-                      onClick={() => {
-                        GameService.advancePhase(gameId!, 'PROPOSE_DAMAGE_CALCULATION');
-                        setShowPhaseMenu(false);
-                      }}
-                    >
-                      <Zap className="w-6 h-6" />
-                      DAMAGE RESOLVE
-                    </motion.button>
                   </>
                 )}
 

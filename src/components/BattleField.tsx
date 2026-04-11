@@ -59,6 +59,10 @@ export const BattleField: React.FC = () => {
     effects: { effect: CardEffect; index: number }[];
     triggerLocation: TriggerLocation;
   } | null>(null);
+  const [allianceConfirmation, setAllianceConfirmation] = useState<{
+    attacker1: Card;
+    attacker2: Card;
+  } | null>(null);
 
   // Universal Visual Timer Logic
   useEffect(() => {
@@ -165,6 +169,14 @@ export const BattleField: React.FC = () => {
     setSelectedQueryIds([]);
     setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
   }, [game?.pendingQuery?.id]);
+
+  // Clear alliance selection if we leave the selection phase
+  useEffect(() => {
+    if (game?.phase !== 'BATTLE_DECLARATION') {
+      setAllianceTargetSelection(null);
+      setAllianceConfirmation(null);
+    }
+  }, [game?.phase]);
 
 
 
@@ -347,7 +359,15 @@ export const BattleField: React.FC = () => {
       const isPartnerUnit = me.unitZone.some(c => c?.gamecardId === card.gamecardId) && canUnitAttack(card) && card.gamecardId !== allianceTargetSelection;
 
       if (zone === 'unit' && isPartnerUnit) {
-        // Instead of immediate action, fall through to show the Action Menu with "Attack (Allied Forces)"
+        const attacker1 = me.unitZone.find(c => c?.gamecardId === allianceTargetSelection);
+        if (attacker1) {
+          setAllianceConfirmation({ attacker1, attacker2: card });
+          setAllianceTargetSelection(null);
+          return;
+        }
+      } else if (zone === 'unit' && card.gamecardId === allianceTargetSelection) {
+        setAllianceTargetSelection(null);
+        return;
       } else {
         return;
       }
@@ -1431,22 +1451,6 @@ export const BattleField: React.FC = () => {
                 })()
               )}
 
-              {/* Action: Attack (Allied Forces) */}
-              {allianceTargetSelection && cardMenu.zone === 'unit' && me.unitZone.some(c => c?.gamecardId === cardMenu.card.gamecardId) && (
-                <motion.button
-                  whileHover={{ scale: 1.1, x: -3 }}
-                  className="px-3 py-1 text-[9px] font-black tracking-tighter text-red-50 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.4)] flex items-center gap-2 border border-red-400/50"
-                  onClick={() => {
-                    handleDeclareAttack([allianceTargetSelection, cardMenu.card.gamecardId], true);
-                    setAllianceTargetSelection(null);
-                    setCardMenu(null);
-                  }}
-                >
-                  <Sword className="w-2.5 h-2.5 fill-current" />
-                  ALLIANCE
-                </motion.button>
-              )}
-
               {/* Action: Defend (Blue) */}
               {game.phase === 'DEFENSE_DECLARATION' && opponent?.isTurn && cardMenu.zone === 'unit' && (
                 (() => {
@@ -1501,6 +1505,72 @@ export const BattleField: React.FC = () => {
       </AnimatePresence>
 
 
+
+      {/* Alliance Confirmation Prompt */}
+      <AnimatePresence>
+        {allianceConfirmation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-8"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-zinc-900 border border-orange-500/50 p-10 rounded-3xl flex flex-col items-center gap-8 shadow-[0_0_100px_rgba(249,115,22,0.2)] max-w-3xl w-full"
+            >
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-16 h-16 bg-orange-500/10 rounded-2xl flex items-center justify-center shadow-inner">
+                  <Sword className="w-10 h-10 text-orange-500" />
+                </div>
+                <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter mt-4">确认联军宣告 (CONFIRM ALLIANCE)</h2>
+                <p className="text-zinc-400 text-sm font-medium tracking-wide">是否宣告这两个单位进行联军攻击？</p>
+              </div>
+
+              <div className="flex gap-8 items-center">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-40 aspect-[3/4] rounded-xl overflow-hidden border-2 border-white/10 shadow-2xl">
+                    <CardComponent card={allianceConfirmation.attacker1} disableZoom />
+                  </div>
+                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Attacker 1</span>
+                </div>
+
+                <div className="flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                    <Zap className="w-6 h-6 text-orange-500 animate-pulse" />
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-40 aspect-[3/4] rounded-xl overflow-hidden border-2 border-white/10 shadow-2xl">
+                    <CardComponent card={allianceConfirmation.attacker2} disableZoom />
+                  </div>
+                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Attacker 2</span>
+                </div>
+              </div>
+
+              <div className="flex gap-6 w-full">
+                <button
+                  onClick={() => {
+                    handleDeclareAttack([allianceConfirmation.attacker1.gamecardId, allianceConfirmation.attacker2.gamecardId], true);
+                    setAllianceConfirmation(null);
+                  }}
+                  className="flex-1 py-5 bg-orange-600 hover:bg-orange-500 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all shadow-xl hover:scale-[1.02] border border-orange-400/50"
+                >
+                  确认宣告 (CONFIRM ALLIANCE)
+                </button>
+                <button
+                  onClick={() => setAllianceConfirmation(null)}
+                  className="flex-1 py-5 bg-zinc-800 hover:bg-zinc-700 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all border border-white/10"
+                >
+                  取消 (CANCEL)
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Alliance Target Selection Overlay */}
       <AnimatePresence>

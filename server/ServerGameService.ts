@@ -1375,6 +1375,7 @@ export const ServerGameService = {
         }
         unit.hasAttackedThisTurn = false;
         unit.usedShenyiThisTurn = false;
+        unit.inAllianceGroup = false;
       }
     });
 

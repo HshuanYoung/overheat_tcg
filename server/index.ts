@@ -1268,7 +1268,7 @@ io.on('connection', (socket) => {
                     }
                 } else if (action === 'SUBMIT_QUERY_CHOICE') {
                     const { queryId, selections } = payload;
-                    await ServerGameService.handleQueryChoice(gameState, myUid, queryId, selections);
+                    await ServerGameService.handleQueryChoice(gameState, myUid, queryId, selections, syncCallback);
                 } else if (action === 'END_PHASE') {
                     if (player.isTurn || gameState.phase === 'BATTLE_FREE' || gameState.phase === 'COUNTERING') {
                         await advancePhase(gameState, gameId, myUid, socket, payload);

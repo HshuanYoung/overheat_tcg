@@ -705,12 +705,20 @@ export const ServerGameService = {
       gameState.currentProcessingItem = null;
       if (onUpdate) await onUpdate(gameState);
       
+      // PAUSE RESOLUTION: If an effect triggered a user choice, stop here.
+      // We will resume once handleQueryChoice is called and finished.
+      if (gameState.pendingQuery) {
+        gameState.logs.push(`[连锁结算] 暂停结算以等待玩家选择...`);
+        return gameState;
+      }
+
       // Small pause between multiple items
       if (gameState.counterStack.length > 0) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
+    // CLEANUP: All items resolved
     gameState.isResolvingStack = false;
     gameState.isCountering = 0;
     gameState.priorityPlayerId = undefined;
@@ -750,7 +758,7 @@ export const ServerGameService = {
     return this.resolveCounterStack(gameState, onUpdate);
   },
 
-  async handleQueryChoice(gameState: GameState, playerUid: string, queryId: string, selections: string[]) {
+  async handleQueryChoice(gameState: GameState, playerUid: string, queryId: string, selections: string[], onUpdate?: (state: GameState) => Promise<void>) {
     // console.log(`[Server] handleQueryChoice: player=${playerUid}, queryId=${queryId}, selections=`, selections);
 
     if (!gameState.pendingQuery || gameState.pendingQuery.id !== queryId) {
@@ -823,6 +831,11 @@ export const ServerGameService = {
         gameState.logs.push(`[系统] 正在执行脚本回调 ${effect.id || effectIndex}`);
         effect.resolve(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
         EventEngine.recalculateContinuousEffects(gameState);
+        
+        // RESUME RESOLUTION: If this choice was part of a sequential settlement, resume it.
+        if (gameState.isResolvingStack) {
+          await this.resolveCounterStack(gameState, onUpdate);
+        }
         return gameState;
       } else {
         gameState.logs.push(`[错误] EFFECT_RESOLVE 找不到有效回调 (index: ${effectIndex}, id: ${effectId})`);
@@ -872,6 +885,11 @@ export const ServerGameService = {
       }
       gameState.battleState = undefined;
       gameState.phaseTimerStart = Date.now();
+
+      // RESUME RESOLUTION
+      if (gameState.isResolvingStack) {
+        await this.resolveCounterStack(gameState, onUpdate);
+      }
       return gameState;
     }
 
@@ -929,6 +947,12 @@ export const ServerGameService = {
     }
 
     this.checkBattleInterruption(gameState);
+
+    // RESUME RESOLUTION: If this choice was part of a sequential settlement, resume it.
+    if (gameState.isResolvingStack) {
+      await this.resolveCounterStack(gameState, onUpdate);
+    }
+
     return gameState;
   },
 

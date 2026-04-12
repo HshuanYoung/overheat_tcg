@@ -144,6 +144,11 @@ export const ServerGameService = {
       }
     }
 
+    // 5. Name-lock Check
+    if (player.negatedNames && player.negatedNames.includes(card.fullName)) {
+      return false;
+    }
+
     return true;
   },
 
@@ -642,6 +647,11 @@ export const ServerGameService = {
       if (stackItem.type === 'PHASE_END') {
         gameState.logs.push(`[连锁结算] Link ${gameState.counterStack.length + 1} (阶段请求) 被后续动作中断，取消该请求。`);
         continue; 
+      }
+
+      if (stackItem.isNegated) {
+        gameState.logs.push(`[连锁结算] Link ${gameState.counterStack.length + 1} 已被无效，跳过执行。`);
+        continue;
       }
 
       const card = stackItem.card;
@@ -1490,7 +1500,7 @@ export const ServerGameService = {
       resolutions.forEach(record => {
         if (record.effect.resolve) {
           const player = gameState.players[record.playerUid];
-          record.effect.resolve(record.card, gameState, player);
+          record.effect.resolve(record.card, gameState, player, record.event);
         }
       });
     }
@@ -1863,22 +1873,33 @@ export const ServerGameService = {
     });
 
     player.timeRemaining = (gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL);
-    const unitsToReset = player.unitZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
+    const unitsToReset = player.unitZone.filter(card => 
+      card && card.isExhausted && (card.canResetCount === 0 || card.canResetCount === undefined)
+    );
+    const itemsToReset = player.itemZone.filter(card => 
+      card && card.isExhausted && (card.canResetCount === 0 || card.canResetCount === undefined)
+    );
+    
+    // Check if any unit/item has a freeze counter that needs aging
+    const unitsToAge = player.unitZone.filter(card => 
+      card && card.canResetCount !== undefined && card.canResetCount > 0
+    );
+    const itemsToAge = player.itemZone.filter(card => 
+      card && card.canResetCount !== undefined && card.canResetCount > 0
+    );
 
-    const itemsToReset = player.itemZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
-
-    if (unitsToReset.length === 0 && itemsToReset.length === 0) {
+    if (unitsToReset.length === 0 && itemsToReset.length === 0 && unitsToAge.length === 0 && itemsToAge.length === 0) {
       gameState.logs.push(`${player.displayName} 没有可调度的单位，直接进入抽牌阶段。`);
     } else {
       player.unitZone.forEach(card => {
-        if (card && card.canResetCount === 0) {
+        if (card && (card.canResetCount === 0 || card.canResetCount === undefined)) {
           this.readyCard(card);
         } else if (card && card.canResetCount !== undefined && card.canResetCount > 0) {
           card.canResetCount -= 1;
         }
       });
       player.itemZone.forEach(card => {
-        if (card && card.canResetCount === 0) {
+        if (card && (card.canResetCount === 0 || card.canResetCount === undefined)) {
           this.readyCard(card);
         } else if (card && card.canResetCount !== undefined && card.canResetCount > 0) {
           card.canResetCount -= 1;

@@ -110,11 +110,11 @@ async function handleBotMove(gameState: any, gameId: string) {
                     }
                     const currentGameState = typeof stateRows[0].state === 'string' ? JSON.parse(stateRows[0].state) : stateRows[0].state;
                     ServerGameService.hydrateGameState(currentGameState);
-                    
+
                     const syncCallback = async (state: any) => {
                         await syncAndSaveState(gameId, state);
                     };
-                    
+
                     await ServerGameService.botMove(currentGameState, syncCallback);
 
                     await syncAndSaveState(gameId, currentGameState);
@@ -177,7 +177,7 @@ async function saveMatchLog(gameState: any, gameId?: string) {
     const p2 = gameState.playerIds[1] || 'Unknown';
     const winner = gameState.winnerId || 'Draw/None';
     const reason = gameState.winReason || 'Unknown';
-    
+
     const history = matchLogHistory.get(gameId) || [];
     const logContent = [
         `Player1: ${p1}`,
@@ -299,7 +299,7 @@ setInterval(async () => {
 
                 const now = Date.now();
                 const elapsedSinceLastUpdate = now - (gameState.phaseTimerStart || now);
-                
+
                 // Identify active player(s) for the timer
                 let activePlayerUid: string | undefined;
 
@@ -323,19 +323,19 @@ setInterval(async () => {
                 if (activePlayerUid && gameState.players[activePlayerUid]) {
                     const player = gameState.players[activePlayerUid];
                     player.timeRemaining = Math.max(0, (player.timeRemaining ?? (gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : 300000)) - elapsedSinceLastUpdate);
-                    
+
                     if (player.timeRemaining <= 0) {
                         // TIMEOUT LOSS
                         gameState.gameStatus = 2;
                         gameState.winnerId = gameState.playerIds.find(id => id !== activePlayerUid);
                         gameState.winReason = 'TIMEOUT_LOSS';
                         gameState.logs.push(`[对局结束] ${player.displayName} 时间已耗尽，判负。`);
-                        
+
                         await syncAndSaveState(gameId, gameState);
                         return;
                     }
                 }
-                
+
                 gameState.phaseTimerStart = now;
 
                 // Sync the deducted time back to DB
@@ -488,7 +488,7 @@ app.post('/api/games/friend/join', async (req, res): Promise<void> => {
         }
         gameState.playerIds.push(user.userId);
         gameState.status = 'READY';
-        
+
         await syncAndSaveState(gameId, gameState);
         res.json({ gameId });
     } catch (err) {
@@ -778,7 +778,7 @@ app.get('/api/user/collection', async (req, res): Promise<void> => {
 // Store - Buy Pack Endpoint
 const CARD_POOL = [
     '10400002', '10400003', '10401001', '10401004', '10401005', '10401008',
-    '10402006', '10402007', '20400001', '20400002', '20400003', '20400004',
+    '10402006', '10402007', '20400001', '20400002', '20400013', '20400004',
     '20400005', '20400007', '20403006', '30400002', '30401001', '99999999'
 ];
 
@@ -786,7 +786,7 @@ const CARD_POOL = [
 const CARD_RARITIES: Record<string, string> = {
     '10400002': 'U', '10400003': 'U', '10401001': 'SR', '10401004': 'SR',
     '10401005': 'C', '10401008': 'SR', '10402006': 'R', '10402007': 'PR',
-    '20400001': 'R', '20400002': 'U', '20400003': 'R', '20400004': 'U',
+    '20400001': 'R', '20400002': 'U', '20400013': 'R', '20400004': 'U',
     '20400005': 'U', '20400007': 'U', '20403006': 'U', '30400002': 'U',
     '30401001': 'R', '99999999': 'UR',
 };
@@ -1315,7 +1315,7 @@ io.on('connection', (socket) => {
                 if (gameState.gameStatus !== 2) {
                     await ServerGameService.checkTriggeredEffects(gameState);
                 }
-                
+
                 // Final state sync and save
                 await syncAndSaveState(gameId, gameState);
                 if (gameState.gameStatus !== 2) {
@@ -1326,7 +1326,7 @@ io.on('connection', (socket) => {
             }
         });
     });
- 
+
     socket.on('leaveGame', (gameId: string) => {
         if (gameId) {
             // console.log(`[Socket] User ${((socket as any).user?.userId) || socket.id} leaving game ${gameId}`);
@@ -1349,7 +1349,7 @@ const start = async () => {
 
         const PORT = process.env.PORT || 3001;
         httpServer.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
+            console.log(`Server running on port ${PORT}`);
         });
     } catch (err) {
         console.error('[Server] Fatal initialization error:', err);

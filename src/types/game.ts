@@ -156,7 +156,7 @@ export interface CardEffect {
 
   execute?: (card: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => void; // The function to execute when the effect is triggered
   onQueryResolve?: (card: Card, gameState: GameState, playerState: PlayerState, selections: string[], context?: any) => void; // Resolve sequential steps after a query
-  resolve?: (card: Card, gameState: GameState, playerState: PlayerState) => void; // Post-processing logic (e.g. end of turn)
+  resolve?: (card: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => void; // Post-processing logic (e.g. end of turn)
   atomicEffects?: AtomicEffect[]; // Structured atomic effects
   content?: string; // Description of the effect: Move, Draw, Add Power, etc.
   description: string; // Human readable text
@@ -234,6 +234,7 @@ export interface PlayerState {
   isGoddessMode?: boolean;
   isHandPublic?: number;
   timeRemaining: number;
+  negatedNames?: string[]; // Names of cards that cannot be used this turn
 }
 
 export type StackItemType = 'PLAY' | 'EFFECT' | 'ATTACK' | 'PHASE_END';
@@ -248,6 +249,7 @@ export interface StackItem {
   isAlliance?: boolean; // For ATTACK
   data?: any; // Generic data for effects (e.g. query results)
   timestamp: number;
+  isNegated?: boolean;
 }
 
 

@@ -91,6 +91,7 @@ export class EventEngine {
           if (card.baseGodMark !== undefined) card.godMark = card.baseGodMark;
           if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
           if (card.baseCanActivateEffect !== undefined) card.canActivateEffect = card.baseCanActivateEffect;
+          card.influencingEffects = [];
         }
       });
     };

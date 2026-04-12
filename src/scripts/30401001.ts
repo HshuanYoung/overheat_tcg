@@ -1,5 +1,6 @@
 import { Card, GameState, PlayerState, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { EventEngine } from '../services/EventEngine';
 
 const isNonCombat = (gameState: GameState, cardId: string) => {
   const isAttacking = (gameState.battleState?.attackers || []).includes(cardId);
@@ -17,23 +18,19 @@ const universalEquipEffect: CardEffect = {
   condition: (gameState) => gameState.phase === 'MAIN',
   execute: (card, gameState, playerState) => {
     const currentHostId = card.equipTargetId;
-    const otherUnits = playerState.unitZone.filter(u => u && u.gamecardId !== currentHostId) as Card[];
+    const options: any[] = [];
 
-    // BUG FIX 4: If already equipped and no other units, skip query and just unequip
-    if (currentHostId && otherUnits.length === 0) {
-      gameState.logs.push(`${card.fullName} 解除了装备状态 (无其他可装备目标)`);
-      card.equipTargetId = undefined;
-      return;
-    }
-
-    // Construct options: other units + self (if equipped)
-    const options = otherUnits.map(u => ({ card: u, source: 'UNIT' as any }));
     if (currentHostId) {
+      // IF EQUIPPED: Only allow disarming (selecting self)
       options.push({ card: card, source: 'ITEM' as any });
+    } else {
+      // IF NOT EQUIPPED: Allow selecting any unit to equip
+      const units = playerState.unitZone.filter(u => u !== null) as Card[];
+      options.push(...units.map(u => ({ card: u, source: 'UNIT' as any })));
     }
 
     if (options.length === 0) {
-      gameState.logs.push(`没有可供装备的目标单位`);
+      gameState.logs.push(`[系统] 没有可供操作的目标单位`);
       return;
     }
 
@@ -42,8 +39,8 @@ const universalEquipEffect: CardEffect = {
       type: 'SELECT_CARD',
       playerUid: playerState.uid,
       options: options,
-      title: currentHostId ? '重新装备 或 解除装备' : '选择装备目标',
-      description: currentHostId ? '选择另一个单位重新装备，或者选择此装备本身以解除装备状态。' : `选择一个单位装备 ${card.fullName}`,
+      title: currentHostId ? '解除装备' : '选择装备目标',
+      description: currentHostId ? '选择卡牌本身以确认解除装备状态。' : `选择一个单位进行装备 ${card.fullName}`,
       minSelections: 1,
       maxSelections: 1,
       callbackKey: 'EFFECT_RESOLVE',
@@ -56,15 +53,17 @@ const universalEquipEffect: CardEffect = {
   onQueryResolve: (card, gameState, playerState, selections, context) => {
     const selectedId = selections[0];
     if (selectedId === card.gamecardId) {
-      // Unequip
-      gameState.logs.push(`${card.fullName} 解除了装备状态`);
+      // Unequip action
+      gameState.logs.push(`[效果] ${card.fullName} 已解除装备`);
       card.equipTargetId = undefined;
     } else {
-      // Equip or Move
+      // Equip or Re-equip action
       card.equipTargetId = selectedId;
       const targetUnit = playerState.unitZone.find(u => u?.gamecardId === selectedId);
-      gameState.logs.push(`${card.fullName} 装备到了 ${targetUnit?.fullName || '未知单位'}`);
+      gameState.logs.push(`[效果] ${card.fullName} 装备到了 ${targetUnit?.fullName || '未知单位'}`);
     }
+    // After equipment change, recalculate values
+    EventEngine.recalculateContinuousEffects(gameState);
   }
 };
 
@@ -74,21 +73,19 @@ const handActivationEffect: CardEffect = {
   description: '【起】：我方场上存在2个或以上蓝色单位。支付2费用，在手牌中发动：选择我方2个非神蚀单位（不能是战斗中的单位）返回持有者手牌。之后，将这张卡放置在战场上，并选择我方场上一个单位装备。',
   triggerLocation: ['HAND'],
   condition: (gameState, playerState) => {
-    // BUG FIX 1 & 2: Only trigger if there are 2+ non-combat blue units
     const eligibleBlueUnits = playerState.unitZone.filter(u =>
       u && u.color === 'BLUE' && isNonCombat(gameState, u.gamecardId)
     );
     return eligibleBlueUnits.length >= 2;
   },
   execute: (card, gameState, playerState) => {
-    const queryId = Math.random().toString(36).substring(7);
     gameState.pendingQuery = {
-      id: queryId,
+      id: Math.random().toString(36).substring(7),
       type: 'SELECT_PAYMENT',
       playerUid: playerState.uid,
       options: [],
-      title: '发动效果：支付费用',
-      description: '请支付2费用以发动效果。',
+      title: '发动歌月: 支付费用',
+      description: '请支付 2 点费用以从手牌发动效果。',
       minSelections: 1,
       maxSelections: 1,
       callbackKey: 'EFFECT_RESOLVE',
@@ -96,25 +93,20 @@ const handActivationEffect: CardEffect = {
       paymentColor: card.color,
       context: {
         sourceCardId: card.gamecardId,
-        effectIndex: 1, // Index of handActivationEffect
+        effectId: 'hand_activation',
         step: 1
       }
     };
   },
   onQueryResolve: (card, gameState, playerState, selections, context) => {
-    gameState.logs.push(`[脚本] 30401001 resolve 开始, step: ${context.step}`);
-
     if (context.step === 1) {
       // Step 1: After payment, select 2 units to return to hand
-      gameState.logs.push(`[脚本] Step 1: 正在选择返回手牌的目标`);
       const targets = playerState.unitZone.filter(u =>
         u && !u.godMark && isNonCombat(gameState, u.gamecardId)
       ) as Card[];
 
-      gameState.logs.push(`[脚本] 符合条件的目标数量: ${targets.length}`);
-
       if (targets.length < 2) {
-        gameState.logs.push(`[错误] 符合条件的非神蚀非战斗单位不足2个`);
+        gameState.logs.push(`[系统] 符合条件的非神蚀非战斗单位不足 2 个，发动失败。`);
         return;
       }
 
@@ -124,24 +116,14 @@ const handActivationEffect: CardEffect = {
         playerUid: playerState.uid,
         options: targets.map(t => ({ card: t, source: 'UNIT' as any })),
         title: '选择返回手牌的单位',
-        description: '请选择2个非神蚀且不在战斗中的单位。',
+        description: '请选择 2 个我方非神蚀且不在战斗中的单位返回手牌。',
         minSelections: 2,
         maxSelections: 2,
         callbackKey: 'EFFECT_RESOLVE',
         context: { ...context, step: 2 }
       };
-      gameState.logs.push(`[脚本] Step 1 完成, 已发送选择卡牌请求`);
     } else if (context.step === 2) {
-      gameState.logs.push(`[脚本] Step 2: 正在处理单位返回并移动装备`);
-      // Step 2: Return units to hand, move self to field, then select equip target
-      for (const id of selections) {
-        const targetCard = playerState.unitZone.find(c => c?.gamecardId === id);
-        if (targetCard) {
-          gameState.logs.push(`[效果] ${targetCard.fullName} 返回了手牌`);
-        }
-      }
-
-      // Let's use AtomicEffectExecutor for Step 2
+      // Step 2: Return units to hand, move self to field
       selections.forEach(id => {
         AtomicEffectExecutor.execute(gameState, playerState.uid, {
           type: 'MOVE_FROM_FIELD',
@@ -157,15 +139,22 @@ const handActivationEffect: CardEffect = {
         destinationZone: 'ITEM'
       }, card);
 
-      // Select equip target
+      // Select equip target among remaining units
       const units = playerState.unitZone.filter(u => u !== null) as Card[];
+      
+      if (units.length === 0) {
+        gameState.logs.push(`[系统] ${card.fullName} 已登场，但场上没有剩余可装备的目标。`);
+        card.equipTargetId = undefined;
+        return;
+      }
+
       gameState.pendingQuery = {
         id: Math.random().toString(36).substring(7),
         type: 'SELECT_CARD',
         playerUid: playerState.uid,
         options: units.map(u => ({ card: u, source: 'UNIT' as any })),
         title: '选择装备目标',
-        description: `请选择一个单位装备 ${card.fullName}`,
+        description: `请选择一个单位进行装备。`,
         minSelections: 1,
         maxSelections: 1,
         callbackKey: 'EFFECT_RESOLVE',
@@ -176,19 +165,28 @@ const handActivationEffect: CardEffect = {
       const targetId = selections[0];
       card.equipTargetId = targetId;
       const targetUnit = findCardInUnitZone(gameState, targetId);
-      gameState.logs.push(`${card.fullName} 装备到了 ${targetUnit?.fullName || '未知单位'}`);
+      gameState.logs.push(`[效果] ${card.fullName} 装备到了 ${targetUnit?.fullName || '未知单位'}`);
+      EventEngine.recalculateContinuousEffects(gameState);
     }
   }
 };
 
-
-// Continuous Effect helper
 const applyContinuousBonus = (gameState: GameState, card: Card) => {
   if (card.equipTargetId) {
     const target = findCardInUnitZone(gameState, card.equipTargetId);
     if (target) {
       target.power = (target.power || 0) + 1000;
       target.damage = (target.damage || 0) + 1;
+
+      if (!target.influencingEffects) target.influencingEffects = [];
+      target.influencingEffects.push({
+        sourceCardName: card.fullName,
+        description: '该卡片使其力量值增加1000，伤害值增加1'
+      });
+    } else {
+      // Release equipment if target is gone
+      gameState.logs.push(`[系统] ${card.fullName} 的装备对象已离开战场，装备已解除。`);
+      card.equipTargetId = undefined;
     }
   }
 };
@@ -208,7 +206,7 @@ const card: Card = {
   type: 'ITEM',
   isEquip: true,
   color: 'BLUE',
-  gamecardId: null,
+  gamecardId: null as any,
   colorReq: { 'BLUE': 2 },
   faction: '无',
   acValue: 3,
@@ -220,6 +218,7 @@ const card: Card = {
     universalEquipEffect,
     handActivationEffect,
     {
+      id: 'continuous_bonus',
       type: 'CONTINUOUS',
       description: '装备此卡的单位：伤害+1，力量+1000。',
       applyContinuous: applyContinuousBonus
@@ -227,7 +226,7 @@ const card: Card = {
   ],
   rarity: 'R',
   availableRarities: ['R'],
-  uniqueId: null,
+  uniqueId: null as any,
 };
 
 export default card;

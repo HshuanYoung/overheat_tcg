@@ -19,7 +19,9 @@ export const ServerGameService = {
           execute: originalEffect.execute,
           cost: originalEffect.cost,
           onQueryResolve: originalEffect.onQueryResolve,
-          resolve: originalEffect.resolve
+          resolve: originalEffect.resolve,
+          applyContinuous: originalEffect.applyContinuous,
+          removeContinuous: originalEffect.removeContinuous
         };
       });
     }

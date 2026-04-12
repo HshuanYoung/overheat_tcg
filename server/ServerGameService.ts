@@ -1861,7 +1861,7 @@ export const ServerGameService = {
       }
     });
 
-    player.timeRemaining = GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
+    player.timeRemaining = (gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL);
     const unitsToReset = player.unitZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
 
     const itemsToReset = player.itemZone.filter(c => c && c.isExhausted && c.canResetCount === 0);
@@ -2451,7 +2451,7 @@ export const ServerGameService = {
     return array;
   },
 
-  async createPracticeGameState(deck: Card[], playerUid: string, playerName: string): Promise<GameState> {
+  async createPracticeGameState(deck: Card[], playerUid: string, playerName: string, turnTimerLimit?: number): Promise<GameState> {
     const initializedDeck = deck.map(card => ({
       ...card,
       basePower: card.basePower ?? card.power,
@@ -2490,7 +2490,7 @@ export const ServerGameService = {
       mulliganDone: false,
       hasExhaustedThisTurn: [],
       isHandPublic: 0,
-      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
+      timeRemaining: turnTimerLimit ? turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     const botState: PlayerState = {
@@ -2510,7 +2510,7 @@ export const ServerGameService = {
       mulliganDone: true,
       hasExhaustedThisTurn: [],
       isHandPublic: 0,
-      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
+      timeRemaining: turnTimerLimit ? turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     // Draw 4
@@ -2539,7 +2539,8 @@ export const ServerGameService = {
         'BOT_PLAYER': botState
       },
       mode: 'practice',
-      phaseTimerStart: 0
+      phaseTimerStart: 0,
+      turnTimerLimit
     };
 
     // Correctly set isTurn for the initial player
@@ -2549,7 +2550,7 @@ export const ServerGameService = {
     return gameState;
   },
 
-  async createMatchGameState(uid1: string, deck1: Card[], uid2: string, deck2: Card[]): Promise<GameState> {
+  async createMatchGameState(uid1: string, deck1: Card[], uid2: string, deck2: Card[], turnTimerLimit?: number): Promise<GameState> {
     const init1 = this.assignGameCardIds(this.shuffle(deck1.map(c => ({ ...c, cardlocation: 'DECK', displayState: 'FRONT_FACEDOWN' }))));
     const init2 = this.assignGameCardIds(this.shuffle(deck2.map(c => ({ ...c, cardlocation: 'DECK', displayState: 'FRONT_FACEDOWN' }))));
 
@@ -2557,13 +2558,13 @@ export const ServerGameService = {
       uid: uid1, displayName: 'Player 1', deck: init1, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
       isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
       isHandPublic: 0,
-      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
+      timeRemaining: turnTimerLimit ? turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
     const p2: PlayerState = {
       uid: uid2, displayName: 'Player 2', deck: init2, hand: [], grave: [], exile: [], itemZone: Array(6).fill(null), erosionFront: Array(10).fill(null), erosionBack: Array(10).fill(null), unitZone: Array(6).fill(null), playZone: [],
       isTurn: false, isFirst: false, mulliganDone: false, hasExhaustedThisTurn: [],
       isHandPublic: 0,
-      timeRemaining: GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
+      timeRemaining: turnTimerLimit ? turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
     };
 
     for (let i = 0; i < 4; i++) {
@@ -2581,7 +2582,8 @@ export const ServerGameService = {
       playerIds: [uid1, uid2], gameStatus: 1, logs: ['匹配成功。对局开始'],
       players: { [uid1]: p1, [uid2]: p2 },
       mode: 'match',
-      phaseTimerStart: 0
+      phaseTimerStart: 0,
+      turnTimerLimit
     };
 
     // Correctly set isTurn for the initial player

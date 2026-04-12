@@ -337,6 +337,7 @@ export interface GameState {
   previousPhase?: GamePhase;
   pendingQuery?: EffectQuery;
   pendingShenyi?: PendingShenyi;
+  turnTimerLimit?: number; // Total seconds for turn timer (180-999)
 }
 
 export interface Deck {

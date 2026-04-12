@@ -501,29 +501,22 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
       {/* Background Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
 
-      {/* Global Timer Display */}
+      {/* Personalized Timer Display */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-3">
-        {['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'].includes(game.phase) ? (
-          <div className="bg-black/60 backdrop-blur-md border border-[#f27d26]/30 px-4 py-2 rounded-xl flex items-center gap-3 shadow-2xl">
-            <Play className="w-4 h-4 text-[#f27d26]" />
-            <div className="flex flex-col">
-              <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">Main Phase Time</span>
-              <span className="text-xl font-black tabular-nums text-white leading-none">
-                {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}
-              </span>
-            </div>
+        <div className={cn(
+          "bg-black/60 backdrop-blur-md border px-4 py-2 rounded-xl flex items-center gap-3 shadow-2xl transition-all",
+          timer < 30 ? "border-red-500/50 animate-pulse" : "border-[#f27d26]/30"
+        )}>
+          <div className="flex flex-col">
+            <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">My Remaining Time</span>
+            <span className={cn(
+              "text-xl font-black tabular-nums leading-none",
+              timer < 30 ? "text-red-500" : "text-white"
+            )}>
+              {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}
+            </span>
           </div>
-        ) : (
-          <div className="bg-black/60 backdrop-blur-md border border-red-500/30 px-4 py-2 rounded-xl flex items-center gap-3 shadow-2xl animate-pulse">
-            <Zap className="w-4 h-4 text-red-500" />
-            <div className="flex flex-col">
-              <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">{game.phase} Timeout</span>
-              <span className="text-xl font-black tabular-nums text-red-500 leading-none">
-                {timer}s
-              </span>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Opponent Half */}

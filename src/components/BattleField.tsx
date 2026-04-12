@@ -82,17 +82,8 @@ export const BattleField: React.FC = () => {
       const now = Date.now();
       const elapsed = now - (game.phaseTimerStart || now);
 
-      let activePlayerUid: string | undefined;
-      if (game.pendingQuery) {
-        activePlayerUid = game.pendingQuery.playerUid;
-      } else if (game.priorityPlayerId) {
-        activePlayerUid = game.priorityPlayerId;
-      } else {
-        activePlayerUid = game.playerIds[game.currentTurnPlayer];
-      }
-
-      const activePlayer = activePlayerUid ? game.players[activePlayerUid] : null;
-      let remaining = activePlayer ? Math.max(0, (activePlayer.timeRemaining || 0) - elapsed) : 0;
+      const me = game.players[myUid];
+      let remaining = me ? Math.max(0, (me.timeRemaining || 0) - (me.uid === (game.pendingQuery?.playerUid || game.priorityPlayerId || game.playerIds[game.currentTurnPlayer]) ? elapsed : 0)) : 0;
 
       const newTimerValue = Math.ceil(remaining / 1000);
       setTimer(prev => prev !== newTimerValue ? newTimerValue : prev);

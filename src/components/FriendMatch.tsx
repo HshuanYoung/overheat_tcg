@@ -20,6 +20,7 @@ export const FriendMatch: React.FC = () => {
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
   const [createdGameId, setCreatedGameId] = useState('');
   const [error, setError] = useState('');
+  const [turnTime, setTurnTime] = useState(300);
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = localStorage.getItem('token');
@@ -63,7 +64,10 @@ export const FriendMatch: React.FC = () => {
       const res = await fetch(`${BACKEND_URL}/api/games/friend`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deckId: selectedDeckId }),
+        body: JSON.stringify({ 
+          deckId: selectedDeckId,
+          turnTimerLimit: turnTime
+        }),
       });
       const data = await res.json();
       setCreatedRoomCode(data.roomCode);
@@ -201,6 +205,29 @@ export const FriendMatch: React.FC = () => {
             </div>
 
             {error && <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-xl text-red-400 text-sm">{error}</div>}
+
+            {mode === 'create' && (
+              <div className="mb-10 p-6 rounded-2xl bg-zinc-900/50 border border-zinc-800">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">回合对局时间 (秒)</h2>
+                  <span className="text-2xl font-black italic tracking-tighter text-red-500">{turnTime}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="180"
+                  max="999"
+                  step="10"
+                  value={turnTime}
+                  onChange={(e) => setTurnTime(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-600"
+                />
+                <div className="flex justify-between mt-2 text-[10px] text-zinc-600 font-bold uppercase tracking-widest">
+                  <span>Minimum (180s)</span>
+                  <span>Default (300s)</span>
+                  <span>Maximum (999s)</span>
+                </div>
+              </div>
+            )}
 
             {mode === 'create' && (
               <div className="flex justify-center">

@@ -311,7 +311,7 @@ setInterval(async () => {
                     // Special case: decrement for all who haven't finished
                     Object.values(gameState.players).forEach((p: any) => {
                         if (!p.mulliganDone) {
-                            p.timeRemaining = Math.max(0, (p.timeRemaining ?? 300000) - elapsedSinceLastUpdate);
+                            p.timeRemaining = Math.max(0, (p.timeRemaining ?? (gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : 300000)) - elapsedSinceLastUpdate);
                         }
                     });
                 } else {
@@ -320,7 +320,7 @@ setInterval(async () => {
 
                 if (activePlayerUid && gameState.players[activePlayerUid]) {
                     const player = gameState.players[activePlayerUid];
-                    player.timeRemaining = Math.max(0, (player.timeRemaining ?? 300000) - elapsedSinceLastUpdate);
+                    player.timeRemaining = Math.max(0, (player.timeRemaining ?? (gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : 300000)) - elapsedSinceLastUpdate);
                     
                     if (player.timeRemaining <= 0) {
                         // TIMEOUT LOSS
@@ -401,7 +401,7 @@ app.post('/api/games/practice', async (req, res): Promise<void> => {
     const user = verifyToken(authHeader.split(' ')[1]);
     if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
 
-    const { deckId } = req.body;
+    const { deckId, turnTimerLimit } = req.body;
     if (!deckId) { res.status(400).json({ error: '请选择卡组' }); return; }
 
     try {
@@ -409,7 +409,7 @@ app.post('/api/games/practice', async (req, res): Promise<void> => {
         if (!validation.valid) { res.status(400).json({ error: validation.error }); return; }
 
         const gameId = 'practice_' + Math.random().toString(36).substring(2, 9);
-        const gameState = await ServerGameService.createPracticeGameState(validation.cards!, user.userId, user.displayName);
+        const gameState = await ServerGameService.createPracticeGameState(validation.cards!, user.userId, user.displayName, turnTimerLimit);
         gameState.gameId = gameId;
 
         await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
@@ -444,7 +444,8 @@ app.post('/api/games/friend', async (req, res): Promise<void> => {
             roomCode: roomCode,
             counterStack: [],
             isCountering: 0,
-            effectUsage: {}
+            effectUsage: {},
+            turnTimerLimit: req.body.turnTimerLimit
         };
 
         await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(initialState)]);
@@ -495,7 +496,7 @@ app.post('/api/games/friend/join', async (req, res): Promise<void> => {
 });
 
 // Matchmaking Queue
-const matchmakingQueue: { userId: string; socketId?: string; timestamp: number; deck?: Card[] }[] = [];
+const matchmakingQueue: { userId: string; socketId?: string; timestamp: number; deck?: Card[]; turnTimerLimit?: number }[] = [];
 
 app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
     const authHeader = req.headers.authorization;
@@ -504,7 +505,7 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
     if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
 
     try {
-        const { deckId } = req.body;
+        const { deckId, turnTimerLimit } = req.body;
         if (!deckId) { res.status(400).json({ error: '请选择卡组' }); return; }
 
         const validation = await validateUserDeck(user.userId, deckId);
@@ -519,7 +520,7 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
         if (opponent && opponent.userId !== user.userId) {
             // Create a match
             const gameId = 'match_' + Math.random().toString(36).substring(2, 9);
-            const gameState = await ServerGameService.createMatchGameState(opponent.userId, opponent.deck!, user.userId, validation.cards!);
+            const gameState = await ServerGameService.createMatchGameState(opponent.userId, opponent.deck!, user.userId, validation.cards!, turnTimerLimit || opponent.turnTimerLimit);
             gameState.gameId = gameId;
 
             await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
@@ -532,7 +533,7 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
             res.json({ gameId, matched: true });
         } else {
             // Add to queue
-            matchmakingQueue.push({ userId: user.userId, deck: validation.cards, timestamp: Date.now() });
+            matchmakingQueue.push({ userId: user.userId, deck: validation.cards, timestamp: Date.now(), turnTimerLimit });
             res.json({ matched: false, position: matchmakingQueue.length });
         }
     } catch (err) {
@@ -1040,7 +1041,7 @@ app.post('/api/user/craft', async (req, res): Promise<void> => {
 
 // Socket.IO logic
 // Helper to create initial player state
-function createInitialPlayer(deckCards: Card[], displayName: string, isFirst: boolean): PlayerState {
+function createInitialPlayer(deckCards: Card[], displayName: string, isFirst: boolean, turnTimerLimit?: number): PlayerState {
     const fullDeck: Card[] = deckCards.map(c => {
         const uniqueId = Math.random().toString(36).substring(2, 10);
         return {
@@ -1078,7 +1079,8 @@ function createInitialPlayer(deckCards: Card[], displayName: string, isFirst: bo
         mulliganDone: false,
         hasExhaustedThisTurn: [],
         isGoddessMode: false,
-        isTurn: isFirst
+        isTurn: isFirst,
+        timeRemaining: turnTimerLimit ? turnTimerLimit * 1000 : 300000
     };
 
 }
@@ -1156,12 +1158,12 @@ io.on('connection', (socket) => {
 
                     const isFirst = gameState.playerIds.indexOf(userIdStr) === 0;
 
-                    const player = createInitialPlayer(deckCards, user.displayName || user.username || '玩家', isFirst);
+                    const player = createInitialPlayer(deckCards, user.displayName || user.username || '玩家', isFirst, gameState.turnTimerLimit);
                     player.uid = userIdStr;
                     gameState.players[userIdStr] = player;
 
                     if (gameState.mode === 'practice' && !gameState.players['BOT_PLAYER']) {
-                        const botPlayer = createInitialPlayer(deckCards, '机器人', !isFirst);
+                        const botPlayer = createInitialPlayer(deckCards, '机器人', !isFirst, gameState.turnTimerLimit);
                         botPlayer.uid = 'BOT_PLAYER';
                         botPlayer.mulliganDone = true;
                         gameState.players['BOT_PLAYER'] = botPlayer;

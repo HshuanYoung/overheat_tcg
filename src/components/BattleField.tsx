@@ -66,9 +66,10 @@ export const BattleField: React.FC = () => {
   } | null>(null);
 
   const lastAutoResolveRef = useRef<string | null>(null);
-  const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
   const gameRef = useRef<GameState | null>(null);
+  const pendingPlayCardRef = useRef<Card | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
+  useEffect(() => { pendingPlayCardRef.current = pendingPlayCard; }, [pendingPlayCard]);
 
   // Universal Visual Timer Logic - Stabilized with gameRef
   useEffect(() => {
@@ -149,7 +150,8 @@ export const BattleField: React.FC = () => {
       setGame(newState);
 
       // Robust clearing of query-related state
-      if (!newState.pendingQuery) {
+      // Only clear if we are not in a local play card flow and there's no pending query
+      if (!newState.pendingQuery && !pendingPlayCardRef.current) {
         setSelectedQueryIds([]);
         setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
       }
@@ -193,8 +195,15 @@ export const BattleField: React.FC = () => {
 
   // Clear query selection when query changes
   useEffect(() => {
-    setSelectedQueryIds([]);
-    setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
+    // Always clear if a new query has arrived
+    if (game?.pendingQuery) {
+      setSelectedQueryIds([]);
+      setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
+    } else if (!pendingPlayCard) {
+      // Only clear if no query is active and we are not in a local play card flow
+      setSelectedQueryIds([]);
+      setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
+    }
   }, [game?.pendingQuery?.id]);
 
   // Clear alliance selection if we leave the selection phase
@@ -530,7 +539,12 @@ export const BattleField: React.FC = () => {
       const queryType = game.pendingQuery.type.replace(/-/g, '_').toUpperCase();
 
       if (queryType === 'SELECT_PAYMENT') {
-        selections = [JSON.stringify(paymentSelection)];
+        const mappedPayment = {
+          feijingCardId: paymentSelection.useFeijing[0],
+          exhaustUnitIds: paymentSelection.exhaustIds,
+          erosionFrontIds: paymentSelection.erosionFrontIds
+        };
+        selections = [JSON.stringify(mappedPayment)];
       }
 
       await GameService.submitQueryChoice(gameId, game.pendingQuery.id, selections);
@@ -544,7 +558,15 @@ export const BattleField: React.FC = () => {
 
   const togglePaymentExhaust = (gamecardId: string) => {
     setPaymentSelection(prev => {
+      // Mutual Exclusivity: cannot select units if Feijing is selected
+      if (prev.useFeijing.length > 0) return prev;
+
       const isExhausted = prev.exhaustIds.includes(gamecardId);
+      if (!isExhausted) {
+        const required = pendingPlayCard ? pendingPlayCard.acValue : (game.pendingQuery?.paymentCost || 0);
+        const current = (prev.useFeijing.length * 3) + prev.exhaustIds.length;
+        if (current >= required) return prev;
+      }
       return {
         ...prev,
         exhaustIds: isExhausted
@@ -557,8 +579,11 @@ export const BattleField: React.FC = () => {
   const togglePaymentFeijing = (gamecardId: string) => {
     setPaymentSelection(prev => {
       const isUsed = prev.useFeijing.includes(gamecardId);
+      // Feijing is always allowed if not already in use (allows overpayment up to 3)
+      // When selected, it clears any unit exhaustion selections (mutual exclusivity)
       return {
         ...prev,
+        exhaustIds: isUsed ? prev.exhaustIds : [],
         useFeijing: isUsed
           ? [] // Only allow one feijing card
           : [gamecardId]
@@ -569,6 +594,10 @@ export const BattleField: React.FC = () => {
   const togglePaymentErosionFront = (gamecardId: string) => {
     setPaymentSelection(prev => {
       const isUsed = prev.erosionFrontIds.includes(gamecardId);
+      if (!isUsed) {
+        const required = pendingPlayCard ? Math.abs(pendingPlayCard.acValue) : Math.abs(game.pendingQuery?.paymentCost || 0);
+        if (prev.erosionFrontIds.length >= required) return prev;
+      }
       return {
         ...prev,
         erosionFrontIds: isUsed
@@ -933,16 +962,6 @@ export const BattleField: React.FC = () => {
               <span className="text-[10px] text-white/40 uppercase font-black tracking-[0.2em]">Turn Count</span>
               <span className="text-2xl font-black italic text-[#f27d26]">ROUND {game.turnCount}</span>
             </div>
-            
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowSurrenderConfirm(true)}
-              className="px-4 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-500 border border-red-500/30 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
-            >
-              <Flag className="w-3 h-3" />
-              SURRENDER
-            </motion.button>
 
             <div className="h-8 w-px bg-white/10" />
             <div className="flex flex-col relative group">
@@ -1848,7 +1867,11 @@ export const BattleField: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Selected:</span>
-                      <span className="text-3xl font-black text-white">{(paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length}</span>
+                      <span className="text-3xl font-black text-white">
+                        {(game.pendingQuery.paymentCost || 0) > 0
+                          ? (paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length
+                          : paymentSelection.erosionFrontIds.length}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -1938,14 +1961,14 @@ export const BattleField: React.FC = () => {
                 /* Payment Selection for Query */
                 <div className="flex flex-col gap-8 w-full max-w-4xl max-h-[50vh] overflow-y-auto p-4 custom-scrollbar">
                   {/* Feijing Section */}
-                  {me.hand.some(c => c.feijingMark && c.color === game.pendingQuery?.paymentColor) && (
+                  {(game.pendingQuery.paymentCost || 0) > 0 && me.hand.some(c => c.feijingMark && (c.color === game.pendingQuery?.paymentColor || !game.pendingQuery?.paymentColor || game.pendingQuery?.paymentColor === 'NONE')) && (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2 text-blue-400 font-black uppercase italic tracking-widest text-sm">
                         <Zap className="w-4 h-4" />
                         菲晶支付 (Feijing Payment - Cost -3)
                       </div>
                       <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-                        {me.hand.filter(c => c.feijingMark && c.color === game.pendingQuery?.paymentColor).map(card => {
+                        {me.hand.filter(c => c.feijingMark && (c.color === game.pendingQuery?.paymentColor || !game.pendingQuery?.paymentColor || game.pendingQuery?.paymentColor === 'NONE')).map(card => {
                           const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
                           return (
                             <motion.div
@@ -1958,7 +1981,7 @@ export const BattleField: React.FC = () => {
                                 isSelected ? "border-blue-500 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >
-                              <CardComponent card={card} disableZoom />
+                              <CardComponent card={card} disableZoom displayMode="hand" />
                             </motion.div>
                           );
                         })}
@@ -1967,7 +1990,7 @@ export const BattleField: React.FC = () => {
                   )}
 
                   {/* Exhaust Section */}
-                  {me.unitZone.some(c => c && !c.isExhausted) && (
+                  {(game.pendingQuery.paymentCost || 0) > 0 && me.unitZone.some(c => c && !c.isExhausted) && (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
                         <Sword className="w-4 h-4" />
@@ -1985,6 +2008,35 @@ export const BattleField: React.FC = () => {
                               className={cn(
                                 "w-32 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
                                 isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
+                              )}
+                            >
+                              <CardComponent card={card!} disableZoom />
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Erosion Front Section (Horizontal Units) - Only for negative costs */}
+                  {(game.pendingQuery.paymentCost || 0) < 0 && me.erosionFront.some(c => c && c.displayState === 'FRONT_UPRIGHT') && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 text-red-400 font-black uppercase italic tracking-widest text-sm">
+                        <Layers className="w-4 h-4" />
+                        水平支付 (Level Payment - Cost -1)
+                      </div>
+                      <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                        {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map(card => {
+                          const isSelected = paymentSelection.erosionFrontIds.includes(card!.gamecardId);
+                          return (
+                            <motion.div
+                              key={card!.gamecardId}
+                              whileHover={{ y: -5 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => togglePaymentErosionFront(card!.gamecardId)}
+                              className={cn(
+                                "w-32 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                isSelected ? "border-red-500 scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >
                               <CardComponent card={card!} disableZoom />
@@ -2405,54 +2457,6 @@ export const BattleField: React.FC = () => {
                 >
                   CANCEL
                 </motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Surrender Confirmation Modal */}
-      <AnimatePresence>
-        {showSurrenderConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1200] bg-black/80 backdrop-blur-xl flex items-center justify-center p-6"
-            onClick={() => setShowSurrenderConfirm(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="max-w-md w-full bg-zinc-900/90 border border-white/10 rounded-[2.5rem] p-10 shadow-3xl text-center relative overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-red-500" />
-
-              <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/20">
-                <Flag className="w-10 h-10 text-red-500" />
-              </div>
-
-              <h3 className="text-2xl font-black italic text-white uppercase tracking-wider mb-2">Confirm Surrender?</h3>
-              <p className="text-white/50 text-sm mb-8 leading-relaxed font-medium">Are you sure you want to concede this duel? This action cannot be undone and will count as a defeat.</p>
-
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  className="py-4 px-6 bg-zinc-800 hover:bg-zinc-700 text-white/70 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
-                  onClick={() => setShowSurrenderConfirm(false)}
-                >
-                  CANCEL
-                </button>
-                <button
-                  className="py-4 px-6 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-red-900/20"
-                  onClick={() => {
-                    handleSurrender();
-                    setShowSurrenderConfirm(false);
-                  }}
-                >
-                  CONCEDE
-                </button>
               </div>
             </motion.div>
           </motion.div>

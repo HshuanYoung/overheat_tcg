@@ -8,7 +8,7 @@ const card: Card = {
   type: 'STORY',
   color: 'BLUE',
   gamecardId: null as any,
-  colorReq: { BLUE: 2 },
+  colorReq: { BLUE: 1 },
   faction: '无',
   acValue: 3,
   godMark: false,
@@ -33,16 +33,47 @@ const card: Card = {
           godMark: isFuhuaPresent ? undefined : false
         };
 
-        // 3. Find and return the first valid target to hand
-        // (In a full implementation, this would trigger a UI selection event)
+        // 3. Find valid targets across all players
+        const allPotentialTargets: Card[] = [];
+        Object.values(gameState.players).forEach(player => {
+          player.unitZone.forEach(u => {
+            if (u && AtomicEffectExecutor.matchesFilter(u, filter as any, card)) {
+              allPotentialTargets.push(u);
+            }
+          });
+        });
+
+        if (allPotentialTargets.length === 0) {
+          gameState.logs.push(`[歌月拂风] 没有合法目标。`);
+          return;
+        }
+
+        // 4. Trigger selection query
+        gameState.pendingQuery = {
+          id: Math.random().toString(36).substring(7),
+          type: 'SELECT_CARD',
+          playerUid: playerState.uid,
+          options: allPotentialTargets.map(t => ({ card: t, source: 'UNIT' as any })),
+          title: '选择返回手牌的单位',
+          description: isFuhuaPresent ? '选择战场上一个单位返回持有者手牌。' : '选择战场上一个非神格单位返回持有者手牌。',
+          minSelections: 1,
+          maxSelections: 1,
+          callbackKey: 'EFFECT_RESOLVE',
+          context: {
+            sourceCardId: card.gamecardId,
+            effectId: 'fufeng_activate'
+          }
+        };
+      },
+      onQueryResolve: (card, gameState, playerState, selections) => {
+        const targetId = selections[0];
         AtomicEffectExecutor.execute(gameState, playerState.uid, {
           type: 'MOVE_FROM_FIELD',
           destinationZone: 'HAND',
-          targetFilter: filter as any,
-          targetCount: 1
+          targetFilter: { gamecardId: targetId }
         }, card);
 
-        gameState.logs.push(`${playerState.displayName} 发动了 [歌月拂风]。`);
+        gameState.logs.push(`${playerState.displayName} 发动了 [歌月拂风]，将一个单位返回手牌。`);
       }
     }
   ],

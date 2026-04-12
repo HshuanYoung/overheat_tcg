@@ -40,6 +40,9 @@ const card: Card = {
         return isSelf && isTargetZone && isOnBattlefield;
       },
       cost: (gameState, playerState, card) => {
+        return true;
+      },
+      execute: (card, gameState, playerState) => {
         const options: { card: Card; source: any }[] = [];
         playerState.deck.forEach(c => {
           if (c.fullName.includes('歌月') && c.type === 'STORY') options.push({ card: { ...c }, source: 'DECK' });
@@ -48,7 +51,7 @@ const card: Card = {
           if (c.fullName.includes('歌月') && c.type === 'STORY') options.push({ card: { ...c }, source: 'GRAVE' });
         });
 
-        if (options.length === 0) return false;
+        if (options.length === 0) return;
 
         gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
@@ -56,48 +59,81 @@ const card: Card = {
           playerUid: playerState.uid,
           options: options as any,
           title: '选择「歌月」卡牌',
-          description: '从你的卡组或墓地中选择一张名称包含「歌月」的故事卡放逐。',
+          description: '从你的卡组或墓地中选择一张名称包含「歌月」的故事卡放逐并执行其效果。',
           minSelections: 1,
           maxSelections: 1,
-          callbackKey: 'ACTIVATE_COST_RESOLVE',
+          callbackKey: 'EFFECT_RESOLVE',
           context: { sourceCardId: card.gamecardId, effectIndex: 0 }
         };
-        return true;
       },
-      onQueryResolve: (card, gameState, playerState, selections) => {
-        const cardId = selections[0];
+      onQueryResolve: (card, gameState, playerState, selections, context) => {
+        const step = context?.step || 1;
         const sourcePlayer = gameState.players[playerState.uid];
 
-        let foundCard: Card | undefined;
-        let sourceZone: string | undefined;
+        if (step === 1) {
+          const cardId = selections[0];
+          let foundCard: Card | undefined;
+          let sourceZone: string | undefined;
 
-        const deckIdx = sourcePlayer.deck.findIndex(c => c.gamecardId === cardId);
-        if (deckIdx !== -1) {
-          foundCard = sourcePlayer.deck.splice(deckIdx, 1)[0];
-          sourceZone = 'DECK';
-        } else {
-          const graveIdx = sourcePlayer.grave.findIndex(c => c.gamecardId === cardId);
-          if (graveIdx !== -1) {
-            foundCard = sourcePlayer.grave.splice(graveIdx, 1)[0];
-            sourceZone = 'GRAVE';
+          // Search in deck and grave
+          const deckIdx = sourcePlayer.deck.findIndex(c => c.gamecardId === cardId);
+          if (deckIdx !== -1) {
+            foundCard = sourcePlayer.deck.splice(deckIdx, 1)[0];
+            sourceZone = 'DECK';
+          } else {
+            const graveIdx = sourcePlayer.grave.findIndex(c => c.gamecardId === cardId);
+            if (graveIdx !== -1) {
+              foundCard = sourcePlayer.grave.splice(graveIdx, 1)[0];
+              sourceZone = 'GRAVE';
+            }
           }
-        }
 
-        if (foundCard) {
-          foundCard.cardlocation = 'EXILE';
-          sourcePlayer.exile.push(foundCard);
-          gameState.logs.push(`[歌月] 已从 ${sourceZone} 放逐 ${foundCard.fullName}。`);
-          // Store for execution
-          gameState.currentProcessingItem = { ...gameState.currentProcessingItem!, data: { banishedCard: foundCard } } as any;
-        }
-      },
-      execute: (card, gameState, playerState) => {
-        const banishedCard = (gameState.currentProcessingItem?.data as any)?.banishedCard;
-        if (banishedCard && banishedCard.effects) {
-          gameState.logs.push(`[风花] 正在执行 ${banishedCard.fullName} 的效果...`);
-          banishedCard.effects.forEach(e => {
-            if (e.execute) e.execute(banishedCard, gameState, playerState);
-          });
+          if (foundCard) {
+            foundCard.cardlocation = 'EXILE';
+            sourcePlayer.exile.push(foundCard);
+            gameState.logs.push(`[风花] 已从 ${sourceZone} 放逐 ${foundCard.fullName}。`);
+
+            // Check if payment is required
+            if (foundCard.acValue && foundCard.acValue !== 0) {
+              gameState.pendingQuery = {
+                id: Math.random().toString(36).substring(7),
+                type: 'SELECT_PAYMENT',
+                playerUid: playerState.uid,
+                options: [],
+                title: `支付 [${foundCard.fullName}] 的费用`,
+                description: `请支付 ${foundCard.acValue} 点费用以执行其效果。`,
+                minSelections: 1,
+                maxSelections: 1,
+                callbackKey: 'EFFECT_RESOLVE',
+                paymentCost: foundCard.acValue,
+                paymentColor: foundCard.color,
+                context: { 
+                  sourceCardId: card.gamecardId, 
+                  effectIndex: 0, 
+                  step: 2, 
+                  banishedCardId: foundCard.gamecardId 
+                }
+              };
+              gameState.logs.push(`[风花] 等待 ${sourcePlayer.displayName} 支付费用...`);
+              return;
+            }
+
+            // If no payment, execute immediately
+            if (foundCard.effects) {
+              foundCard.effects.forEach(e => {
+                if (e.execute) e.execute(foundCard!, gameState, sourcePlayer);
+              });
+            }
+          }
+        } else if (step === 2) {
+          const cardId = context.banishedCardId;
+          const foundCard = sourcePlayer.exile.find(c => c.gamecardId === cardId);
+          if (foundCard && foundCard.effects) {
+            gameState.logs.push(`[风花] 费用支付成功，正在执行 ${foundCard.fullName} 的效果...`);
+            foundCard.effects.forEach(e => {
+              if (e.execute) e.execute(foundCard, gameState, sourcePlayer);
+            });
+          }
         }
       }
     },

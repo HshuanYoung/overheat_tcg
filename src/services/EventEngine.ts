@@ -39,10 +39,10 @@ export class EventEngine {
               const isEventSelf = (event.sourceCard === card) ||
                 (event.sourceCard?.runtimeFingerprint && event.sourceCard.runtimeFingerprint === card.runtimeFingerprint) ||
                 (event.sourceCardId && event.sourceCardId === card.gamecardId);
-              
+
               // Guard: For specific card-entry/action events, default to self-trigger unless explicitly global
               const isMovementEvent = ['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_PLAYED', 'CARD_ATTACK_DECLARED'].includes(event.type);
-              
+
               if (isMovementEvent && !effect.isGlobal && !isEventSelf) {
                 // If it's a movement/entry event for another card and this effect is not global, skip it
                 return;
@@ -92,6 +92,7 @@ export class EventEngine {
           if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
           if (card.baseCanActivateEffect !== undefined) card.canActivateEffect = card.baseCanActivateEffect;
           if (card.baseIsImmuneToUnitEffects !== undefined) card.isImmuneToUnitEffects = card.baseIsImmuneToUnitEffects;
+          if (card.baseShenyi !== undefined) card.isShenyi = card.baseShenyi;
           card.influencingEffects = [];
         }
       });

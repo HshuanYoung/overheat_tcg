@@ -180,7 +180,7 @@ const card: Card = {
     effect_10403016_activate
   ],
   rarity: 'PR',
-  availableRarities: ['PR'],
+  availableRarities: ['PR', 'R'],
   uniqueId: null,
 };
 

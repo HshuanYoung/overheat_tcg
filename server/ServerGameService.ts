@@ -1068,6 +1068,13 @@ export const ServerGameService = {
           subCard.cardlocation = 'GRAVE';
           player.grave.push(subCard);
           gameState.logs.push(`[系统] ${subCard.fullName} 代替了破坏`);
+          
+          // Dispatch event to trigger "When destroyed" effects
+          EventEngine.dispatchEvent(gameState, {
+            type: 'CARD_LEFT_FIELD',
+            playerUid,
+            sourceCardId: subCardId
+          });
         }
       } else {
         // Resume default destruction (skip substitution)
@@ -2127,7 +2134,14 @@ export const ServerGameService = {
   },
 
   executeDrawPhase(gameState: GameState, player: PlayerState) {
-    // console.log(`[ServerGameService] executeDrawPhase for ${player.displayName}`);
+    if (player.skipDrawPhase) {
+      player.skipDrawPhase = false;
+      gameState.logs.push(`${player.displayName} 的抽卡阶段被跳过了。`);
+      gameState.phase = 'EROSION';
+      this.executeErosionPhase(gameState, player);
+      return;
+    }
+
     gameState.logs.push(`${player.displayName} 的抽卡阶段`);
 
 

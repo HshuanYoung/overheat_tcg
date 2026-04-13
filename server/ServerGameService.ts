@@ -1928,7 +1928,9 @@ export const ServerGameService = {
       gameState.logs.push(`${player.displayName} 没有可调度的单位，直接进入抽牌阶段。`);
     } else {
       player.unitZone.forEach(card => {
-        if (card && (card.canResetCount === 0 || card.canResetCount === undefined)) {
+        if (card) {
+          card.temporaryPowerBuff = 0;
+          if (card.canResetCount === 0 || card.canResetCount === undefined) {
           this.readyCard(card);
         } else if (card && card.canResetCount !== undefined && card.canResetCount > 0) {
           card.canResetCount -= 1;

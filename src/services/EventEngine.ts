@@ -84,7 +84,7 @@ export class EventEngine {
       ];
       allCards.forEach(card => {
         if (card) {
-          if (card.basePower !== undefined) card.power = card.basePower;
+          if (card.basePower !== undefined) card.power = card.basePower + (card.temporaryPowerBuff || 0);
           if (card.baseDamage !== undefined) card.damage = card.baseDamage;
           if (card.baseIsrush !== undefined) card.isrush = card.baseIsrush;
           if (card.baseCanAttack !== undefined) card.canAttack = card.baseCanAttack;

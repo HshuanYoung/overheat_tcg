@@ -201,6 +201,7 @@ export interface Card {
   cardlocation?: 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK' | 'PLAY' | 'DECK';
   feijingMark: boolean;
   canResetCount?: number;    //only 0 can be reset,if not 0,at the start of turn,canResetCount-1
+  temporaryPowerBuff?: number; // cleared at turn start
   effects?: CardEffect[];
   influencingEffects?: { sourceCardName: string; description: string }[];
   inAllianceGroup?: boolean;

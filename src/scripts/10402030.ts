@@ -22,8 +22,8 @@ const card: Card = {
   feijingMark: false,
   canResetCount: 0,
   effects: [],
-  rarity: 'R',
-  availableRarities: ['R'],
+  rarity: 'SR',
+  availableRarities: ['SR'],
   uniqueId: null,
 };
 

@@ -4,6 +4,7 @@ build/
 dist/
 *.log
 .env*
-pics/
+pics/*
+!pics/命名规则.txt
 admin/
 guest*/

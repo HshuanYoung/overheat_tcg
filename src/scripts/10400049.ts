@@ -4,13 +4,14 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect_10400049_activate: CardEffect = {
   id: 'mina_salvage_activate',
   type: 'ACTIVATE',
-  description: '【起】每回合一次。在你的回合中，舍弃一张手牌：选择一张你侵蚀区域最前方的卡牌加入手牌。',
+  description: '【起】每回合一次。在你的回合中，舍弃一张手牌：选择一张你侵蚀区域的卡牌加入手牌。',
   limitCount: 1,
   limitNameType: true,
   condition: (gameState: GameState, playerState: PlayerState) => {
     return playerState.isTurn && playerState.hand.length > 0 && playerState.erosionFront.some(c => c !== null);
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  triggerLocation: ['UNIT'],
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // 1. Discard 1
     gameState.pendingQuery = {
       id: Math.random().toString(36).substring(7),
@@ -69,10 +70,11 @@ const effect_10400049_trigger: CardEffect = {
   id: 'mina_salvage_trigger',
   type: 'TRIGGER',
   triggerLocation: ['GRAVE'],
-  description: '【诱发】当此单位因战斗或对手的卡牌效果破坏并送入墓地时：选择最多两张你侵蚀区域最前方的卡牌加入手牌。',
+  triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  description: '【诱发】当此单位因战斗或对手的卡牌效果破坏并送入墓地时：选择最多两张你侵蚀区域的卡牌加入手牌。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
-    if (!event) return false;
-    
+    if (!event) return instance.cardlocation === 'GRAVE';
+
     // Check destruction type and source
     if (event.type === 'CARD_DESTROYED_BATTLE' && event.targetCardId === instance.gamecardId) {
       return true;
@@ -83,7 +85,7 @@ const effect_10400049_trigger: CardEffect = {
     }
     return false;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const frontCards = playerState.erosionFront.filter(c => c !== null) as Card[];
     if (frontCards.length > 0) {
       gameState.pendingQuery = {

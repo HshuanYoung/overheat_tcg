@@ -10,7 +10,7 @@ const effect_10401044_activation: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState) => {
     return playerState.isTurn && gameState.phase === 'MAIN';
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const pUid = playerState.uid;
     // 1. Move self to hand
     AtomicEffectExecutor.moveCard(gameState, pUid, 'UNIT', pUid, 'HAND', instance.gamecardId, true);
@@ -52,7 +52,7 @@ const effect_10401044_activation: CardEffect = {
       const targetId = selections[0];
       const target = AtomicEffectExecutor.findCardById(gameState, targetId)!;
       const owner = AtomicEffectExecutor.findCardOwnerKey(gameState, targetId)!;
-      
+
       AtomicEffectExecutor.moveCard(gameState, owner, 'UNIT', owner, 'HAND', targetId, true);
       gameState.logs.push(`[${instance.fullName}] 的效果使 [${target.fullName}] 返回了手牌。`);
     }

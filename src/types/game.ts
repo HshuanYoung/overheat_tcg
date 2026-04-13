@@ -38,6 +38,7 @@ export type GameEventType =
   | 'COMBAT_DAMAGE_CAUSED'
   | 'EFFECT_DAMAGE_CAUSED'
   | 'GODDESS_TRANSFORMATION'
+  | 'GODDESS_EXIT'
   | 'EFFECT_COUNTERED'
   | 'CARD_SELECTED_TARGET'
   | 'CARD_EXILED'
@@ -150,7 +151,7 @@ export interface CardEffect {
   targetcost?: [number, number]; // [min, max]
 
   // New Event System Properties
-  triggerEvent?: GameEventType;
+  triggerEvent?: GameEventType | GameEventType[];
   isMandatory?: boolean;
   isGlobal?: boolean; // If true, the effect triggers for any card meeting the criteria (e.g. any card entering), not just self.
   condition?: (gameState: GameState, playerState: PlayerState, card: Card, event?: GameEvent) => boolean;

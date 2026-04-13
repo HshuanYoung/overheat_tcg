@@ -4,12 +4,12 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect_10403016_trigger: CardEffect = {
   id: 'cocola_main_phase_trigger',
   type: 'TRIGGER',
-  triggerType: 'PHASE_CHANGED',
+  triggerEvent: 'PHASE_CHANGED',
   description: '【诱发】在你的主要阶段开始时，选择对手的一个非神蚀单位，在本回合中，你的单位可以攻击该单位。',
   condition: (gameState: GameState, playerState: PlayerState) => {
     return gameState.phase === 'MAIN' && playerState.isTurn;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
     const opponent = gameState.players[opponentId];
     const choices = opponent.unitZone.filter(u => u && !u.godMark) as Card[];
@@ -50,7 +50,7 @@ const effect_10403016_activate: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState) => {
     return !!playerState.isGoddessMode;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const frontCards = playerState.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT') as Card[];
     if (frontCards.length === 0) throw new Error('没有侵蚀区正面卡牌作为代价');
 

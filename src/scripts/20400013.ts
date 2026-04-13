@@ -8,7 +8,7 @@ const effect_20400013_activation: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState) => {
     return playerState.isTurn && gameState.phase === 'MAIN';
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const targets: Card[] = [];
     Object.values(gameState.players).forEach(p => {
       p.unitZone.forEach(c => {

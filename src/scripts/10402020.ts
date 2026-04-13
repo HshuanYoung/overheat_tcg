@@ -4,14 +4,14 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect_10402020_trigger: CardEffect = {
   id: 'aketi_rotation_trigger',
   type: 'TRIGGER',
-  triggerType: 'CARD_TO_EROSION_FRONT',
+  triggerEvent: 'CARD_TO_EROSION_FRONT',
   description: '【诱发】每回合一次。在你的回合中，当我方卡牌进入侵蚀区域正面时：选择一张非神蚀卡牌，将其横置或竖置。',
   limitCount: 1,
   limitNameType: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     return playerState.isTurn && event?.type === 'CARD_TO_EROSION_FRONT' && event.playerUid === playerState.uid;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // Select non-godmark unit or item
     const targets: Card[] = [];
     Object.values(gameState.players).forEach(p => {
@@ -60,7 +60,7 @@ const effect_10402020_activate: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState) => {
     return playerState.isTurn && playerState.isGoddessMode && playerState.erosionFront.filter(c => c !== null).length >= 2;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // 1. Cost: Select 2 from Erosion Front
     const frontCards = playerState.erosionFront.filter(c => c !== null) as Card[];
     gameState.pendingQuery = {

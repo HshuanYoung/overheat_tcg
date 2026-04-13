@@ -4,14 +4,15 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect_10400055_trigger: CardEffect = {
   id: 'tsukiyoru_bounce_trigger',
   type: 'TRIGGER',
-  triggerType: 'CARD_ENTERED_ZONE',
+  triggerEvent: 'CARD_ENTERED_ZONE',
   description: '【诱发】当此单位进入对战区时：选择对战区或道具区中一张横置的非神蚀卡牌返回其持有者手牌。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     return event?.type === 'CARD_ENTERED_ZONE' && 
            event.sourceCardId === instance.gamecardId && 
-           event.destinationZone === 'UNIT';
+           event.data?.zone === 'UNIT';
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  triggerLocation: ['UNIT'],
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const targets: Card[] = [];
     Object.values(gameState.players).forEach(p => {
       // Unit Zone
@@ -34,9 +35,9 @@ const effect_10400055_trigger: CardEffect = {
         type: 'SELECT_CARD',
         playerUid: playerState.uid,
         // Identify source zone for UI
-        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, targets.map(c => ({ 
-          card: c, 
-          source: c.cardlocation as TriggerLocation 
+        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, targets.map(c => ({
+          card: c,
+          source: c.cardlocation as TriggerLocation
         }))),
         title: '选择回场目标',
         description: '请选择一张横置的非神蚀卡牌返回其持有者手牌。',
@@ -57,7 +58,7 @@ const effect_10400055_trigger: CardEffect = {
       const targetId = selections[0];
       const target = AtomicEffectExecutor.findCardById(gameState, targetId);
       const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, targetId);
-      
+
       if (target && ownerUid) {
         const fromZone = target.cardlocation as TriggerLocation;
         AtomicEffectExecutor.moveCard(gameState, ownerUid, fromZone, ownerUid, 'HAND', targetId, true);
@@ -81,7 +82,7 @@ const card: Card = {
   basePower: 2500,
   damage: 2,
   baseDamage: 2,
-  godMark: true,
+  godMark: false,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,

@@ -4,15 +4,16 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect_10400038_trigger: CardEffect = {
   id: 'vaer_entry_trigger',
   type: 'TRIGGER',
-  triggerType: 'CARD_ENTERED_ZONE',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
   description: '【诱发】当此单位从手牌进入对战区时：选择一名玩家，该玩家抽两张卡。之后，若我方侵蚀区域背面卡牌在2张或以上，选择一名玩家将其下一次抽卡阶段跳过。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     return event?.type === 'CARD_ENTERED_ZONE' && 
            event.sourceCardId === instance.gamecardId && 
-           event.destinationZone === 'UNIT' && 
-           event.fromZone === 'HAND';
+           event.data?.zone === 'UNIT' && 
+           instance.cardlocation === 'UNIT';
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // 1. Select player to draw 2
     const players = Object.values(gameState.players);
     gameState.pendingQuery = {
@@ -41,7 +42,7 @@ const effect_10400038_trigger: CardEffect = {
       const targetUid = selectedId === 'PLAYER_SELF' ? playerState.uid : gameState.playerIds.find(id => id !== playerState.uid)!;
       
       // Execute Draw 2
-      AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 2, targetFilter: { owner: targetUid === playerState.uid ? 'SELF' : 'OPPONENT' } }, instance);
+      AtomicEffectExecutor.execute(gameState, targetUid, { type: 'DRAW', value: 2 }, instance);
       gameState.logs.push(`[${instance.fullName}] 的效果使玩家抽了两张卡。`);
 
       // 2. Conditional: Skip Draw Phase

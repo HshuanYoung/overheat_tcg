@@ -155,7 +155,7 @@ export const GameService = {
   },
 
 
-  checkEffectLimitsAndReqs(gameState: GameState | null, playerUid: string, card: Card, effect: CardEffect, triggerLocation: TriggerLocation): boolean {
+  checkEffectLimitsAndReqs(gameState: GameState | null, playerUid: string, card: Card, effect: CardEffect, triggerLocation: TriggerLocation, event?: GameEvent): boolean {
     if (!gameState || !gameState.players) return true;
     const player = gameState.players[playerUid];
     if (!player) return false;
@@ -208,7 +208,7 @@ export const GameService = {
     // 4. Condition Check (Simplified for UI, only if no async needed)
     if (effect.condition) {
       try {
-        if (!effect.condition(gameState, player, card)) {
+        if (!effect.condition(gameState, player, card, event)) {
           return false;
         }
       } catch (e) {

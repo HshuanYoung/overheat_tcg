@@ -1319,6 +1319,11 @@ io.on('connection', (socket) => {
                 } else if (action === 'SUBMIT_QUERY_CHOICE') {
                     const { queryId, selections } = payload;
                     await ServerGameService.handleQueryChoice(gameState, myUid, queryId, selections, syncCallback);
+                } else if (action === 'CONFIRM_SHENYI' || action === 'DECLINE_SHENYI') {
+                    await advancePhase(gameState, gameId, myUid, socket, action);
+                } else if (action === 'MOVE_CARD') {
+                    const { fromZone, toPlayerId, toZone, cardId } = payload;
+                    await ServerGameService.moveCard(gameState, myUid, fromZone, toPlayerId, toZone, cardId, true);
                 } else if (action === 'END_PHASE') {
                     if (player.isTurn || gameState.phase === 'BATTLE_FREE' || gameState.phase === 'COUNTERING') {
                         await advancePhase(gameState, gameId, myUid, socket, payload);
@@ -1339,8 +1344,9 @@ io.on('connection', (socket) => {
                 if (gameState.gameStatus !== 2) {
                     triggerBotIfNeeded(gameState, gameId);
                 }
-            } catch (err) {
-                // console.error('Game action error:', err);
+            } catch (err: any) {
+                console.error('[Socket] Game action error:', err);
+                socket.emit('error', { message: err.message || 'Unknown game error' });
             }
         });
     });

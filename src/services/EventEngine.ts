@@ -14,12 +14,18 @@ export class EventEngine {
       // activeZones: units and items are always active. 
       // erosionFront cards are active (e.g. for continuous effects like color), 
       // but TRIGGER effects should only fire if the card is in an allowed triggerLocation.
-      const activeZones = [...player.unitZone, ...player.itemZone, ...player.erosionFront];
+      const activeZones = [
+        ...player.unitZone, ...player.itemZone, ...player.erosionFront, ...player.erosionBack,
+        ...player.grave, ...player.hand, ...player.exile, ...player.deck
+      ];
 
       activeZones.forEach(card => {
         if (card && card.effects) {
           card.effects.forEach((effect, index) => {
-            if ((effect.type === 'TRIGGERED' || effect.type === 'TRIGGER') && effect.triggerEvent === event.type) {
+            const isEventMatch = !effect.triggerEvent || 
+              (Array.isArray(effect.triggerEvent) ? effect.triggerEvent.includes(event.type) : effect.triggerEvent === event.type);
+
+            if ((effect.type === 'TRIGGERED' || effect.type === 'TRIGGER') && isEventMatch) {
 
               // New: Check if the card's current location is in the effect's triggerLocation array
               // If triggerLocation is not specified, default depends on the card type (usually UNIT/ITEM for units)
@@ -31,17 +37,18 @@ export class EventEngine {
               }
 
               // Check limits and requirements
-              if (!GameService.checkEffectLimitsAndReqs(gameState, player.uid, card, effect, cardLoc)) {
+              if (!GameService.checkEffectLimitsAndReqs(gameState, player.uid, card, effect, cardLoc, event)) {
                 return;
               }
 
               // Robust Self-Identification
               const isEventSelf = (event.sourceCard === card) ||
                 (event.sourceCard?.runtimeFingerprint && event.sourceCard.runtimeFingerprint === card.runtimeFingerprint) ||
-                (event.sourceCardId && event.sourceCardId === card.gamecardId);
+                (event.sourceCardId && event.sourceCardId === card.gamecardId) ||
+                (event.targetCardId && event.targetCardId === card.gamecardId);
 
               // Guard: For specific card-entry/action events, default to self-trigger unless explicitly global
-              const isMovementEvent = ['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_PLAYED', 'CARD_ATTACK_DECLARED'].includes(event.type);
+              const isMovementEvent = ['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_PLAYED', 'CARD_ATTACK_DECLARED', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'].includes(event.type);
 
               if (isMovementEvent && !effect.isGlobal && !isEventSelf) {
                 // If it's a movement/entry event for another card and this effect is not global, skip it
@@ -76,6 +83,22 @@ export class EventEngine {
   }
 
   static recalculateContinuousEffects(gameState: GameState) {
+    // 0. Update Goddess Mode status based on erosion count
+    Object.values(gameState.players).forEach(player => {
+      const totalErosion = player.erosionFront.filter(c => c !== null).length + 
+                           player.erosionBack.filter(c => c !== null).length;
+      
+      if (player.isGoddessMode && totalErosion < 10) {
+        player.isGoddessMode = false;
+        gameState.logs.push(`${player.displayName} 的侵蚀区卡牌不足 10 张，退出了女神化状态。`);
+        
+        this.dispatchEvent(gameState, {
+          type: 'GODDESS_EXIT',
+          playerUid: player.uid
+        });
+      }
+    });
+
     // 1. Reset all cards to base stats
     const resetCards = (player: PlayerState) => {
       const allCards = [
@@ -106,16 +129,14 @@ export class EventEngine {
       activeZones.forEach(card => {
         if (card && card.effects) {
           card.effects.forEach(effect => {
-            if (effect.type === 'CONTINUOUS') {
-              if (effect.applyContinuous) {
-                effect.applyContinuous(gameState, card);
-              }
-              if (effect.atomicEffects) {
-                effect.atomicEffects.forEach(atomic => {
-                  // Only applying stat changes for continuous atomic effects for now
-                  AtomicEffectExecutor.execute(gameState, player.uid, atomic, card);
-                });
-              }
+            if (effect.applyContinuous) {
+              effect.applyContinuous(gameState, card);
+            }
+            if (effect.type === 'CONTINUOUS' && effect.atomicEffects) {
+              effect.atomicEffects.forEach(atomic => {
+                // Only applying stat changes for continuous atomic effects for now
+                AtomicEffectExecutor.execute(gameState, player.uid, atomic, card);
+              });
             }
           });
         }

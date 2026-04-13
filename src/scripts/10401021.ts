@@ -11,14 +11,14 @@ const effect_10401021_continuous: CardEffect = {
 const effect_10401021_trigger: CardEffect = {
   id: 'fuka_end_turn_bounce',
   type: 'TRIGGER',
-  triggerType: 'PHASE_CHANGED',
+  triggerEvent: 'PHASE_CHANGED',
   description: '【诱发】在你的回合结束时，如果你的战场上只有蓝色单位，你可以选择发动：选择对手战场上一个AC+2以下且非神迹的卡牌返回持有者手牌。',
   condition: (gameState: GameState, playerState: PlayerState) => {
     // Turn just ended logic: phase is now START, but it's not our turn anymore.
     // Also check if we were the player who just finished (turnCount must have been incremented)
     return !playerState.isTurn && gameState.phase === 'START' && gameState.turnCount > 1;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const units = playerState.unitZone.filter(u => u !== null) as Card[];
     // battlefield has units AND all units are blue
     if (units.length > 0 && units.every(u => u.color === 'BLUE')) {
@@ -75,7 +75,7 @@ const effect_10401021_activate: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState) => {
     return playerState.isTurn && gameState.phase === 'MAIN';
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // Search for '风花' godmark cards in Hand, Deck, Grave (excluding this one)
     const zones: { zone: (Card | null)[], name: TriggerLocation }[] = [
       { zone: playerState.hand, name: 'HAND' },

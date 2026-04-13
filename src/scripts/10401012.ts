@@ -1,7 +1,7 @@
 import { Card, GameState, PlayerState, CardEffect, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
-const trigger_10401006_1: CardEffect = {
+const trigger_10401012_1: CardEffect = {
   id: '10401012_trigger_1',
   type: 'TRIGGER',
   description: '【诱发】这个单位被战斗破坏时，你可以选择你的侵蚀区中的最多2张具有 [菲晶] 的正面卡：将被选择的卡加入手牌。',
@@ -30,7 +30,7 @@ const trigger_10401006_1: CardEffect = {
       playerUid: playerState.uid,
       options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, blueCrystalCards.map(c => ({ card: c, source: 'EROSION_FRONT' }))),
       title: '选择加入手牌的卡',
-      description: '请从你的侵蚀前区选择最多2张具有 [蓝晶] 的正面卡加入手牌',
+      description: '请从你的侵蚀前区选择最多2张具有 [菲晶] 的正面卡加入手牌',
       minSelections: 1,
       maxSelections: Math.min(2, blueCrystalCards.length),
       callbackKey: 'EFFECT_RESOLVE',
@@ -76,7 +76,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [trigger_10401006_1],
+  effects: [trigger_10401012_1],
   rarity: 'C',
   availableRarities: ['C'],
   uniqueId: null,

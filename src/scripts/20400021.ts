@@ -23,7 +23,7 @@ const effect_20400021_counter: CardEffect = {
       !item.isNegated
     );
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // Select payment (2 AC)
     gameState.pendingQuery = {
       id: Math.random().toString(36).substring(7),

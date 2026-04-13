@@ -11,7 +11,7 @@ const effect_10401034_front: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState) => {
     return playerState.isTurn && gameState.phase === 'MAIN' && playerState.unitZone.some(s => s === null);
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const pUid = playerState.uid;
     AtomicEffectExecutor.moveCard(gameState, pUid, 'EROSION_FRONT' as TriggerLocation, pUid, 'UNIT', instance.gamecardId, true);
     gameState.logs.push(`[${instance.fullName}] 从侵蚀区域回到了战场！`);
@@ -37,7 +37,7 @@ const effect_10401034_hand: CardEffect = {
     const emptyIdx = playerState.erosionFront.findIndex(s => s === null);
     return emptyIdx !== -1;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const pUid = playerState.uid;
     // 1. Move to Erosion Front
     AtomicEffectExecutor.moveCard(gameState, pUid, 'HAND', pUid, 'EROSION_FRONT' as TriggerLocation, instance.gamecardId, true);

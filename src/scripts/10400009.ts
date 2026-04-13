@@ -16,7 +16,7 @@ const effect_10400009_counter: CardEffect = {
     const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
     return gameState.counterStack.some(item => item.type === 'PLAY' && item.ownerUid === opponentId && !item.isNegated);
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // 1. Pay Cost (4 fees)
     gameState.pendingQuery = {
       id: Math.random().toString(36).substring(7),

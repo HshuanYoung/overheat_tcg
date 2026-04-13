@@ -47,6 +47,28 @@ export const ServerGameService = {
         if (item.card) this.hydrateCard(item.card);
       });
     }
+
+    // New: Hydrate cards and effects in pending resolutions
+    if (gameState.pendingResolutions) {
+      gameState.pendingResolutions = gameState.pendingResolutions.map(record => {
+        if (!record || !record.card) return record;
+
+        this.hydrateCard(record.card);
+
+        // Find the matching effect in the library and restore it entirely
+        if (record.card.effects) {
+          const masterEffect = record.card.effects[record.effectIndex];
+          if (masterEffect) {
+            // Merge all properties from the library to restore functions and metadata
+            record.effect = { ...record.effect, ...masterEffect };
+          }
+        }
+        return record;
+      });
+    }
+    
+    // New: After restoring all functions, recalculate all continuous effects to ensure stats are correct
+    EventEngine.recalculateContinuousEffects(gameState);
   },
 
   // Validate deck: 50 cards, max 10 God Mark, max 4 per card
@@ -83,7 +105,7 @@ export const ServerGameService = {
     }
   },
 
-  checkEffectLimitsAndReqs(gameState: GameState, playerUid: string, card: Card, effect: CardEffect, triggerLocation?: TriggerLocation): boolean {
+  checkEffectLimitsAndReqs(gameState: GameState, playerUid: string, card: Card, effect: CardEffect, triggerLocation?: TriggerLocation, event?: GameEvent): boolean {
     const player = gameState.players[playerUid];
     if (!player) return false;
 
@@ -139,7 +161,7 @@ export const ServerGameService = {
     }
     // 4. Condition Check
     if (effect.condition) {
-      if (!effect.condition(gameState, player, card)) {
+      if (!effect.condition(gameState, player, card, event)) {
         return false;
       }
     }
@@ -290,17 +312,17 @@ export const ServerGameService = {
         return { canPlay: false, reason: '道具区已有同名专用卡' };
       }
     }
-    
+
     // 1.1 Godmark Limit Check (e.g. 10401021)
     if (card.godMark) {
       // Check for limits on the field OR on the card itself
       const fieldEffects = player.unitZone
         .filter(u => u !== null)
         .flatMap(u => (u as Card).effects || []);
-      
+
       const fieldLimitEffect = fieldEffects.find(e => e.type === 'CONTINUOUS' && e.limitGodmarkCount !== undefined);
       const selfLimitEffect = card.effects?.find(e => e.type === 'CONTINUOUS' && e.limitGodmarkCount !== undefined);
-      
+
       const effectiveLimit = fieldLimitEffect?.limitGodmarkCount ?? selfLimitEffect?.limitGodmarkCount;
 
       if (effectiveLimit !== undefined) {
@@ -314,7 +336,7 @@ export const ServerGameService = {
     // 3. Color Requirements
     const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
     let omniColorCount = 0;
-    
+
     const checkOmni = (c: Card | null) => {
       if (!c) return false;
       // Use centralized logic from AtomicEffectExecutor
@@ -512,7 +534,7 @@ export const ServerGameService = {
 
     gameState.isCountering = 1;
     gameState.counterStack.push(stackItem);
-    
+
     // Combo Link Numbering (Link 1 is the trigger, Link 2 is the first response, etc.)
     const linkNumber = gameState.counterStack.length;
     const opponentId = gameState.playerIds.find(id => id !== sourcePlayerId);
@@ -549,7 +571,7 @@ export const ServerGameService = {
     if (!paymentResult.success) throw new Error(paymentResult.reason);
 
     this.moveCard(gameState, playerId, sourceZone, playerId, 'PLAY', cardId);
-    
+
     // Record faction used
     if (card.faction) {
       if (!player.factionsUsedThisTurn) player.factionsUsedThisTurn = [];
@@ -604,8 +626,8 @@ export const ServerGameService = {
 
     const effect = card.effects?.[effectIndex];
     if (!effect) throw new Error('Effect not found');
-
-    if (!this.checkEffectLimitsAndReqs(gameState, playerId, card, effect, location)) {
+    const loc = card.cardlocation as TriggerLocation;
+    if (!this.checkEffectLimitsAndReqs(gameState, playerId, card, effect, loc)) {
       throw new Error('不满足发动条件或已达到使用次数限制');
     }
 
@@ -623,7 +645,7 @@ export const ServerGameService = {
     if (effect.cost) {
       const player = gameState.players[playerId];
       const costResult = effect.cost(gameState, player, card);
-      
+
       // If cost triggered a query, wait for it
       if (gameState.pendingQuery) {
         gameState.pendingQuery.callbackKey = 'ACTIVATE_COST_RESOLVE';
@@ -634,7 +656,7 @@ export const ServerGameService = {
         };
         return gameState;
       }
-      
+
       if (!costResult) {
         throw new Error('发动费用不足或无法支付费用');
       }
@@ -670,7 +692,7 @@ export const ServerGameService = {
 
     const player = gameState.players[playerId];
     const topItem = gameState.counterStack[gameState.counterStack.length - 1];
-    
+
     if (topItem.type === 'PHASE_END') {
       gameState.logs.push(`${player.displayName} 接受了阶段结束请求 (Pass)。`);
     } else if (topItem.type === 'ATTACK') {
@@ -719,11 +741,11 @@ export const ServerGameService = {
     // Resolve the entire stack from top to bottom (LIFO)
     while (gameState.counterStack.length > 0) {
       const topItem = gameState.counterStack[gameState.counterStack.length - 1];
-      
+
       // 1. Visual Highlight: Show which item is being processed
       gameState.currentProcessingItem = topItem;
       if (onUpdate) await onUpdate(gameState);
-      
+
       // Wait for the front-end to display the effect
       await new Promise(resolve => setTimeout(resolve, 1500));
 
@@ -735,7 +757,7 @@ export const ServerGameService = {
       // RULE 3: after confrontation is over, return to 'main' or 'battle_free'.
       if (stackItem.type === 'PHASE_END') {
         gameState.logs.push(`[连锁结算] Link ${gameState.counterStack.length + 1} (阶段请求) 被后续动作中断，取消该请求。`);
-        continue; 
+        continue;
       }
 
       if (stackItem.isNegated) {
@@ -832,7 +854,7 @@ export const ServerGameService = {
       // 2. Clear Highlight: Item has been processed and removed from stack
       gameState.currentProcessingItem = null;
       if (onUpdate) await onUpdate(gameState);
-      
+
       // PAUSE RESOLUTION: If an effect triggered a user choice, stop here.
       // We will resume once handleQueryChoice is called and finished.
       if (gameState.pendingQuery) {
@@ -845,7 +867,7 @@ export const ServerGameService = {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
-    
+
     await this.finishCounteringStack(gameState, onUpdate);
     return gameState;
   },
@@ -1002,10 +1024,15 @@ export const ServerGameService = {
       }
 
       if (effect && effect.onQueryResolve) {
-        gameState.logs.push(`[系统] 正在执行脚本回调 ${effect.id || effectIndex}`);
-        effect.onQueryResolve(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
-        EventEngine.recalculateContinuousEffects(gameState);
-        
+        try {
+          gameState.logs.push(`[系统] 正在执行脚本回调 ${effect.id || effectIndex}`);
+          effect.onQueryResolve(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
+          EventEngine.recalculateContinuousEffects(gameState);
+        } catch (err: any) {
+          console.error(`[Error] CRASH in onQueryResolve:`, err);
+          gameState.logs.push(`[错误] 脚本回调执行崩溃: ${err.message}`);
+        }
+
         // RESUME RESOLUTION: If this choice was part of a sequential settlement, resume it.
         if (gameState.isResolvingStack) {
           if (gameState.counterStack.length > 0) {
@@ -1032,11 +1059,11 @@ export const ServerGameService = {
       }
       const effectIndex = query.context?.effectIndex;
       const effect = sourceCard.effects?.[effectIndex];
-      
+
       if (effect && effect.onQueryResolve) {
         effect.onQueryResolve(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
       }
-      
+
       // If it was a trigger cost, execute immediately, otherwise enter countering
       if (query.context?.isTrigger) {
         await this.executeTriggeredEffect(gameState, playerUid, {
@@ -1068,7 +1095,7 @@ export const ServerGameService = {
           subCard.cardlocation = 'GRAVE';
           player.grave.push(subCard);
           gameState.logs.push(`[系统] ${subCard.fullName} 代替了破坏`);
-          
+
           // Dispatch event to trigger "When destroyed" effects
           EventEngine.dispatchEvent(gameState, {
             type: 'CARD_LEFT_FIELD',
@@ -1086,9 +1113,9 @@ export const ServerGameService = {
     if (query.callbackKey === 'EROSION_KEEP_RESOLVE') {
       const { choice, selectedCardId } = query.context;
       const keepCardId = selections[0]; // If none picked, selections[0] is undefined
-      
+
       this.executeErosionMovements(gameState, playerUid, choice, selectedCardId, keepCardId);
-      
+
       gameState.phase = 'MAIN';
       gameState.phaseTimerStart = Date.now();
       gameState.logs.push(`${gameState.players[playerUid].displayName} 进入主要阶段`);
@@ -1328,6 +1355,8 @@ export const ServerGameService = {
     gameState.phase = 'BATTLE_FREE';
     gameState.phaseTimerStart = Date.now();
 
+    await this.checkTriggeredEffects(gameState);
+
     return gameState;
   },
 
@@ -1381,7 +1410,7 @@ export const ServerGameService = {
         const attackerPower = attackingUnit.power || 0;
 
         if (attackerPower > defenderPower) {
-          this.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
+          await this.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
           gameState.logs.push(`${attackingUnit.fullName} 破坏了 ${defendingUnit.fullName}`);
 
           // Annihilation Effect
@@ -1390,11 +1419,11 @@ export const ServerGameService = {
             this.applyDamageToPlayer(gameState, defenderId, attackingUnit.damage || 0, 'BATTLE');
           }
         } else if (attackerPower < defenderPower) {
-          this.destroyUnit(gameState, attackerId, attackingUnit.gamecardId);
+          await this.destroyUnit(gameState, attackerId, attackingUnit.gamecardId);
           gameState.logs.push(`${defendingUnit.fullName} 破坏了 ${attackingUnit.fullName}`);
         } else {
-          this.destroyUnit(gameState, attackerId, attackingUnit.gamecardId);
-          this.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
+          await this.destroyUnit(gameState, attackerId, attackingUnit.gamecardId);
+          await this.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
           gameState.logs.push(`${attackingUnit.fullName} 和 ${defendingUnit.fullName} 同归于尽`);
 
           // Annihilation Effect (Trigger only if attacker survived)
@@ -1412,7 +1441,7 @@ export const ServerGameService = {
           const isDestroyed = defenderPower < Math.min(powerA, powerB) || (defenderPower >= Math.min(powerA, powerB) && defenderPower <= totalAttackerPower);
 
           if (isDestroyed) {
-            this.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
+            await this.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
             gameState.logs.push(`${defendingUnit.fullName} 被联军破坏`);
 
             // Annihilation Effect for Alliances (Survivor only logic)
@@ -1461,8 +1490,8 @@ export const ServerGameService = {
           // Already handled above for destruction
         } else if (defenderPower > totalAttackerPower) {
           // Both attackers destroyed
-          this.destroyUnit(gameState, attackerId, attackingUnits[0].gamecardId);
-          this.destroyUnit(gameState, attackerId, attackingUnits[1].gamecardId);
+          await this.destroyUnit(gameState, attackerId, attackingUnits[0].gamecardId);
+          await this.destroyUnit(gameState, attackerId, attackingUnits[1].gamecardId);
           gameState.logs.push(`联军被 ${defendingUnit.fullName} 击溃，两个单位都被破坏`);
         } else {
           // Defender power is between min and total
@@ -1509,6 +1538,7 @@ export const ServerGameService = {
     }
     gameState.battleState = undefined;
     gameState.phaseTimerStart = Date.now();
+    await this.checkTriggeredEffects(gameState);
     return gameState;
   },
 
@@ -1587,40 +1617,44 @@ export const ServerGameService = {
 
     // Check for Substitution effects
     if (!skipSubstitution) {
-      const substitutionCards = player.itemZone.filter(c => 
-      c !== null && 
-      c.effects && 
-      c.effects.some(e => e.substitutionFilter && AtomicEffectExecutor.matchesFilter(unit, e.substitutionFilter, c))
-    ) as Card[];
+      const substitutionCards = player.itemZone.filter(c =>
+        c !== null &&
+        c.effects &&
+        c.effects.some(e => e.substitutionFilter && AtomicEffectExecutor.matchesFilter(unit, e.substitutionFilter, c))
+      ) as Card[];
 
-    for (const subCard of substitutionCards) {
-      const effect = subCard.effects.find(e => e.substitutionFilter && AtomicEffectExecutor.matchesFilter(unit, e.substitutionFilter, subCard));
-      if (effect && this.checkEffectLimitsAndReqs(gameState, playerId, subCard, effect)) {
-        // Issue Query
-        const queryId = Math.random().toString(36).substring(7);
-        gameState.pendingQuery = {
-          id: queryId,
-          type: 'SELECT_CHOICE',
-          playerUid: playerId,
-          options: [
-            { id: 'YES', label: '发动(YES)' },
-            { id: 'NO', label: '不发动(NO)' }
-          ],
-          title: '效果发动确认',
-          description: `是否发动 [${subCard.fullName}] 的效果，将其送入墓地代替 [${unit.fullName}] 的破坏？`,
-          callbackKey: 'SUBSTITUTION_CHOICE',
-          context: { subCardId: subCard.gamecardId, targetUnitId: gamecardId, isEffect, sourcePlayerId }
-        };
+      for (const subCard of substitutionCards) {
+        const effect = subCard.effects.find(e => e.substitutionFilter && AtomicEffectExecutor.matchesFilter(unit, e.substitutionFilter, subCard));
+        if (effect && this.checkEffectLimitsAndReqs(gameState, playerId, subCard, effect)) {
+          // Issue Query
+          const queryId = Math.random().toString(36).substring(7);
+          gameState.pendingQuery = {
+            id: queryId,
+            type: 'SELECT_CHOICE',
+            playerUid: playerId,
+            options: [
+              { id: 'YES', label: '发动(YES)' },
+              { id: 'NO', label: '不发动(NO)' }
+            ],
+            title: '效果发动确认',
+            description: `是否发动 [${subCard.fullName}] 的效果，将其送入墓地代替 [${unit.fullName}] 的破坏？`,
+            callbackKey: 'SUBSTITUTION_CHOICE',
+            context: { subCardId: subCard.gamecardId, targetUnitId: gamecardId, isEffect, sourcePlayerId }
+          };
 
-        return; 
+          return;
+        }
       }
-    }
     }
 
     // Default destruction
     unit.cardlocation = 'GRAVE';
     player.grave.push(unit);
     player.unitZone[unitIdx] = null;
+
+    // Ensure movement events are dispatched
+    EventEngine.handleCardLeftZone(gameState, playerId, unit, 'UNIT', isEffect, 'GRAVE');
+
 
     if (isEffect) {
       EventEngine.dispatchEvent(gameState, {
@@ -1634,7 +1668,7 @@ export const ServerGameService = {
         type: 'CARD_DESTROYED_BATTLE',
         targetCardId: gamecardId,
         playerUid: playerId,
-        data: { 
+        data: {
           attackerIds: gameState.battleState?.attackers || [],
           isAlliance: gameState.battleState?.isAlliance || false
         }
@@ -1662,57 +1696,86 @@ export const ServerGameService = {
       data: { cardId: card.gamecardId }
     });
 
+    await this.checkTriggeredEffects(gameState);
+
     if (player.hand.length <= 6) {
       // Move to next turn
-      this.finishTurnTransition(gameState);
+      await this.finishTurnTransition(gameState);
     }
 
     return gameState;
   },
 
-  finishTurnTransition(gameState: GameState) {
-    const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-    const currentPlayer = gameState.players[currentPlayerId];
+  async finishTurnTransition(gameState: GameState) {
+    try {
 
-    gameState.currentTurnPlayer = gameState.currentTurnPlayer === 0 ? 1 : 0;
-    gameState.turnCount += 1;
-    gameState.phase = 'START';
-    gameState.phaseTimerStart = Date.now();
-    const nextPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
-    const nextPlayer = gameState.players[nextPlayerId];
+      const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      const currentPlayer = gameState.players[currentPlayerId];
 
-    currentPlayer.isTurn = false;
-    nextPlayer.isTurn = true;
+      gameState.currentTurnPlayer = gameState.currentTurnPlayer === 0 ? 1 : 0;
+      gameState.turnCount += 1;
+      gameState.phase = 'START';
+      gameState.phaseTimerStart = Date.now();
+      const nextPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      const nextPlayer = gameState.players[nextPlayerId];
 
-    gameState.logs.push(`--- 回合 ${gameState.turnCount}: ${nextPlayer.displayName} ---`);
+      currentPlayer.isTurn = false;
+      nextPlayer.isTurn = true;
 
-    // New: Process pending resolutions at the end of the turn
-    if (gameState.pendingResolutions && gameState.pendingResolutions.length > 0) {
-      gameState.logs.push(`[系统] 正在处理阶段结束效果...`);
-      const resolutions = [...gameState.pendingResolutions];
-      gameState.pendingResolutions = []; // Clear queue
-      resolutions.forEach(record => {
-        if (record.effect.resolve) {
-          const player = gameState.players[record.playerUid];
-          record.effect.resolve(record.card, gameState, player, record.event);
+      gameState.logs.push(`--- 回合 ${gameState.turnCount}: ${nextPlayer.displayName} ---`);
+
+      // 1. Process pending resolutions (End-of-Turn Effects)
+      if (gameState.pendingResolutions && gameState.pendingResolutions.length > 0) {
+        const resolutions = [...gameState.pendingResolutions];
+        gameState.pendingResolutions = []; // Clear queue immediately
+
+        for (const record of resolutions) {
+          if (!record.effect || !record.effect.resolve) {
+            continue;
+          }
+
+          try {
+            const player = gameState.players[record.playerUid];
+            if (player) {
+              // Use Promise.race to prevent potential hangs in resolution scripts
+              const resolvePromise = (record.effect.resolve as any)(record.card, gameState, player, record.event);
+              await Promise.race([
+                resolvePromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Effect resolution timeout (5s)")), 5000))
+              ]);
+            }
+          } catch (err: any) {
+            gameState.logs.push(`[效果错误] ${record.card?.fullName || '未知来源'} 的阶段结束效果处理失败: ${err.message}`);
+          }
         }
-      });
-    }
-
-    // Heroic Effect and Multi-turn flags reset for PREVIOUS player
-    currentPlayer.unitZone.forEach(unit => {
-      if (unit) {
-        if (unit.isHeroic && unit.hasAttackedThisTurn) {
-          gameState.logs.push(`【英勇】效果触发！${unit.fullName} 在回合结束时重置`);
-          this.readyCard(unit);
-        }
-        unit.hasAttackedThisTurn = false;
-        unit.usedShenyiThisTurn = false;
-        unit.inAllianceGroup = false;
       }
-    });
 
-    this.executeStartPhase(gameState, nextPlayer);
+      // 2. Perform global cleanup/flag reset
+      Object.values(gameState.players).forEach(p => {
+        p.hasUnitReturnedThisTurn = false;
+        p.hasExhaustedThisTurn = [];
+        p.unitZone.forEach(u => {
+          if (u) {
+            u.hasAttackedThisTurn = false;
+            u.usedShenyiThisTurn = false;
+            u.inAllianceGroup = false;
+          }
+        });
+      });
+
+      // 3. Recalculate stats after any moves during resolutions
+      EventEngine.recalculateContinuousEffects(gameState);
+
+      // 4. Start the next phase
+      await this.executeStartPhase(gameState, nextPlayer);
+
+    } catch (err: any) {
+      gameState.logs.push(`[致命错误] 回合切换过程崩溃: ${err.message}`);
+      // Ensure we don't block the server response despite the crash
+      if (gameState.phase === 'DECLARE_END') {
+        gameState.phase = 'START';
+      }
+    }
   },
 
   checkWinConditions(gameState: GameState): boolean {
@@ -1794,7 +1857,7 @@ export const ServerGameService = {
     if (effect.cost && !skipCost) {
       const player = gameState.players[playerUid];
       const costResult = effect.cost(gameState, player, card);
-      
+
       if (gameState.pendingQuery) {
         // If query triggered by cost, we must wait
         gameState.pendingQuery.context = {
@@ -1806,7 +1869,7 @@ export const ServerGameService = {
         };
         return;
       }
-      
+
       if (!costResult) {
         // Cost failed, proceed to next trigger
         await this.checkTriggeredEffects(gameState, onUpdate);
@@ -1827,7 +1890,7 @@ export const ServerGameService = {
       data: { event }
     };
     if (onUpdate) await onUpdate(gameState);
-    
+
     // Record faction used
     const player = gameState.players[playerUid];
     if (card.faction && player) {
@@ -1860,7 +1923,7 @@ export const ServerGameService = {
     });
 
     gameState.logs.push(`[诱发结算] ${card.fullName} 的展示效果已结算。`);
-    
+
     // 7. Cleanup highlight
     gameState.currentProcessingItem = null;
     if (onUpdate) await onUpdate(gameState);
@@ -1910,19 +1973,19 @@ export const ServerGameService = {
         gameState.turnCount = 1;
         gameState.logs.push(`[阶段切换] 进入开始阶段`);
         EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } });
-        this.executeStartPhase(gameState, turnPlayer);
+        await this.executeStartPhase(gameState, turnPlayer);
         break;
       case 'START':
         gameState.phase = 'DRAW';
         gameState.logs.push(`[阶段切换] 进入抽牌阶段`);
         EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'DRAW' } });
-        this.executeDrawPhase(gameState, turnPlayer);
+        await this.executeDrawPhase(gameState, turnPlayer);
         break;
       case 'DRAW':
         gameState.phase = 'EROSION';
         gameState.logs.push(`[阶段切换] 进入侵蚀阶段`);
         EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'EROSION' } });
-        this.executeErosionPhase(gameState, turnPlayer);
+        await this.executeErosionPhase(gameState, turnPlayer);
         break;
       case 'EROSION':
         // Handled by handleErosionChoice
@@ -1948,7 +2011,7 @@ export const ServerGameService = {
         } else if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
             gameState.logs.push(`[阶段切换] 进入弃牌阶段`);
-            this.executeEndPhase(gameState, actingPlayer);
+            await this.executeEndPhase(gameState, actingPlayer);
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求结束回合`);
             this.enterCountering(gameState, actingPlayerId, {
@@ -1964,7 +2027,7 @@ export const ServerGameService = {
         if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
             gameState.logs.push(`[阶段切换] 进入弃牌阶段`);
-            this.executeEndPhase(gameState, actingPlayer);
+            await this.executeEndPhase(gameState, actingPlayer);
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求结束回合`);
             this.enterCountering(gameState, actingPlayerId, {
@@ -2062,7 +2125,7 @@ export const ServerGameService = {
     return gameState;
   },
 
-  executeStartPhase(gameState: GameState, player: PlayerState) {
+  async executeStartPhase(gameState: GameState, player: PlayerState) {
     // console.log(`[ServerGameService] executeStartPhase for ${player.displayName}`);
 
     // Update public hand duration
@@ -2084,18 +2147,18 @@ export const ServerGameService = {
     });
 
     player.timeRemaining = (gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL);
-    const unitsToReset = player.unitZone.filter(card => 
+    const unitsToReset = player.unitZone.filter(card =>
       card && card.isExhausted && (card.canResetCount === 0 || card.canResetCount === undefined)
     );
-    const itemsToReset = player.itemZone.filter(card => 
+    const itemsToReset = player.itemZone.filter(card =>
       card && card.isExhausted && (card.canResetCount === 0 || card.canResetCount === undefined)
     );
-    
+
     // Check if any unit/item has a freeze counter that needs aging
-    const unitsToAge = player.unitZone.filter(card => 
+    const unitsToAge = player.unitZone.filter(card =>
       card && card.canResetCount !== undefined && card.canResetCount > 0
     );
-    const itemsToAge = player.itemZone.filter(card => 
+    const itemsToAge = player.itemZone.filter(card =>
       card && card.canResetCount !== undefined && card.canResetCount > 0
     );
 
@@ -2130,15 +2193,15 @@ export const ServerGameService = {
     // Automatically move to DRAW phase
     gameState.phase = 'DRAW';
     gameState.phaseTimerStart = Date.now();
-    this.executeDrawPhase(gameState, player);
+    await this.executeDrawPhase(gameState, player);
   },
 
-  executeDrawPhase(gameState: GameState, player: PlayerState) {
+  async executeDrawPhase(gameState: GameState, player: PlayerState) {
     if (player.skipDrawPhase) {
       player.skipDrawPhase = false;
       gameState.logs.push(`${player.displayName} 的抽卡阶段被跳过了。`);
       gameState.phase = 'EROSION';
-      this.executeErosionPhase(gameState, player);
+      await this.executeErosionPhase(gameState, player);
       return;
     }
 
@@ -2149,7 +2212,7 @@ export const ServerGameService = {
     if (gameState.turnCount === 1) {
       gameState.logs.push('先手玩家第一回合不抽卡');
       gameState.phase = 'EROSION';
-      this.executeErosionPhase(gameState, player);
+      await this.executeErosionPhase(gameState, player);
       return;
     }
 
@@ -2165,6 +2228,7 @@ export const ServerGameService = {
           playerUid: player.uid,
           data: { cardId: card.gamecardId }
         });
+        await this.checkTriggeredEffects(gameState);
       }
     } else {
       // 1. During the card drawing stage, there are no cards available for drawing
@@ -2177,10 +2241,10 @@ export const ServerGameService = {
 
     // Automatically move to EROSION phase
     gameState.phase = 'EROSION';
-    this.executeErosionPhase(gameState, player);
+    await this.executeErosionPhase(gameState, player);
   },
 
-  executeErosionPhase(gameState: GameState, player: PlayerState) {
+  async executeErosionPhase(gameState: GameState, player: PlayerState) {
     // console.log(`[ServerGameService] executeErosionPhase for ${player.displayName}`);
     const faceUpCards = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
     // console.log(`[ServerGameService] Found ${faceUpCards.length} face-up cards in erosion front`);
@@ -2210,9 +2274,9 @@ export const ServerGameService = {
     else if (choice === 'B' || choice === 'C') goingToGrave = faceUpCards.filter(c => c.gamecardId !== selectedCardId);
 
     // Check for EROSION_KEEP effects (10403015)
-    const keepEffectCard = player.unitZone.find(c => 
-      c && c.effects && c.effects.some(e => 
-        e.erosionKeepReplacement && 
+    const keepEffectCard = player.unitZone.find(c =>
+      c && c.effects && c.effects.some(e =>
+        e.erosionKeepReplacement &&
         (!e.condition || e.condition(gameState, player, c))
       )
     );
@@ -2246,6 +2310,7 @@ export const ServerGameService = {
     } else {
       gameState.previousPhase = 'MAIN';
     }
+    await this.checkTriggeredEffects(gameState);
   },
 
   executeErosionMovements(gameState: GameState, playerId: string, choice: 'A' | 'B' | 'C', selectedCardId?: string, keptCardId?: string) {
@@ -2302,14 +2367,14 @@ export const ServerGameService = {
     }
   },
 
-  executeEndPhase(gameState: GameState, player: PlayerState) {
+  async executeEndPhase(gameState: GameState, player: PlayerState) {
     gameState.logs.push(`${player.displayName} 的结束阶段`);
 
     if (player.hand.length > 6) {
       gameState.phase = 'DISCARD';
       gameState.logs.push(`${player.displayName} 手牌超过 6 张，请弃置卡牌。`);
     } else {
-      this.finishTurnTransition(gameState);
+      await this.finishTurnTransition(gameState);
     }
   },
 
@@ -2564,7 +2629,7 @@ export const ServerGameService = {
     if (gameState.pendingQuery && gameState.pendingQuery.playerUid === 'BOT_PLAYER') {
       const query = gameState.pendingQuery;
       // console.log(`[Bot] Handling query: ${query.type} (${query.callbackKey})`);
-      
+
       let selections: string[] = [];
 
       if (query.type === 'SELECT_PAYMENT') {
@@ -2572,7 +2637,7 @@ export const ServerGameService = {
         const player = gameState.players['BOT_PLAYER'];
         const handIds = player.hand.map(c => c.gamecardId);
         const unitsInZone = player.unitZone.filter(c => c && !c.isExhausted).map(c => c!.gamecardId);
-        
+
         // Mock a simple payment selection
         const payment = {
           trashIds: handIds.slice(0, query.paymentCost || 0),
@@ -2586,8 +2651,8 @@ export const ServerGameService = {
         const min = query.minSelections || 1;
         selections = query.options.slice(0, min).map(o => o.id);
       } else if (query.type === 'SELECT_TARGET') {
-         // If no options but title/description, might be manual click? 
-         // But server queries usually have options.
+        // If no options but title/description, might be manual click? 
+        // But server queries usually have options.
       }
 
       await this.handleQueryChoice(gameState, 'BOT_PLAYER', query.id, selections, onUpdate);
@@ -2622,15 +2687,15 @@ export const ServerGameService = {
         const botErosionCount = bot.erosionFront.filter(Boolean).length + bot.erosionBack.filter(Boolean).length;
 
         const availableDefenders = bot.unitZone.filter(c => c && !c.isExhausted);
-        
+
         // 1. Find best "Winner" (Power > Attacker)
         let defender = availableDefenders.find(c => (c.power || 0) > totalAttackerPower);
-        
+
         // 2. If no winner, find a "Trader" (Power == Attacker)
         if (!defender) {
           defender = availableDefenders.find(c => (c.power || 0) === totalAttackerPower);
         }
-        
+
         // 3. If still no defender, consider a "Sacrifice" block (Power < Attacker)
         // Heuristic: Sacrifice if health is low (erosion >= 7) OR incoming damage is high (damage >= 2)
         if (!defender && (botErosionCount >= 7 || totalAttackerDamage >= 2)) {
@@ -2854,7 +2919,10 @@ export const ServerGameService = {
       },
       mode: 'practice',
       phaseTimerStart: 0,
-      turnTimerLimit
+      turnTimerLimit,
+      triggeredEffectsQueue: [],
+      pendingResolutions: [],
+      effectUsage: {}
     };
 
     // Correctly set isTurn for the initial player
@@ -2897,7 +2965,10 @@ export const ServerGameService = {
       players: { [uid1]: p1, [uid2]: p2 },
       mode: 'match',
       phaseTimerStart: 0,
-      turnTimerLimit
+      turnTimerLimit,
+      triggeredEffectsQueue: [],
+      pendingResolutions: [],
+      effectUsage: {}
     };
 
     // Correctly set isTurn for the initial player

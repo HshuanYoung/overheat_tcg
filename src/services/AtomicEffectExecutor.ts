@@ -79,9 +79,6 @@ export class AtomicEffectExecutor {
         this.turnErosionFaceDown(gameState, playerUid, effect.value || 0, sourceCard, querySelections);
         break;
 
-      case 'SET_CAN_RESET_COUNT':
-        this.applyCanResetChange(gameState, effect, sourceCard, querySelections);
-        break;
 
       case 'ROTATE_HORIZONTAL':
         this.rotateCards(gameState, playerUid, effect, 'HORIZONTAL', sourceCard, querySelections);
@@ -466,7 +463,19 @@ export class AtomicEffectExecutor {
     });
   }
 
-  private static findCardOwnerKey(gameState: GameState, cardId: string): string | undefined {
+  static findCardById(gameState: GameState, cardId: string): Card | undefined {
+    for (const uid of Object.keys(gameState.players)) {
+      const p = gameState.players[uid];
+      const zones = [p.hand, p.unitZone, p.itemZone, p.grave, p.exile, p.deck, p.erosionFront, p.erosionBack];
+      for (const zone of zones) {
+        const card = zone.find(c => c && c.gamecardId === cardId);
+        if (card) return card;
+      }
+    }
+    return undefined;
+  }
+
+  static findCardOwnerKey(gameState: GameState, cardId: string): string | undefined {
     for (const uid of Object.keys(gameState.players)) {
       const p = gameState.players[uid];
       const hasCard = [...p.hand, ...p.unitZone, ...p.itemZone, ...p.grave, ...p.exile, ...p.erosionFront, ...p.erosionBack, ...p.deck]
@@ -553,7 +562,7 @@ export class AtomicEffectExecutor {
     return results;
   }
 
-  private static moveCard(gameState: GameState, playerUid: string, fromZone: TriggerLocation, toPlayerUid: string, toZone: TriggerLocation, cardId: string, isEffect?: boolean) {
+  static moveCard(gameState: GameState, playerUid: string, fromZone: TriggerLocation, toPlayerUid: string, toZone: TriggerLocation, cardId: string, isEffect?: boolean) {
     const sourcePlayer = gameState.players[playerUid];
     const targetPlayer = gameState.players[toPlayerUid];
 
@@ -673,15 +682,6 @@ export class AtomicEffectExecutor {
     });
 
     gameState.logs.push(`${player.displayName} 将 ${targets.length} 张侵蚀区的卡翻面。`);
-  }
-
-  private static applyCanResetChange(gameState: GameState, effect: AtomicEffect, sourceCard?: Card, querySelections?: string[]) {
-    const targets = this.findTargets(gameState, effect.targetFilter, sourceCard, querySelections);
-    targets.forEach(card => {
-      if (effect.value !== undefined) {
-        card.canResetCount = effect.value;
-      }
-    });
   }
 
   private static applySilence(gameState: GameState, effect: AtomicEffect, sourceCard?: Card, querySelections?: string[]) {

@@ -4,14 +4,14 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect_10403051_trigger: CardEffect = {
   id: 'sodo_entry_bounce',
   type: 'TRIGGER',
-  triggerType: 'CARD_EROSION_TO_FIELD',
+  triggerEvent: 'CARD_EROSION_TO_FIELD',
   description: '【诱发】每回合一次。当此单位从侵蚀区域进入战场时：将此单位转为横置，并选择对手的一张单位卡牌返回持有者手牌。',
   limitCount: 1,
   limitNameType: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     return event?.type === 'CARD_EROSION_TO_FIELD' && event.sourceCardId === instance.gamecardId;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // 1. Ask if player wants to activate (Choice)
     gameState.pendingQuery = {
       id: Math.random().toString(36).substring(7),
@@ -96,7 +96,7 @@ const effect_10403051_activate: CardEffect = {
     const emptyIdx = playerState.erosionFront.findIndex(s => s === null);
     return emptyIdx !== -1;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const pUid = playerState.uid;
     // 1. Move to Erosion Front
     AtomicEffectExecutor.moveCard(gameState, pUid, 'HAND', pUid, 'EROSION_FRONT' as TriggerLocation, instance.gamecardId, true);

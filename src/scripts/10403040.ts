@@ -4,14 +4,14 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect_10403040_kill_trigger: CardEffect = {
   id: 'cocoa_kill_trigger',
   type: 'TRIGGER',
-  triggerType: 'CARD_DESTROYED_BATTLE',
+  triggerEvent: 'CARD_DESTROYED_BATTLE',
   description: '【诱发】当此单位在战斗中破坏对手的单位时，选择对手的一个横置状态的非神迹单位并破坏。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     // Only trigger if this unit was the "killer"
     if (!event || !event.data || !event.data.attackerIds) return false;
     return event.data.attackerIds.includes(instance.gamecardId);
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
     const opponent = gameState.players[opponentId];
     
@@ -64,7 +64,7 @@ const effect_10403040_activate: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState) => {
     return !!playerState.isGoddessMode;
   },
-  execute: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const frontCards = playerState.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT') as Card[];
     if (frontCards.length === 0) throw new Error('没有侵蚀区正面卡牌作为代价');
 

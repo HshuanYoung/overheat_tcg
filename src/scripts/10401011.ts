@@ -1,5 +1,6 @@
 import { Card, GameState, PlayerState, CardEffect, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { EventEngine } from '../services/EventEngine';
 
 const trigger_10401011_1: CardEffect = {
   id: '10401011_trigger_1',
@@ -36,8 +37,8 @@ const trigger_10401011_1: CardEffect = {
       maxSelections: 1,
       callbackKey: 'EFFECT_RESOLVE',
       context: {
-        sourceCardId: instance.gamecardId,
-        effectId: '10401011_trigger_1',
+        sourceCardId: instance.gamecardId || (instance as any).uniqueId,
+        effectIndex: 0,
         step: 1
       }
     };
@@ -48,22 +49,14 @@ const trigger_10401011_1: CardEffect = {
       const targetUnit = playerState.unitZone.find(u => u?.gamecardId === targetId);
 
       if (targetUnit) {
-        // [等级+1/ATK+1000]
-        AtomicEffectExecutor.execute(gameState, playerState.uid, {
-          type: 'CHANGE_AC',
-          value: 1,
-          turnDuration: 1 // For this turn
-        }, instance, undefined, [targetId]);
-
-        AtomicEffectExecutor.execute(gameState, playerState.uid, {
-          type: 'CHANGE_POWER',
-          value: 1000,
-          turnDuration: 1 // For this turn
-        }, instance, undefined, [targetId]);
+        // Save boost state on the instance to survive hydration and enable applyContinuous
+        (instance as any).boostTargetId = targetId;
+        (instance as any).boostTurn = gameState.turnCount;
 
         gameState.logs.push(`[百濑刃匠] 强化了 ${targetUnit.fullName} (+1 等级 / +1000 ATK)。`);
 
-        // Schedule return to hand at end of turn
+        // Add to return-to-hand queue at end of turn
+        if (!gameState.pendingResolutions) gameState.pendingResolutions = [];
         gameState.pendingResolutions.push({
           card: instance,
           effect: trigger_10401011_1,
@@ -74,16 +67,52 @@ const trigger_10401011_1: CardEffect = {
             data: { targetGamecardId: targetId }
           } as any
         });
+        
+        // Force recalculate to make the buff show up immediately via applyContinuous
+        EventEngine.recalculateContinuousEffects(gameState);
       }
     }
   },
-  resolve: (instance: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => {
+  applyContinuous: (gameState: GameState, instance: Card) => {
+    const boostTargetId = (instance as any).boostTargetId;
+    const boostTurn = (instance as any).boostTurn;
+
+    if (boostTargetId && boostTurn === gameState.turnCount) {
+      for (const player of Object.values(gameState.players)) {
+        const target = player.unitZone.find(u => u?.gamecardId === boostTargetId);
+        if (target) {
+          const oldPower = target.power || 0;
+          const oldDamage = target.damage || 0;
+          
+          target.damage = oldDamage + 1;
+          target.power = oldPower + 1000;
+          
+          if (!target.influencingEffects) target.influencingEffects = [];
+          target.influencingEffects.push({
+            sourceCardName: '百濑刃匠',
+            description: '+1 伤害 / +1000 Power (诱发效果)'
+          });
+          
+          // Debug log to confirm application (only if not already logged in this state tick)
+          // Since applyContinuous runs many times, we avoid spamming logs here, 
+          // but the target object is definitely modified.
+          break;
+        }
+      }
+    }
+  },
+  resolve: async (instance: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => {
     // This is called at finishTurnTransition for each record in pendingResolutions
     const targetId = event?.data?.targetGamecardId;
-    if (targetId) {
+    
+    if (targetId && playerState) {
+      // Clear boost state
+      (instance as any).boostTargetId = undefined;
+      (instance as any).boostTurn = undefined;
+
       const targetUnit = playerState.unitZone.find(u => u?.gamecardId === targetId);
       if (targetUnit) {
-        AtomicEffectExecutor.execute(gameState, playerState.uid, {
+        await AtomicEffectExecutor.execute(gameState, playerState.uid, {
           type: 'MOVE_FROM_FIELD',
           targetFilter: { gamecardId: targetId },
           destinationZone: 'HAND'

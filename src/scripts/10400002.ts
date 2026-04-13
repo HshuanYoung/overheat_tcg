@@ -1,4 +1,5 @@
 import { Card, GameState, PlayerState } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
 
 
@@ -30,7 +31,7 @@ const card: Card = {
       playCost: 0,
       triggerLocation: ['EROSION_FRONT'],
       condition: (gameState, playerState) => {
-        const blueUnits = playerState.unitZone.filter(c => c && c.color === 'BLUE');
+        const blueUnits = playerState.unitZone.filter(c => c && AtomicEffectExecutor.matchesColor(c, 'BLUE'));
         const isNotCountering = gameState.phase !== 'COUNTERING';
         return blueUnits.length >= 2 && isNotCountering && playerState.hand.length >= 1;
       },

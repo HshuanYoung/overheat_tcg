@@ -42,7 +42,7 @@ const card: Card = {
 
         if (!isSelf || !isTargetZone || !isOnUnitZone) return false;
 
-        const blueUnits = playerState.unitZone.filter(c => c && c.color === 'BLUE');
+        const blueUnits = playerState.unitZone.filter(c => c && AtomicEffectExecutor.matchesColor(c, 'BLUE'));
         return blueUnits.length >= 2;
       },
       cost: (gameState, playerState, card) => {

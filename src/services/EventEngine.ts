@@ -94,6 +94,7 @@ export class EventEngine {
           card.influencingEffects = [];
         }
       });
+      player.effectDamageModifier = 0;
     };
     Object.values(gameState.players).forEach(resetCards);
 

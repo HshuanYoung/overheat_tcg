@@ -29,7 +29,7 @@ const card: Card = {
       limitCount: 1,
       limitNameType: true,
       condition: (gameState, playerState) => {
-        const blueUnits = playerState.unitZone.filter(c => c && c.color === 'BLUE' && c.type === 'UNIT');
+        const blueUnits = playerState.unitZone.filter(c => c && AtomicEffectExecutor.matchesColor(c, 'BLUE') && c.type === 'UNIT');
         const hasFrontErosion = playerState.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
         return blueUnits.length >= 3 && hasFrontErosion;
       },

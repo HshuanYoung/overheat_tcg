@@ -281,15 +281,40 @@ export const ServerGameService = {
 
     // 3. Color Requirements
     const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
-    const countColors = (c: Card | null) => {
-      if (c && c.color !== 'NONE') availableColors[c.color] = (availableColors[c.color] || 0) + 1;
+    let omniColorCount = 0;
+    
+    const checkOmni = (c: Card | null) => {
+      if (!c) return false;
+      // Use centralized logic from AtomicEffectExecutor
+      return c.id === '10500055' || (c.effects && c.effects.some(e => e.id === '10500055_omni'));
     };
-    player.unitZone.forEach(countColors);
-    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
-      if ((availableColors[color] || 0) < (reqCount as number)) {
-        return { canPlay: false, reason: `缺少颜色: ${color}` };
+
+    // Count fixed colors from Unit Zone
+    player.unitZone.forEach(c => {
+      if (!c) return;
+      if (checkOmni(c)) {
+        omniColorCount++;
+      } else if (c.color !== 'NONE') {
+        availableColors[c.color] = (availableColors[c.color] || 0) + 1;
       }
+    });
+
+    // Count Omni colors from Erosion Zones (only if in allowed zones)
+    player.erosionFront.forEach(c => {
+      if (checkOmni(c)) omniColorCount++;
+    });
+
+    let totalDeficit = 0;
+    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
+      const deficit = Math.max(0, (reqCount as number) - (availableColors[color] || 0));
+      totalDeficit += deficit;
     }
+
+    if (totalDeficit > omniColorCount) {
+      return { canPlay: false, reason: `缺少颜色需求 (缺口: ${totalDeficit}, 可用变色单位: ${omniColorCount})` };
+    }
+
+
 
     // 4. Cost Check (AC Value)
     const cost = card.acValue || 0;
@@ -1147,7 +1172,8 @@ export const ServerGameService = {
 
     gameState.battleState = {
       attackers: attackerIds,
-      isAlliance
+      isAlliance,
+      defensePowerRestriction: 0
     };
 
     const attackerNames = attackers.map(a => a.fullName).join(' 和 ');
@@ -1182,6 +1208,11 @@ export const ServerGameService = {
       const unit = player.unitZone.find(c => c?.gamecardId === defenderId);
       if (!unit) throw new Error('Defender not found in unit zone');
       if (unit.isExhausted) throw new Error('Defender is already exhausted');
+
+      const minPower = gameState.battleState.defensePowerRestriction || 0;
+      if (minPower > 0 && (unit.power || 0) < minPower) {
+        throw new Error(`无法防御：对方的效果使得力量值低于 ${minPower} 的单位不能进行防御`);
+      }
 
       this.exhaustCard(unit);
       gameState.battleState.defender = defenderId;
@@ -1399,6 +1430,11 @@ export const ServerGameService = {
       if (totalErosion >= 10 && !player.isGoddessMode) {
         player.isGoddessMode = true;
         gameState.logs.push(`${player.displayName} 进入了女神化状态！`);
+
+        EventEngine.dispatchEvent(gameState, {
+          type: 'GODDESS_TRANSFORMATION',
+          playerUid: playerId
+        });
 
         // Shenyi Effect (Interactive)
         const shenyiUnits = player.unitZone.filter(u => u && u.isShenyi && !u.usedShenyiThisTurn && u.isExhausted);

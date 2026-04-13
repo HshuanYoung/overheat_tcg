@@ -235,6 +235,7 @@ export interface PlayerState {
   isHandPublic?: number;
   timeRemaining: number;
   negatedNames?: string[]; // Names of cards that cannot be used this turn
+  effectDamageModifier?: number; // Bonus damage dealt by this player's card effects
 }
 
 export type StackItemType = 'PLAY' | 'EFFECT' | 'ATTACK' | 'PHASE_END';
@@ -332,6 +333,7 @@ export interface GameState {
     defender?: string; // gamecardId
     isAlliance: boolean;
     askConfront?: 'ASKING_OPPONENT' | 'ASKING_TURN_PLAYER';
+    defensePowerRestriction?: number;
   };
   effectUsage?: Record<string, number>;
   phaseTimerStart?: number;

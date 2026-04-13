@@ -145,11 +145,11 @@ export class AtomicEffectExecutor {
         break;
 
       case 'DEAL_EFFECT_DAMAGE':
-        if (effect.value) this.dealDamage(gameState, opponentUid, effect.value, 'EFFECT');
+        if (effect.value) this.dealDamage(gameState, opponentUid, playerUid, effect.value, 'EFFECT');
         break;
 
       case 'DEAL_COMBAT_DAMAGE':
-        if (effect.value) this.dealDamage(gameState, opponentUid, effect.value, 'BATTLE');
+        if (effect.value) this.dealDamage(gameState, opponentUid, playerUid, effect.value, 'BATTLE');
         break;
 
       case 'DESTROY_CARD':
@@ -288,23 +288,29 @@ export class AtomicEffectExecutor {
     });
   }
 
-  private static dealDamage(gameState: GameState, playerUid: string, amount: number, source: 'BATTLE' | 'EFFECT') {
-    const player = gameState.players[playerUid];
+  private static dealDamage(gameState: GameState, targetPlayerUid: string, dealerPlayerUid: string, amount: number, source: 'BATTLE' | 'EFFECT') {
+    const player = gameState.players[targetPlayerUid];
+    const dealer = gameState.players[dealerPlayerUid];
+
+    let finalAmount = amount;
+    if (source === 'EFFECT' && dealer.effectDamageModifier) {
+      finalAmount += dealer.effectDamageModifier;
+    }
 
     // Loss condition: Insufficient deck for damage
-    if (player.deck.length < amount) {
+    if (player.deck.length < finalAmount) {
       if (gameState.gameStatus !== 2) {
         gameState.gameStatus = 2;
         gameState.winReason = source === 'BATTLE' ? 'DECK_OUT_BATTLE_DAMAGE' : 'DECK_OUT_EFFECT_DAMAGE';
-        gameState.winnerId = gameState.playerIds.find(id => id !== playerUid);
+        gameState.winnerId = gameState.playerIds.find(id => id !== targetPlayerUid);
         gameState.logs.push(`[游戏结束] ${player.displayName} 受到伤害但卡组不足以支付，判负。`);
       }
       return;
     }
 
-    gameState.logs.push(`${player.displayName} 受到了 ${amount} 点 ${source === 'BATTLE' ? '战斗' : '效果'} 伤害`);
+    gameState.logs.push(`${player.displayName} 受到了 ${finalAmount} 点 ${source === 'BATTLE' ? '战斗' : '效果'} 伤害`);
 
-    for (let i = 0; i < amount; i++) {
+    for (let i = 0; i < finalAmount; i++) {
       const card = player.deck.pop()!;
       card.displayState = 'FRONT_UPRIGHT';
       card.cardlocation = 'EROSION_FRONT';
@@ -315,8 +321,8 @@ export class AtomicEffectExecutor {
 
     EventEngine.dispatchEvent(gameState, {
       type: source === 'BATTLE' ? 'COMBAT_DAMAGE_CAUSED' : 'EFFECT_DAMAGE_CAUSED',
-      playerUid,
-      data: { amount }
+      playerUid: targetPlayerUid,
+      data: { amount: finalAmount }
     });
   }
 
@@ -428,6 +434,19 @@ export class AtomicEffectExecutor {
     return undefined;
   }
 
+  static matchesColor(card: Card, targetColor: string): boolean {
+    if (card.color === targetColor) return true;
+
+    // Omni-color check for 10500055 (摇篮的少女)
+    // Works in Unit zone and Front Erosion zone as per latest script
+    const isOmni = card.id === '10500055' || (card.effects && card.effects.some(e => e.id === '10500055_omni'));
+    if (isOmni && ['UNIT', 'EROSION_FRONT'].includes(card.cardlocation as string)) {
+      return true;
+    }
+
+    return false;
+  }
+
   static matchesFilter(card: Card, filter?: CardFilter, sourceCard?: Card, querySelections?: string[]): boolean {
     if (!filter) return true;
 
@@ -444,7 +463,7 @@ export class AtomicEffectExecutor {
         if (card.type !== filter.type) return false;
       }
     }
-    if (filter.color && card.color !== filter.color) return false;
+    if (filter.color && !this.matchesColor(card, filter.color)) return false;
     if (filter.faction && card.faction !== filter.faction) return false;
     if (filter.godMark !== undefined && card.godMark !== filter.godMark) return false;
     if (filter.minPower !== undefined && (card.power || 0) < filter.minPower) return false;

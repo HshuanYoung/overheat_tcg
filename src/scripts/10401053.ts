@@ -18,13 +18,13 @@ const trigger_10401053: CardEffect = {
     if (!isSelf || !isTargetZone) return false;
 
     // Condition: Must have a '剑仙' card in front erosion area (face-up)
-    const erosionTargets = playerState.erosionFront.filter(c => 
+    const erosionTargets = playerState.erosionFront.filter(c =>
       c && c.displayState === 'FRONT_UPRIGHT' && c.fullName.includes('剑仙')
     );
     return erosionTargets.length > 0;
   },
   execute: (instance: Card, gameState: GameState, playerState: PlayerState) => {
-    const erosionTargets = playerState.erosionFront.filter(c => 
+    const erosionTargets = playerState.erosionFront.filter(c =>
       c && c.displayState === 'FRONT_UPRIGHT' && c.fullName.includes('剑仙')
     ) as Card[];
 
@@ -51,14 +51,14 @@ const trigger_10401053: CardEffect = {
     if (context.step === 1) {
       const targetId = selections[0];
       const targetCard = playerState.erosionFront.find(c => c?.gamecardId === targetId);
-      
+
       if (targetCard) {
         AtomicEffectExecutor.execute(gameState, playerState.uid, {
           type: 'MOVE_FROM_EROSION',
           targetFilter: { gamecardId: targetId },
           destinationZone: 'HAND'
         }, instance);
-        
+
         gameState.logs.push(`[${instance.fullName}] 发动：将侵蚀区的 ${targetCard.fullName} 加入手牌。`);
       }
     }
@@ -67,7 +67,7 @@ const trigger_10401053: CardEffect = {
 
 const card: Card = {
   id: '10401053',
-  fullName: '百濑之剑侍',
+  fullName: '御剑仙婢',
   specialName: '',
   type: 'UNIT',
   color: 'BLUE',

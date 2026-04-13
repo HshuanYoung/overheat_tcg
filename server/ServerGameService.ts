@@ -149,6 +149,11 @@ export const ServerGameService = {
       return false;
     }
 
+    // 6. Faction-lock Check
+    if (player.factionLock && card.faction !== player.factionLock) {
+      return false;
+    }
+
     return true;
   },
 
@@ -360,6 +365,11 @@ export const ServerGameService = {
       }
     }
 
+    // 6. Faction-lock Check
+    if (player.factionLock && card.faction !== player.factionLock) {
+      return { canPlay: false, reason: `受到派系限制：只能打出 [${player.factionLock}] 派系的卡牌` };
+    }
+
     return { canPlay: true };
   },
 
@@ -503,6 +513,15 @@ export const ServerGameService = {
     if (!paymentResult.success) throw new Error(paymentResult.reason);
 
     this.moveCard(gameState, playerId, 'HAND', playerId, 'PLAY', cardId);
+    
+    // Record faction used
+    if (card.faction) {
+      if (!player.factionsUsedThisTurn) player.factionsUsedThisTurn = [];
+      if (!player.factionsUsedThisTurn.includes(card.faction)) {
+        player.factionsUsedThisTurn.push(card.faction);
+      }
+    }
+
     const identity = getCardIdentity(gameState, playerId, card);
     gameState.logs.push(`${player.displayName} 打出了 ${identity} ${card.fullName}`);
 
@@ -586,6 +605,15 @@ export const ServerGameService = {
     }
 
     this.recordEffectUsage(gameState, playerId, card, effect);
+
+    // Record faction used
+    if (card.faction) {
+      if (!player.factionsUsedThisTurn) player.factionsUsedThisTurn = [];
+      if (!player.factionsUsedThisTurn.includes(card.faction)) {
+        player.factionsUsedThisTurn.push(card.faction);
+      }
+    }
+
     const identity = getCardIdentity(gameState, playerId, card);
     gameState.logs.push(`${player.displayName} 发动了 ${identity} ${card.fullName} 的效果: ${effect.description}`);
 
@@ -714,9 +742,9 @@ export const ServerGameService = {
           if (!card) break;
           const data = stackItem.data as any;
           if (data && data.afterSelectionEffects) {
-            data.afterSelectionEffects.forEach((atomic: any) => {
-              AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card, undefined, data.selections);
-            });
+            for (const atomic of data.afterSelectionEffects) {
+              await AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card, undefined, data.selections);
+            }
             gameState.logs.push(`[效果结算] 连锁中的选择效果已结算。`);
           } else {
             const effectIndex = stackItem.effectIndex ?? 0;
@@ -724,9 +752,9 @@ export const ServerGameService = {
             if (effect) {
               // Execute Atomic Effects if present
               if (effect.atomicEffects && effect.atomicEffects.length > 0) {
-                effect.atomicEffects.forEach(atomic => {
-                  AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card);
-                });
+                for (const atomic of effect.atomicEffects) {
+                  await AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, card);
+                }
               }
 
               // Execute legacy callback
@@ -993,6 +1021,27 @@ export const ServerGameService = {
       return gameState;
     }
 
+    if (query.callbackKey === 'SUBSTITUTION_CHOICE') {
+      const { subCardId, targetUnitId } = query.context;
+      if (currentSelections[0] === 'YES') {
+        const subCard = this.findCardById(gameState, subCardId);
+        if (subCard) {
+          const subCardOwner = this.findCardOwnerKey(gameState, subCardId);
+          if (subCardOwner) {
+            this.moveCard(gameState, subCardOwner, subCard.cardlocation as any, subCardOwner, 'GRAVE', subCardId);
+            const effect = subCard.effects?.find(e => e.substitutionFilter);
+            if (effect) this.recordEffectUsage(gameState, subCardOwner, subCard, effect);
+            gameState.logs.push(`[系统] ${gameState.players[subCardOwner].displayName} 发动了 [${subCard.fullName}] 的代替效果，${subCard.fullName} 进入墓地，单位得以存续。`);
+          }
+        }
+      } else {
+        // Continue destruction
+        gameState.logs.push(`[系统] ${gameState.players[playerUid].displayName} 放弃使用代替效果。`);
+        await this.destroyUnit(gameState, playerUid, targetUnitId, true); // Re-call with flag to skip sub check
+      }
+      return gameState;
+    }
+
     if (query.callbackKey === 'ALLIANCE_DESTRUCTION_RESOLVE') {
       const selectedId = selections[0];
       const attackerId = query.context?.attackerId;
@@ -1004,7 +1053,7 @@ export const ServerGameService = {
       const selectedUnit = attacker.unitZone.find(u => u?.gamecardId === selectedId);
 
       if (selectedUnit) {
-        this.destroyUnit(gameState, attackerId, selectedId);
+        await this.destroyUnit(gameState, attackerId, selectedId);
         gameState.logs.push(`[联军结算] ${attacker.displayName} 选择了牺牲 ${selectedUnit.fullName}。`);
       }
 
@@ -1378,7 +1427,7 @@ export const ServerGameService = {
           } else {
             // Only one is lower (or equal) -> Lower one destroyed automatically
             const unitToDestroy = powerA <= powerB ? attackingUnits[0] : attackingUnits[1];
-            this.destroyUnit(gameState, attackerId, unitToDestroy.gamecardId);
+            await this.destroyUnit(gameState, attackerId, unitToDestroy.gamecardId);
             gameState.logs.push(`${defendingUnit.fullName} 抵挡了联军，${unitToDestroy.fullName} 被破坏`);
           }
         }
@@ -1467,22 +1516,59 @@ export const ServerGameService = {
     this.checkWinConditions(gameState);
   },
 
-  destroyUnit(gameState: GameState, playerId: string, gamecardId: string) {
+  async destroyUnit(gameState: GameState, playerId: string, gamecardId: string, skipSubstitution: boolean = false) {
     const player = gameState.players[playerId];
-    const idx = player.unitZone.findIndex(c => c?.gamecardId === gamecardId);
-    if (idx !== -1) {
-      const card = player.unitZone[idx]!;
-      card.cardlocation = 'GRAVE';
-      player.grave.push(card);
-      player.unitZone[idx] = null;
+    const unitIdx = player.unitZone.findIndex(c => c?.gamecardId === gamecardId);
+    if (unitIdx === -1) return;
+    const unit = player.unitZone[unitIdx]!;
 
-      EventEngine.dispatchEvent(gameState, {
-        type: 'CARD_DESTROYED_BATTLE',
-        targetCardId: gamecardId,
-        playerUid: playerId
-      });
-      this.checkBattleInterruption(gameState);
+    // Check for Substitution effects
+    if (!skipSubstitution) {
+      const substitutionCards = player.itemZone.filter(c => 
+      c !== null && 
+      c.effects && 
+      c.effects.some(e => e.substitutionFilter && AtomicEffectExecutor.matchesFilter(unit, e.substitutionFilter, c))
+    ) as Card[];
+
+    for (const subCard of substitutionCards) {
+      const effect = subCard.effects.find(e => e.substitutionFilter && AtomicEffectExecutor.matchesFilter(unit, e.substitutionFilter, subCard));
+      if (effect && this.checkEffectLimitsAndReqs(gameState, playerId, subCard, effect)) {
+        // Issue Query
+        const queryId = Math.random().toString(36).substring(7);
+        gameState.pendingQuery = {
+          id: queryId,
+          type: 'SELECT_CHOICE',
+          playerUid: playerId,
+          options: [
+            { id: 'YES', label: '发动(YES)' },
+            { id: 'NO', label: '不发动(NO)' }
+          ],
+          title: '效果发动确认',
+          description: `是否发动 [${subCard.fullName}] 的效果，将其送入墓地代替 [${unit.fullName}] 的破坏？`,
+          callbackKey: 'SUBSTITUTION_CHOICE',
+          context: { subCardId: subCard.gamecardId, targetUnitId: gamecardId }
+        };
+
+        // Pause and wait for query resolution is not possible in a sync-like loop here 
+        // without refactoring the whole state machine to handle sub-steps.
+        // However, for this engine, we can use a "Interrupt" pattern.
+        // For now, I'll return and wait for the query to resolve.
+        return; 
+      }
     }
+    }
+
+    // Default destruction
+    unit.cardlocation = 'GRAVE';
+    player.grave.push(unit);
+    player.unitZone[unitIdx] = null;
+
+    EventEngine.dispatchEvent(gameState, {
+      type: 'CARD_DESTROYED_BATTLE',
+      targetCardId: gamecardId,
+      playerUid: playerId
+    });
+    this.checkBattleInterruption(gameState);
   },
 
   async discardCard(gameState: GameState, playerId: string, cardId: string) {
@@ -1670,14 +1756,23 @@ export const ServerGameService = {
     };
     if (onUpdate) await onUpdate(gameState);
     
+    // Record faction used
+    const player = gameState.players[playerUid];
+    if (card.faction && player) {
+      if (!player.factionsUsedThisTurn) player.factionsUsedThisTurn = [];
+      if (!player.factionsUsedThisTurn.includes(card.faction)) {
+        player.factionsUsedThisTurn.push(card.faction);
+      }
+    }
+
     // Small pause for visual feedback
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     // 4. Atomic Effects
     if (effect.atomicEffects) {
-      effect.atomicEffects.forEach(atomic => {
-        AtomicEffectExecutor.execute(gameState, playerUid, atomic, card, event);
-      });
+      for (const atomic of effect.atomicEffects) {
+        await AtomicEffectExecutor.execute(gameState, playerUid, atomic, card, event);
+      }
     }
 
     // 5. Execute Legacy Callback
@@ -1931,9 +2026,10 @@ export const ServerGameService = {
         if (card) {
           card.temporaryPowerBuff = 0;
           if (card.canResetCount === 0 || card.canResetCount === undefined) {
-          this.readyCard(card);
-        } else if (card && card.canResetCount !== undefined && card.canResetCount > 0) {
-          card.canResetCount -= 1;
+            this.readyCard(card);
+          } else if (card && card.canResetCount !== undefined && card.canResetCount > 0) {
+            card.canResetCount -= 1;
+          }
         }
       });
       player.itemZone.forEach(card => {
@@ -1947,6 +2043,9 @@ export const ServerGameService = {
     }
 
     player.hasExhaustedThisTurn = [];
+    player.hasUnitReturnedThisTurn = false;
+    player.factionsUsedThisTurn = [];
+    player.factionLock = undefined;
 
     // Automatically move to DRAW phase
     gameState.phase = 'DRAW';

@@ -91,6 +91,7 @@ export class EventEngine {
           if (card.baseGodMark !== undefined) card.godMark = card.baseGodMark;
           if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
           if (card.baseCanActivateEffect !== undefined) card.canActivateEffect = card.baseCanActivateEffect;
+          if (card.baseIsImmuneToUnitEffects !== undefined) card.isImmuneToUnitEffects = card.baseIsImmuneToUnitEffects;
           card.influencingEffects = [];
         }
       });
@@ -134,15 +135,23 @@ export class EventEngine {
     });
   }
 
-  static handleCardLeftZone(gameState: GameState, playerUid: string, card: Card, zone: string, isEffect?: boolean) {
+  static handleCardLeftZone(gameState: GameState, playerUid: string, card: Card, fromZone: TriggerLocation, isEffect?: boolean, targetZone?: TriggerLocation) {
     this.recalculateContinuousEffects(gameState);
+
+    // Track "Returned from battlefield" (Bounce)
+    if (fromZone === 'UNIT' && (targetZone === 'HAND' || targetZone === 'DECK')) {
+      const player = gameState.players[playerUid];
+      if (player) {
+        player.hasUnitReturnedThisTurn = true;
+      }
+    }
 
     this.dispatchEvent(gameState, {
       type: 'CARD_LEFT_ZONE',
       sourceCard: card,
       sourceCardId: card.gamecardId,
       playerUid,
-      data: { zone, isEffect: !!isEffect }
+      data: { zone: fromZone, isEffect: !!isEffect, targetZone }
     });
   }
 }

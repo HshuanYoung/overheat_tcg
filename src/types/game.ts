@@ -81,7 +81,9 @@ export type AtomicEffectType =
   | 'SKIP_PHASE'
   | 'FORCE_END_PHASE'
   | 'EXECUTE_CARD_EFFECTS'
-  | 'PAY_CARD_COST';
+  | 'PAY_CARD_COST'
+  | 'CHANGE_CAN_ACTIVATE'
+  | 'IMMUNE_UNIT_EFFECTS';
 
 export interface CardFilter {
   id?: string;
@@ -160,6 +162,7 @@ export interface CardEffect {
   atomicEffects?: AtomicEffect[]; // Structured atomic effects
   content?: string; // Description of the effect: Move, Draw, Add Power, etc.
   description: string; // Human readable text
+  substitutionFilter?: CardFilter; // Filter for units this card can substitute/protect
 }
 
 export type Rarity = 'C' | 'U' | 'R' | 'SR' | 'UR' | 'SER' | 'PR';
@@ -201,6 +204,8 @@ export interface Card {
   cardlocation?: 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK' | 'PLAY' | 'DECK';
   feijingMark: boolean;
   canResetCount?: number;    //only 0 can be reset,if not 0,at the start of turn,canResetCount-1
+  isImmuneToUnitEffects?: boolean;
+  baseIsImmuneToUnitEffects?: boolean;
   temporaryPowerBuff?: number; // cleared at turn start
   effects?: CardEffect[];
   influencingEffects?: { sourceCardName: string; description: string }[];
@@ -237,6 +242,9 @@ export interface PlayerState {
   timeRemaining: number;
   negatedNames?: string[]; // Names of cards that cannot be used this turn
   effectDamageModifier?: number; // Bonus damage dealt by this player's card effects
+  hasUnitReturnedThisTurn?: boolean; // Track if any unit returned from field (bounce)
+  factionsUsedThisTurn?: string[]; // Log of factions used (played/activated) this turn
+  factionLock?: string; // Active faction restriction for the current turn
 }
 
 export type StackItemType = 'PLAY' | 'EFFECT' | 'ATTACK' | 'PHASE_END';

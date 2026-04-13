@@ -508,6 +508,7 @@ export class AtomicEffectExecutor {
     if (filter.excludeGamecardId && card.gamecardId === filter.excludeGamecardId) return false;
 
     if (filter.fuzzyName && !card.fullName.includes(filter.fuzzyName)) return false;
+    if (filter.isExhausted !== undefined && card.isExhausted !== filter.isExhausted) return false;
 
     // Field/Zone check
     if (filter.onField && !['UNIT', 'ITEM'].includes(card.cardlocation as string)) return false;
@@ -571,6 +572,22 @@ export class AtomicEffectExecutor {
     }
 
     if (!card) return;
+    
+    // Movement Replacement logic (e.g. 10401041)
+    if (isEffect && (toZone === 'HAND' || toZone === 'DECK')) {
+      if (card.effects) {
+        for (const effect of card.effects) {
+          if (effect.type === 'CONTINUOUS' && effect.movementReplacementDestination) {
+            const player = gameState.players[toPlayerUid];
+            if (!effect.condition || effect.condition(gameState, player, card)) {
+              gameState.logs.push(`[替换效果] ${card.fullName} 的移动目的地从 ${toZone} 被替换为 ${effect.movementReplacementDestination}`);
+              toZone = effect.movementReplacementDestination;
+              break;
+            }
+          }
+        }
+      }
+    }
 
     card.cardlocation = toZone;
     let toArray: (Card | null)[] = [];

@@ -108,6 +108,7 @@ export interface CardFilter {
   fuzzyName?: string;
   querySelection?: boolean; // If true, only target cards selected in the current query context
   gamecardId?: string; // Specific instance ID
+  isExhausted?: boolean; // New: Filter by exhaustion status (horizontal/rotational)
 }
 
 export interface AtomicEffect {
@@ -163,6 +164,9 @@ export interface CardEffect {
   content?: string; // Description of the effect: Move, Draw, Add Power, etc.
   description: string; // Human readable text
   substitutionFilter?: CardFilter; // Filter for units this card can substitute/protect
+  movementReplacementDestination?: TriggerLocation; // Destination if this card's movement is replaced
+  erosionKeepReplacement?: boolean; // If true, allows keeping a card during erosion phase that would be moved to grave
+  limitGodmarkCount?: number; // New: Limit on the number of Godmark units on the field
 }
 
 export type Rarity = 'C' | 'U' | 'R' | 'SR' | 'UR' | 'SER' | 'PR';
@@ -245,6 +249,7 @@ export interface PlayerState {
   hasUnitReturnedThisTurn?: boolean; // Track if any unit returned from field (bounce)
   factionsUsedThisTurn?: string[]; // Log of factions used (played/activated) this turn
   factionLock?: string; // Active faction restriction for the current turn
+  markedUnitAttackTarget?: string; // Target selected at start of Main Phase that can be attacked
 }
 
 export type StackItemType = 'PLAY' | 'EFFECT' | 'ATTACK' | 'PHASE_END';
@@ -340,6 +345,7 @@ export interface GameState {
   battleState?: {
     attackers: string[]; // gamecardIds
     defender?: string; // gamecardId
+    unitTargetId?: string; // Explicit target for the attack (forces unit combat)
     isAlliance: boolean;
     askConfront?: 'ASKING_OPPONENT' | 'ASKING_TURN_PLAYER';
     defensePowerRestriction?: number;

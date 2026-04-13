@@ -283,6 +283,26 @@ export const ServerGameService = {
         return { canPlay: false, reason: '道具区已有同名专用卡' };
       }
     }
+    
+    // 1.1 Godmark Limit Check (e.g. 10401021)
+    if (card.godMark) {
+      // Check for limits on the field OR on the card itself
+      const fieldEffects = player.unitZone
+        .filter(u => u !== null)
+        .flatMap(u => (u as Card).effects || []);
+      
+      const fieldLimitEffect = fieldEffects.find(e => e.type === 'CONTINUOUS' && e.limitGodmarkCount !== undefined);
+      const selfLimitEffect = card.effects?.find(e => e.type === 'CONTINUOUS' && e.limitGodmarkCount !== undefined);
+      
+      const effectiveLimit = fieldLimitEffect?.limitGodmarkCount ?? selfLimitEffect?.limitGodmarkCount;
+
+      if (effectiveLimit !== undefined) {
+        const currentGodmarkCount = player.unitZone.filter(u => u && u.godMark).length;
+        if (currentGodmarkCount >= effectiveLimit) {
+          return { canPlay: false, reason: `场上神迹单位数量达到上限 (${effectiveLimit})` };
+        }
+      }
+    }
 
     // 3. Color Requirements
     const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
@@ -1024,21 +1044,31 @@ export const ServerGameService = {
     if (query.callbackKey === 'SUBSTITUTION_CHOICE') {
       const { subCardId, targetUnitId } = query.context;
       if (currentSelections[0] === 'YES') {
-        const subCard = this.findCardById(gameState, subCardId);
-        if (subCard) {
-          const subCardOwner = this.findCardOwnerKey(gameState, subCardId);
-          if (subCardOwner) {
-            this.moveCard(gameState, subCardOwner, subCard.cardlocation as any, subCardOwner, 'GRAVE', subCardId);
-            const effect = subCard.effects?.find(e => e.substitutionFilter);
-            if (effect) this.recordEffectUsage(gameState, subCardOwner, subCard, effect);
-            gameState.logs.push(`[系统] ${gameState.players[subCardOwner].displayName} 发动了 [${subCard.fullName}] 的代替效果，${subCard.fullName} 进入墓地，单位得以存续。`);
-          }
+        // Find equipment
+        const player = gameState.players[playerUid];
+        const subCardIdx = player.itemZone.findIndex(c => c?.gamecardId === subCardId);
+        if (subCardIdx !== -1) {
+          const subCard = player.itemZone.splice(subCardIdx, 1)[0]!;
+          subCard.cardlocation = 'GRAVE';
+          player.grave.push(subCard);
+          gameState.logs.push(`[系统] ${subCard.fullName} 代替了破坏`);
         }
       } else {
-        // Continue destruction
-        gameState.logs.push(`[系统] ${gameState.players[playerUid].displayName} 放弃使用代替效果。`);
-        await this.destroyUnit(gameState, playerUid, targetUnitId, true); // Re-call with flag to skip sub check
+        // Resume default destruction (skip substitution)
+        await this.destroyUnit(gameState, playerUid, targetUnitId, true);
       }
+      return gameState;
+    }
+
+    if (query.callbackKey === 'EROSION_KEEP_RESOLVE') {
+      const { choice, selectedCardId } = query.context;
+      const keepCardId = selections[0]; // If none picked, selections[0] is undefined
+      
+      this.executeErosionMovements(gameState, playerUid, choice, selectedCardId, keepCardId);
+      
+      gameState.phase = 'MAIN';
+      gameState.phaseTimerStart = Date.now();
+      gameState.logs.push(`${gameState.players[playerUid].displayName} 进入主要阶段`);
       return gameState;
     }
 
@@ -1167,7 +1197,7 @@ export const ServerGameService = {
     return undefined;
   },
 
-  async declareAttack(gameState: GameState, playerId: string, attackerIds: string[], isAlliance: boolean) {
+  async declareAttack(gameState: GameState, playerId: string, attackerIds: string[], isAlliance: boolean, targetId?: string) {
 
     if (gameState.phase !== 'BATTLE_DECLARATION') throw new Error('Not in battle declaration phase');
 
@@ -1222,6 +1252,7 @@ export const ServerGameService = {
     gameState.battleState = {
       attackers: attackerIds,
       isAlliance,
+      unitTargetId: targetId,
       defensePowerRestriction: 0
     };
 
@@ -1290,6 +1321,15 @@ export const ServerGameService = {
     const attackingUnits = gameState.battleState.attackers.map(id =>
       attacker.unitZone.find(c => c?.gamecardId === id)
     ).filter(Boolean) as Card[];
+
+    // Handle forced attack target (Effect-based)
+    if (!gameState.battleState.defender && gameState.battleState.unitTargetId) {
+      const targetUnit = defender.unitZone.find(u => u && u.gamecardId === gameState.battleState!.unitTargetId);
+      if (targetUnit) {
+        gameState.battleState.defender = targetUnit.gamecardId;
+        gameState.logs.push(`[系统] 攻击指向了被指定的单位: ${targetUnit.fullName}`);
+      }
+    }
 
     if (!gameState.battleState.defender) {
       // Direct damage to player
@@ -1566,7 +1606,11 @@ export const ServerGameService = {
     EventEngine.dispatchEvent(gameState, {
       type: 'CARD_DESTROYED_BATTLE',
       targetCardId: gamecardId,
-      playerUid: playerId
+      playerUid: playerId,
+      data: { 
+        attackerIds: gameState.battleState?.attackers || [],
+        isAlliance: gameState.battleState?.isAlliance || false
+      }
     });
     this.checkBattleInterruption(gameState);
   },
@@ -2117,9 +2161,61 @@ export const ServerGameService = {
 
     const faceUpCards = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT') as Card[];
 
+    // Identify cards going to grave
+    let goingToGrave: Card[] = [];
+    if (choice === 'A') goingToGrave = [...faceUpCards];
+    else if (choice === 'B' || choice === 'C') goingToGrave = faceUpCards.filter(c => c.gamecardId !== selectedCardId);
+
+    // Check for EROSION_KEEP effects (10403015)
+    const keepEffectCard = player.unitZone.find(c => 
+      c && c.effects && c.effects.some(e => 
+        e.erosionKeepReplacement && 
+        (!e.condition || e.condition(gameState, player, c))
+      )
+    );
+
+    if (keepEffectCard && goingToGrave.length > 0) {
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_CARD',
+        playerUid: playerId,
+        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerId, goingToGrave.map(c => ({ card: c, source: 'EROSION_FRONT' }))),
+        title: '选择保留的侵蚀卡',
+        description: `由于 [${keepEffectCard.fullName}] 的效果，你可以从即将移至墓地的卡牌中选择一张保留在侵蚀区。`,
+        minSelections: 0,
+        maxSelections: 1,
+        callbackKey: 'EROSION_KEEP_RESOLVE',
+        context: {
+          choice,
+          selectedCardId,
+          keepCardSourceId: keepEffectCard.gamecardId
+        }
+      };
+      return;
+    }
+
+    this.executeErosionMovements(gameState, playerId, choice, selectedCardId);
+
+    if (gameState.phase !== 'SHENYI_CHOICE') {
+      gameState.phase = 'MAIN';
+      gameState.phaseTimerStart = Date.now();
+      gameState.logs.push(`${player.displayName} 进入主要阶段`);
+    } else {
+      gameState.previousPhase = 'MAIN';
+    }
+  },
+
+  executeErosionMovements(gameState: GameState, playerId: string, choice: 'A' | 'B' | 'C', selectedCardId?: string, keptCardId?: string) {
+    const player = gameState.players[playerId];
+    const faceUpCards = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT') as Card[];
+
     if (choice === 'A') {
       // a. Move all face-up cards in the Erosion Zone to the Graveyard
       for (const card of faceUpCards) {
+        if (card.gamecardId === keptCardId) {
+          gameState.logs.push(`[白夜效果] ${card.fullName} 被保留在侵蚀区。`);
+          continue;
+        }
         this.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'GRAVE', card.gamecardId);
       }
       gameState.logs.push(`${player.displayName} 将侵蚀区所有正面卡移至墓地。`);
@@ -2127,8 +2223,10 @@ export const ServerGameService = {
       // b. Choose one face-up card to keep; others to Graveyard
       if (!selectedCardId) throw new Error('Please select a card to keep');
       for (const card of faceUpCards) {
-        if (card.gamecardId !== selectedCardId) {
+        if (card.gamecardId !== selectedCardId && card.gamecardId !== keptCardId) {
           this.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'GRAVE', card.gamecardId);
+        } else if (card.gamecardId === keptCardId && card.gamecardId !== selectedCardId) {
+          gameState.logs.push(`[白夜效果] ${card.fullName} 被额外保留在侵蚀区。`);
         }
       }
       gameState.logs.push(`${player.displayName} 选择保留一张正面卡，其余移至墓地。`);
@@ -2138,6 +2236,8 @@ export const ServerGameService = {
       for (const card of faceUpCards) {
         if (card.gamecardId === selectedCardId) {
           this.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'HAND', card.gamecardId);
+        } else if (card.gamecardId === keptCardId) {
+          gameState.logs.push(`[白夜效果] ${card.fullName} 被保留在侵蚀区。`);
         } else {
           this.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'GRAVE', card.gamecardId);
         }
@@ -2157,10 +2257,6 @@ export const ServerGameService = {
       }
       gameState.logs.push(`${player.displayName} 将一张正面卡加入手牌，其余移至墓地，并补充了一张背面卡。`);
     }
-
-    gameState.phase = 'MAIN';
-    gameState.phaseTimerStart = Date.now();
-    gameState.logs.push(`${player.displayName} 进入主要阶段`);
   },
 
   executeEndPhase(gameState: GameState, player: PlayerState) {

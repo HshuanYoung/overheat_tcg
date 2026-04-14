@@ -7,7 +7,11 @@ const activate_10402007_1: CardEffect = {
   description: '【启动】在单位区放置为横置：我方选择一名玩家（我方或对手），选择该玩家侵蚀前区的一张正面表示卡并将其送去墓地。之后，将该玩家卡组顶的一张卡放置在侵蚀前区。',
   triggerLocation: ['UNIT'],
   condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
-    return !instance.isExhausted;
+    if (instance.isExhausted) return false;
+    // Check if any player has frontal cards
+    return Object.values(gameState.players).some(p => 
+        p.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT')
+    );
   },
   cost: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
     if (instance.isExhausted) return false;
@@ -18,18 +22,21 @@ const activate_10402007_1: CardEffect = {
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const options: any[] = [];
     Object.values(gameState.players).forEach(p => {
-      const isMe = p.uid === playerState.uid;
-      options.push({
-        card: {
-          gamecardId: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
-          id: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
-          fullName: isMe ? '我方玩家' : '对手玩家',
-          type: 'UNIT',
-          color: 'NONE',
-          rarity: 'C'
-        },
-        source: 'HAND'
-      });
+      // Only include players who have frontal erosion cards
+      if (p.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT')) {
+        const isMe = p.uid === playerState.uid;
+        options.push({
+          card: {
+            gamecardId: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
+            id: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
+            fullName: isMe ? '我方玩家' : '对手玩家',
+            type: 'UNIT',
+            color: 'NONE',
+            rarity: 'C'
+          },
+          source: 'HAND'
+        });
+      }
     });
 
     if (options.length > 0) {
@@ -97,15 +104,11 @@ const activate_10402007_1: CardEffect = {
         } else {
           gameState.logs.push(`[老练的狐族商人] ${targetPlayer.displayName} 侵蚀前区没有正面向上的卡，效果部分失败。`);
           // Still try to do the deck part
-          if (targetPlayer.deck.length > 0) {
-            const topCard = targetPlayer.deck.pop()!;
-            topCard.cardlocation = 'EROSION_FRONT';
-            topCard.displayState = 'FRONT_UPRIGHT';
-            const emptyIdx = targetPlayer.erosionFront.findIndex(c => c === null);
-            if (emptyIdx !== -1) targetPlayer.erosionFront[emptyIdx] = topCard;
-            else targetPlayer.erosionFront.push(topCard);
-            gameState.logs.push(`[老练的狐族商人] 将 ${targetPlayer.displayName} 卡组顶的卡放置在了侵蚀前区`);
-          }
+          await AtomicEffectExecutor.execute(gameState, selectedPlayerUid, {
+            type: 'MOVE_FROM_DECK',
+            destinationZone: 'EROSION_FRONT'
+          }, instance);
+          gameState.logs.push(`[老练的狐族商人] 将 ${targetPlayer.displayName} 卡组顶的卡放置在了侵蚀前区`);
         }
       }
     } else if (context.step === 2) {
@@ -125,15 +128,11 @@ const activate_10402007_1: CardEffect = {
         }, instance);
 
         // Place top card of deck to erosion
-        if (targetPlayer.deck.length > 0) {
-          const topCard = targetPlayer.deck.pop()!;
-          topCard.cardlocation = 'EROSION_FRONT';
-          topCard.displayState = 'FRONT_UPRIGHT';
-          const emptyIdx = targetPlayer.erosionFront.findIndex(c => c === null);
-          if (emptyIdx !== -1) targetPlayer.erosionFront[emptyIdx] = topCard;
-          else targetPlayer.erosionFront.push(topCard);
-          gameState.logs.push(`[老练的狐族商人] 将 ${targetPlayer.displayName} 卡组顶的卡放置在了侵蚀前区`);
-        }
+        await AtomicEffectExecutor.execute(gameState, selectedPlayerUid, {
+          type: 'MOVE_FROM_DECK',
+          destinationZone: 'EROSION_FRONT'
+        }, instance);
+        gameState.logs.push(`[老练的狐族商人] 将 ${targetPlayer.displayName} 卡组顶的卡放置在了侵蚀前区`);
       }
     }
   }

@@ -94,7 +94,7 @@ const effect_10403051_activate: CardEffect = {
     if (!playerState.isTurn || gameState.phase !== 'MAIN') return false;
 
     // 1. Blue unit on field
-    const hasBlueUnit = playerState.unitZone.some(u => u && u.color === 'BLUE');
+    const hasBlueUnit = playerState.unitZone.some(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE'));
     if (!hasBlueUnit) return false;
 
     // 2. No "索德" on erosion front

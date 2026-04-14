@@ -27,7 +27,7 @@ const card: Card = {
     {
       id: '10400002_activate',
       type: 'ACTIVATE',
-      description: '【计略发动】[侵蚀区正面限定] 若你的战场上已有2张或以上的蓝色单位，且当前非对抗阶段：支付0费并舍弃一张手牌，将这张卡以重置状态放置到战场上。',
+      description: '【启】[侵蚀区区才能发动] 若你的战场上已有2张或以上的蓝色单位，且当前非对抗阶段：支付0费并舍弃一张手牌，将这张卡以重置状态放置到战场上。',
       playCost: 0,
       triggerLocation: ['EROSION_FRONT'],
       condition: (gameState, playerState) => {
@@ -70,7 +70,7 @@ const card: Card = {
             targetFilter: { gamecardId: card.gamecardId },
             destinationZone: 'UNIT'
           }, card);
-          
+
           card.displayState = 'FRONT_UPRIGHT';
           card.isExhausted = false;
           gameState.logs.push(`${card.fullName} 已放置到单位区（重置状态）。`);

@@ -9,11 +9,11 @@ const card: Card = {
   color: 'BLUE',
   gamecardId: null as any,
   colorReq: { BLUE: 2 },
-  acValue: 3,
+  acValue: 4,
   power: 3000,
   basePower: 3000,
-  damage: 2,
-  baseDamage: 2,
+  damage: 3,
+  baseDamage: 3,
   godMark: true,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
@@ -47,8 +47,8 @@ const card: Card = {
           const cost = c.acValue || 0;
           if (cost > 0) {
             // Check if player has enough space in erosion zone (limit 9)
-            const currentErosion = playerState.erosionFront.filter(e => e !== null).length + 
-                                   playerState.erosionBack.filter(e => e !== null).length;
+            const currentErosion = playerState.erosionFront.filter(e => e !== null).length +
+              playerState.erosionBack.filter(e => e !== null).length;
             if (currentErosion + cost >= 10) return false;
           } else if (cost < 0) {
             // Negative cost requires enough face-up erosion cards
@@ -105,11 +105,11 @@ const card: Card = {
 
           if (foundCard) {
             await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-               type: 'MOVE_FROM_DECK', // Assuming it could be in deck or grave, AtomicEffectExecutor.execute should handle it if type is refined, 
-               // but we can use specific ones or a generic MOVE if implemented.
-               // For now, I'll use explicit checks since MOVE_FROM_GRAVE/DECK are separate.
-               targetFilter: { gamecardId: cardId },
-               destinationZone: 'EXILE'
+              type: 'MOVE_FROM_DECK', // Assuming it could be in deck or grave, AtomicEffectExecutor.execute should handle it if type is refined, 
+              // but we can use specific ones or a generic MOVE if implemented.
+              // For now, I'll use explicit checks since MOVE_FROM_GRAVE/DECK are separate.
+              targetFilter: { gamecardId: cardId },
+              destinationZone: 'EXILE'
             }, card);
 
             gameState.logs.push(`[风花] 已放逐 ${foundCard.fullName}。`);
@@ -128,11 +128,11 @@ const card: Card = {
                 callbackKey: 'EFFECT_RESOLVE',
                 paymentCost: foundCard.acValue,
                 paymentColor: foundCard.color,
-                context: { 
-                  sourceCardId: card.gamecardId, 
-                  effectIndex: 0, 
-                  step: 2, 
-                  banishedCardId: foundCard.gamecardId 
+                context: {
+                  sourceCardId: card.gamecardId,
+                  effectIndex: 0,
+                  step: 2,
+                  banishedCardId: foundCard.gamecardId
                 }
               };
               gameState.logs.push(`[风花] 等待 ${sourcePlayer.displayName} 支付费用...`);
@@ -191,7 +191,7 @@ const card: Card = {
           type: 'TURN_EROSION_FACE_DOWN',
           value: selections.length
         }, card, undefined, selections);
-        
+
         gameState.logs.push(`${playerState.displayName} 将 2 张侵蚀卡翻至背面。`);
       },
       execute: async (card, gameState, playerState) => {

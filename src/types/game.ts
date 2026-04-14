@@ -61,6 +61,7 @@ export type AtomicEffectType =
   | 'MOVE_FROM_HAND'
   | 'MOVE_FROM_EROSION'
   | 'MOVE_FROM_EROSION_BACK'
+  | 'MOVE_FROM_DECK'
   | 'MOVE_FROM_FIELD'
   | 'COUNTER_EFFECT'
   | 'NEGATE_EFFECT'

@@ -92,16 +92,17 @@ const applyContinuousBonus = (gameState: GameState, card: Card) => {
     });
 
     // 2. Defense Restriction
-    if (gameState.battleState && gameState.battleState.attackers.includes(card.equipTargetId)) {
+    const battleState = gameState.battleState;
+    if (battleState && Array.isArray(battleState.attackers) && card.equipTargetId && battleState.attackers.includes(card.equipTargetId)) {
       const erosionCount = getErosionCount(player);
       if (erosionCount >= 5 && erosionCount <= 7) {
         // Alliance Exception: if in coalition, and other units can be defended, this effect is ineffective.
-        if (gameState.battleState.isAlliance) {
+        if (battleState.isAlliance) {
           // If in an alliance, assume the other unit makes the attack "defendable" by normal units.
         } else {
           // Set restriction: Opponent cannot defend with units power < 2500
-          const currentRestriction = gameState.battleState.defensePowerRestriction || 0;
-          gameState.battleState.defensePowerRestriction = Math.max(currentRestriction, 2500);
+          const currentRestriction = battleState.defensePowerRestriction || 0;
+          battleState.defensePowerRestriction = Math.max(currentRestriction, 2500);
 
           if (!target.influencingEffects) target.influencingEffects = [];
           target.influencingEffects.push({

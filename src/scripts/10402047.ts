@@ -6,6 +6,12 @@ const activated_10402047: CardEffect = {
   type: 'ACTIVATED',
   description: '【行动】[休息]：选择你侵蚀位前区的一张蓝色卡牌送去墓地，之后抽一张牌，并选择你手牌中的一张卡牌正面表示置入侵蚀位前区。',
   triggerLocation: ['UNIT'],
+  condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
+    if (instance.isExhausted) return false;
+    return playerState.erosionFront.some(c => 
+      c && c.displayState === 'FRONT_UPRIGHT' && AtomicEffectExecutor.matchesColor(c, 'BLUE')
+    );
+  },
   cost: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
     if (instance.isExhausted) return false;
     

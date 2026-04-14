@@ -20,11 +20,11 @@ const effect_10400038_trigger: CardEffect = {
       id: Math.random().toString(36).substring(7),
       type: 'SELECT_CARD', // Reusing select player logic via PLAYER_SELF/OPPONENT IDs
       playerUid: playerState.uid,
-      options: [
-        { card: { gamecardId: 'PLAYER_SELF', fullName: '自己' } as any, source: 'UNIT' as TriggerLocation },
-        { card: { gamecardId: 'PLAYER_OPPONENT', fullName: '对手' } as any, source: 'UNIT' as TriggerLocation }
-      ],
-      title: '选择抽卡玩家',
+      options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, [
+        { card: { gamecardId: 'PLAYER_SELF', id: 'PLAYER_SELF', fullName: '我方玩家', type: 'UNIT', color: 'NONE' } as any, source: 'UNIT' as TriggerLocation },
+        { card: { gamecardId: 'PLAYER_OPPONENT', id: 'PLAYER_OPPONENT', fullName: '对手玩家', type: 'UNIT', color: 'NONE' } as any, source: 'UNIT' as TriggerLocation }
+      ]),
+      title: '选择玩家',
       description: '请选择一名玩家抽两张卡。',
       minSelections: 1,
       maxSelections: 1,
@@ -53,11 +53,11 @@ const effect_10400038_trigger: CardEffect = {
           id: Math.random().toString(36).substring(7),
           type: 'SELECT_CARD',
           playerUid: playerState.uid,
-          options: [
-            { card: { gamecardId: 'PLAYER_SELF', fullName: '自己' } as any, source: 'UNIT' as TriggerLocation },
-            { card: { gamecardId: 'PLAYER_OPPONENT', fullName: '对手' } as any, source: 'UNIT' as TriggerLocation }
-          ],
-          title: '选择跳过抽卡的玩家',
+          options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, [
+            { card: { gamecardId: 'PLAYER_SELF', id: 'PLAYER_SELF', fullName: '我方玩家', type: 'UNIT', color: 'NONE' } as any, source: 'UNIT' as TriggerLocation },
+            { card: { gamecardId: 'PLAYER_OPPONENT', id: 'PLAYER_OPPONENT', fullName: '对手玩家', type: 'UNIT', color: 'NONE' } as any, source: 'UNIT' as TriggerLocation }
+          ]),
+          title: '选择玩家',
           description: '侵蚀区背面有2张以上卡牌。请选择一名玩家跳过其下一次抽卡阶段。',
           minSelections: 1,
           maxSelections: 1,

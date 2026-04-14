@@ -8,8 +8,24 @@ const effect_10401034_front: CardEffect = {
   description: '【起】每回合一次。在你的主要阶段，此卡在侵蚀区域正面时：将此卡放置在战场。',
   limitCount: 1,
   limitNameType: true,
-  condition: (gameState: GameState, playerState: PlayerState) => {
-    return playerState.isTurn && gameState.phase === 'MAIN' && playerState.unitZone.some(s => s === null);
+  condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
+    // 1. Basic Turn/Phase/Space check
+    if (!playerState.isTurn || gameState.phase !== 'MAIN' || !playerState.unitZone.some(s => s === null)) return false;
+
+    // 2. Godmark Limit Check (e.g. from 10401021 fuka_restriction)
+    const currentGodmarkCount = playerState.unitZone.filter(u => u && u.godMark).length;
+    
+    // Find effective limit
+    const fieldEffects = playerState.unitZone
+      .filter((u: any) => u !== null)
+      .flatMap((u: any) => u.effects || []);
+    const limitEffect = fieldEffects.find((e: any) => e.limitGodmarkCount !== undefined);
+    
+    if (limitEffect !== undefined && currentGodmarkCount >= limitEffect.limitGodmarkCount) {
+      return false;
+    }
+
+    return true;
   },
   cost: async (gameState: GameState, playerState: PlayerState, instance: Card) => {
     // 0 fee implies no cost or cost function returns true directly. 
@@ -56,7 +72,7 @@ const effect_10401034_hand: CardEffect = {
     }, instance);
     
     // 2. Draw a card
-    await AtomicEffectExecutor.execute(gameState, pUid, { type: 'DRAW_CARD', targetCount: 1 } as any);
+    await AtomicEffectExecutor.execute(gameState, pUid, { type: 'DRAW', value: 1 }, instance);
     gameState.logs.push(`[${instance.fullName}] 进入了侵蚀区域，并从卡组抽了一张牌。`);
   }
 };

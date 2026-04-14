@@ -8,7 +8,7 @@ const card: Card = {
   type: 'UNIT',
   color: 'BLUE',
   gamecardId: null as any,
-  colorReq: { BLUE: 1 },
+  colorReq: {},
   faction: '幻国',
   acValue: 2,
   power: 1000,

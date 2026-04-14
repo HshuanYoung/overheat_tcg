@@ -12,42 +12,49 @@ const effect_10401021_trigger: CardEffect = {
   id: 'fuka_end_turn_bounce',
   type: 'TRIGGER',
   triggerEvent: 'TURN_END',
-  description: '【诱发】在你的回合结束时，如果你的战场上只有蓝色单位，你可以选择发动：选择对手战场上一个AC+2以下且非神迹的卡牌返回持有者手牌。',
-  condition: (gameState: GameState, playerState: PlayerState) => {
-    return playerState.isTurn;
+  description: '【诱发】在你的回合结束时，如果你的战场上只有蓝色单位，你可以选择发动：选择对手战场上一个AC<=2且非神迹的卡牌返回持有者手牌。',
+  condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
+    if (!playerState.isTurn) return false;
+    const units = playerState.unitZone.filter(u => u !== null) as Card[];
+    if (units.length === 0 || !units.every(u => AtomicEffectExecutor.matchesColor(u, 'BLUE'))) return false;
+
+    // Target Check: Opponent must have a valid card to bounce
+    const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
+    const opponent = gameState.players[opponentId];
+    const maxAc = 2;
+    const targets = [...opponent.unitZone, ...opponent.itemZone].filter(c =>
+      c && !c.godMark && (c.acValue || 0) <= maxAc
+    );
+    return targets.length > 0;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
-    const units = playerState.unitZone.filter(u => u !== null) as Card[];
-    // battlefield has units AND all units are blue
-    if (units.length > 0 && units.every(u => u.color === 'BLUE')) {
-      const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
-      const opponent = gameState.players[opponentId];
-      const maxAc = (instance.acValue || 0) + 2;
+    const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
+    const opponent = gameState.players[opponentId];
+    const maxAc = 2;
 
-      const targets = [...opponent.unitZone, ...opponent.itemZone].filter(c =>
-        c && !c.godMark && c.acValue <= maxAc
-      ) as Card[];
+    const targets = [...opponent.unitZone, ...opponent.itemZone].filter(c =>
+      c && !c.godMark && (c.acValue || 0) <= maxAc
+    ) as Card[];
 
-      if (targets.length > 0) {
-        gameState.pendingQuery = {
-          id: Math.random().toString(36).substring(7),
-          type: 'SELECT_CARD',
-          playerUid: playerState.uid,
-          options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, targets.map(c => ({
-            card: c,
-            source: opponent.unitZone.includes(c) ? 'UNIT' : 'ITEM'
-          }))),
-          title: '选择回场目标',
-          description: `【浪漫歌月】诱发效果：选择一个AC ${maxAc} 以下的非神迹卡牌返回手牌。`,
-          minSelections: 0,
-          maxSelections: 1,
-          callbackKey: 'EFFECT_RESOLVE',
-          context: {
-            effectId: 'fuka_end_turn_bounce',
-            sourceCardId: instance.gamecardId
-          }
-        };
-      }
+    if (targets.length > 0) {
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_CARD',
+        playerUid: playerState.uid,
+        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, targets.map(c => ({
+          card: c,
+          source: opponent.unitZone.includes(c) ? 'UNIT' : 'ITEM'
+        }))),
+        title: '选择回场目标',
+        description: `【浪漫歌月】诱发效果：选择一个AC ${maxAc} 以下的非神迹卡牌返回手牌。`,
+        minSelections: 0,
+        maxSelections: 1,
+        callbackKey: 'EFFECT_RESOLVE',
+        context: {
+          effectId: 'fuka_end_turn_bounce',
+          sourceCardId: instance.gamecardId
+        }
+      };
     }
   },
   onQueryResolve: async (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[]) => {

@@ -13,7 +13,7 @@ const activation_10401035: CardEffect = {
     if (!playerState.isTurn) return false;
 
     // 2. Must have two or more blue units on the unit zone
-    const blueUnitsCount = playerState.unitZone.filter(u => u && u.color === 'BLUE' && u.type === 'UNIT').length;
+    const blueUnitsCount = playerState.unitZone.filter(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE') && u.type === 'UNIT').length;
     if (blueUnitsCount < 2) return false;
 
     // 3. Must have a 'godmark' unit with name '剑仙' to target

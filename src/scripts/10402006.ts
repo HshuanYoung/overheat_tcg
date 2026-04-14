@@ -20,27 +20,38 @@ const trigger_10402006_1: CardEffect = {
     if (!isSelf || !isTargetZone || !isOnBattlefield) return false;
 
     // 2. Check for at least 2 blue units on my field (including itself)
-    const blueUnitsCount = playerState.unitZone.filter(u => u && u.color === 'BLUE' && u.type === 'UNIT').length;
-    return blueUnitsCount >= 2;
+    const blueUnitsCount = playerState.unitZone.filter(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE') && u.type === 'UNIT').length;
+    if (blueUnitsCount < 2) return false;
+
+    // 3. Consistency check (like 10402007): At least one player must have both hand AND frontal erosion cards
+    return Object.values(gameState.players).some(p => 
+      p.hand.length > 0 && 
+      p.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT')
+    );
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // Step 1: Choose a player (Me or Opponent)
     const options: any[] = [];
     
     Object.values(gameState.players).forEach(p => {
-      const isMe = p.uid === playerState.uid;
-      // We use a special ID system for player selection that the BattleField UI can recognize
-      options.push({
-        card: {
-          gamecardId: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
-          id: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
-          fullName: isMe ? '我方玩家' : '对手玩家',
-          type: 'UNIT', // Dummy type
-          color: 'NONE',
-          rarity: 'C'
-        },
-        source: 'HAND' // Dummy source
-      });
+      // Only include players who have BOTH hand AND frontal erosion cards
+      const hasHand = p.hand.length > 0;
+      const hasErosion = p.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
+
+      if (hasHand && hasErosion) {
+        const isMe = p.uid === playerState.uid;
+        options.push({
+          card: {
+            gamecardId: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
+            id: isMe ? 'PLAYER_SELF' : 'PLAYER_OPPONENT',
+            fullName: isMe ? '我方玩家' : '对手玩家',
+            type: 'UNIT',
+            color: 'NONE',
+            rarity: 'C'
+          },
+          source: 'HAND'
+        });
+      }
     });
 
     if (options.length > 0) {

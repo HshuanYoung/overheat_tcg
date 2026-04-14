@@ -125,15 +125,32 @@ export const GameService = {
 
     // 2. Color Requirements
     const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
-    const countColors = (c: any) => {
-      if (c && c.color !== 'NONE') availableColors[c.color] = (availableColors[c.color] || 0) + 1;
-    };
-    player.unitZone.forEach(countColors);
+    let omniColorCount = 0;
 
-    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
-      if ((availableColors[color] || 0) < (reqCount as number)) {
-        return { canPlay: false, reason: `MISSING COLOR: ${color}` };
+    const checkOmni = (c: any) => {
+      if (!c) return false;
+      const isTargetId = String(c.id) === '10500055';
+      const hasOmniEffect = c.effects && c.effects.some((e: any) => e.id === '10500055_omni');
+      return isTargetId || hasOmniEffect;
+    };
+
+    player.unitZone.forEach((c: any) => {
+      if (!c) return;
+      if (checkOmni(c)) {
+        omniColorCount++;
+      } else if (c.color !== 'NONE') {
+        availableColors[c.color] = (availableColors[c.color] || 0) + 1;
       }
+    });
+
+    let totalDeficit = 0;
+    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
+      const deficit = Math.max(0, (reqCount as number) - (availableColors[color] || 0));
+      totalDeficit += deficit;
+    }
+
+    if (totalDeficit > omniColorCount) {
+      return { canPlay: false, reason: `缺少颜色需求 (缺口: ${totalDeficit}, 可用变色单位: ${omniColorCount})` };
     }
 
     // 3. Cost Check (AC Value)

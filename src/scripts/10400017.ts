@@ -66,7 +66,7 @@ const trigger_10400017_1: CardEffect = {
 const trigger_10400017_2: CardEffect = {
   id: '10400017_trigger_2',
   type: 'TRIGGER',
-  description: '【诱发】这个单位从战场送入墓地时，你可以抽1张卡。',
+  description: '【诱】这个单位从战场送入墓地时，你可以抽1张卡。',
   triggerLocation: ['GRAVE'],
   triggerEvent: ['CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
   isMandatory: false,
@@ -74,16 +74,16 @@ const trigger_10400017_2: CardEffect = {
     if (!event) return instance.cardlocation === 'GRAVE';
 
     // Verify self-event: matches either sourceCardId, targetCardId, or direct reference
-    const isSelf = 
-      (event.sourceCardId === instance.gamecardId) || 
+    const isSelf =
+      (event.sourceCardId === instance.gamecardId) ||
       (event.targetCardId === instance.gamecardId) ||
       (event.sourceCard === instance);
-    
+
     if (!isSelf) return false;
 
     // Trigger check: Must have moved to Graveyard
     const isNowInGrave = instance.cardlocation === 'GRAVE';
-    
+
     // Zone check: If it was a zone-leave event, verify it left the Unit zone
     const leftUnitZone = event.type !== 'CARD_LEFT_ZONE' || (event.data?.zone === 'UNIT');
 

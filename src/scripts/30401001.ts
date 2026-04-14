@@ -82,7 +82,7 @@ const handActivationEffect: CardEffect = {
   triggerLocation: ['HAND'],
   condition: (gameState, playerState) => {
     const eligibleBlueUnits = playerState.unitZone.filter(u =>
-      u && u.color === 'BLUE' && isNonCombat(gameState, u.gamecardId)
+      u && AtomicEffectExecutor.matchesColor(u, 'BLUE') && isNonCombat(gameState, u.gamecardId)
     );
     return eligibleBlueUnits.length >= 2;
   },

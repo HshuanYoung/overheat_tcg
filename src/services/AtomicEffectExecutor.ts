@@ -112,14 +112,19 @@ export class AtomicEffectExecutor {
         this.moveCards(gameState, playerUid, effect, effect.destinationZone || 'GRAVE', 'EROSION_BACK', sourceCard, querySelections);
         break;
 
+      case 'MOVE_FROM_DECK':
+        {
+          const targetPlayer = gameState.players[playerUid];
+          if (targetPlayer.deck.length > 0) {
+            const topCard = targetPlayer.deck[targetPlayer.deck.length - 1]; // Just peak for the ID, moveCard will handle the pop
+            await this.moveCard(gameState, playerUid, 'DECK', playerUid, effect.destinationZone || 'HAND', topCard.gamecardId, true);
+          }
+        }
+        break;
       case 'MOVE_FROM_FIELD':
         this.moveCards(gameState, playerUid, effect, effect.destinationZone || 'HAND', 'UNIT', sourceCard, querySelections);
         break;
       
-      case 'MOVE_FROM_DECK':
-        this.moveCards(gameState, playerUid, effect, effect.destinationZone || 'HAND', 'DECK', sourceCard, querySelections);
-        break;
-
       case 'MOVE_FROM_GRAVE':
         this.moveCards(gameState, playerUid, effect, effect.destinationZone || 'HAND', 'GRAVE', sourceCard, querySelections);
         break;
@@ -496,9 +501,9 @@ export class AtomicEffectExecutor {
   static matchesColor(card: Card, targetColor: string): boolean {
     if (card.color === targetColor) return true;
 
-    // Omni-color check for 10500055 (摇篮的少女)
-    // Works in Unit zone and Front Erosion zone as per latest script
-    const isOmni = card.id === '10500055' || (card.effects && card.effects.some(e => e.id === '10500055_omni'));
+    // Robust check for 10500055 (string/number safe)
+    const isOmni = String(card.id) === '10500055' || (card.effects && card.effects.some(e => e.id === '10500055_omni'));
+    
     if (isOmni && ['UNIT', 'EROSION_FRONT'].includes(card.cardlocation as string)) {
       return true;
     }
@@ -603,7 +608,7 @@ export class AtomicEffectExecutor {
     if (!card) return;
     
     // Movement Replacement logic (e.g. 10401041)
-    if (isEffect && (toZone === 'HAND' || toZone === 'DECK')) {
+    if (isEffect && (toZone === 'HAND' || toZone === 'DECK' || toZone === 'EROSION_FRONT' || toZone === 'EROSION_BACK')) {
       if (card.effects) {
         for (const effect of card.effects) {
           if (effect.type === 'CONTINUOUS' && effect.movementReplacementDestination) {
@@ -685,7 +690,7 @@ export class AtomicEffectExecutor {
     }
     targets.forEach(card => {
       if (card) {
-        card.displayState = 'FRONT_FACEDOWN';
+        card.displayState = 'BACK_UPRIGHT';
       }
     });
 

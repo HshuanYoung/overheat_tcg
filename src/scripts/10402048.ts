@@ -82,31 +82,18 @@ const card: Card = {
         const allCardIds = context.cardIds as string[];
 
         // 1. Handle selected card (to Hand)
-        const selectedIdx = owner.deck.findIndex(c => c.gamecardId === selectedCardId);
-        if (selectedIdx !== -1) {
-          const selectedCard = owner.deck.splice(selectedIdx, 1)[0];
-          selectedCard.cardlocation = 'HAND';
-          owner.hand.push(selectedCard);
-          gameState.logs.push(`[小巷里的情报贩子] 对手选择了 ${selectedCard.fullName} 加入 ${owner.displayName} 的手牌。`);
+        if (selections.length > 0) {
+          AtomicEffectExecutor.moveCard(gameState, ownerUid, 'DECK', ownerUid, 'HAND', selectedCardId, true);
+          const selectedCard = AtomicEffectExecutor.findCardById(gameState, selectedCardId);
+          gameState.logs.push(`[小巷里的情报贩子] 对手选择了 ${selectedCard?.fullName} 加入 ${owner.displayName} 的手牌。`);
         }
 
         // 2. Handle other card (to Erosion Front)
         const otherCardId = allCardIds.find(id => id !== selectedCardId);
         if (otherCardId) {
-          const otherIdx = owner.deck.findIndex(c => c.gamecardId === otherCardId);
-          if (otherIdx !== -1) {
-            const otherCard = owner.deck.splice(otherIdx, 1)[0];
-            otherCard.cardlocation = 'EROSION_FRONT';
-            otherCard.displayState = 'FRONT_UPRIGHT';
-
-            const emptyIdx = owner.erosionFront.findIndex(c => c === null);
-            if (emptyIdx !== -1) {
-              owner.erosionFront[emptyIdx] = otherCard;
-            } else {
-              owner.erosionFront.push(otherCard);
-            }
-            gameState.logs.push(`[小巷里的情报贩子] 另一张卡 ${otherCard.fullName} 被置入 ${owner.displayName} 的侵蚀区。`);
-          }
+          AtomicEffectExecutor.moveCard(gameState, ownerUid, 'DECK', ownerUid, 'EROSION_FRONT', otherCardId, true);
+          const otherCard = AtomicEffectExecutor.findCardById(gameState, otherCardId);
+          gameState.logs.push(`[小巷里的情报贩子] 另一张卡 ${otherCard?.fullName} 被置入 ${owner.displayName} 的侵蚀区。`);
         }
       }
     }

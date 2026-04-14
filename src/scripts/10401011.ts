@@ -20,11 +20,11 @@ const trigger_10401011_1: CardEffect = {
     if (!isSelf || !isTargetZone || !isOnUnitZone) return false;
 
     // Check if there's at least one blue non-EX unit on my field
-    const targets = playerState.unitZone.filter(u => u && u.color === 'BLUE' && !u.godMark);
+    const targets = playerState.unitZone.filter(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE') && !u.godMark);
     return targets.length > 0;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
-    const targets = playerState.unitZone.filter(u => u && u.color === 'BLUE' && !u.godMark) as Card[];
+    const targets = playerState.unitZone.filter(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE') && !u.godMark) as Card[];
 
     gameState.pendingQuery = {
       id: Math.random().toString(36).substring(7),

@@ -99,6 +99,11 @@ export class EventEngine {
       }
     });
 
+    // 0. Reset global battle properties that are recalculated
+    if (gameState.battleState) {
+      gameState.battleState.defensePowerRestriction = 0;
+    }
+
     // 1. Reset all cards to base stats
     const resetCards = (player: PlayerState) => {
       const allCards = [
@@ -143,6 +148,37 @@ export class EventEngine {
       });
     };
     Object.values(gameState.players).forEach(applyEffects);
+
+    // 3. New: Equipment Influence Display
+    const allUnitMap = new Map<string, Card>();
+    Object.values(gameState.players).forEach(p => {
+      p.unitZone.forEach(u => { if (u) allUnitMap.set(u.gamecardId, u); });
+    });
+
+    Object.values(gameState.players).forEach(p => {
+      p.itemZone.forEach(item => {
+        if (item && item.isEquip && item.equipTargetId) {
+          const target = allUnitMap.get(item.equipTargetId);
+          if (target) {
+            // Add entry to Equipment
+            if (!item.influencingEffects) item.influencingEffects = [];
+            item.influencingEffects.push({
+              sourceCardName: target.fullName,
+              description: '已装备此单位'
+            });
+
+            // Ensure Unit also shows it (most scripts do this, but defensive check)
+            if (!target.influencingEffects) target.influencingEffects = [];
+            if (!target.influencingEffects.some(e => e.sourceCardName === item.fullName)) {
+              target.influencingEffects.push({
+                sourceCardName: item.fullName,
+                description: '装备中'
+              });
+            }
+          }
+        }
+      });
+    });
   }
 
   static handleCardEnteredZone(gameState: GameState, playerUid: string, card: Card, zone: string, isEffect?: boolean) {

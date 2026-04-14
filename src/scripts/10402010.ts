@@ -13,15 +13,15 @@ const trigger_10402010: CardEffect = {
     // 1. Triggered by self entering Goddess Mode
     if (!event || event.type !== 'GODDESS_TRANSFORMATION' || event.playerUid !== playerState.uid) return false;
 
-    // 2. Opponent must have units
+    // 2. Opponent must have vertical units
     const opponentId = Object.keys(gameState.players).find(id => id !== playerState.uid)!;
     const opponent = gameState.players[opponentId];
-    return opponent.unitZone.some(u => u !== null);
+    return opponent.unitZone.some(u => u !== null && !u.isExhausted);
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const opponentId = Object.keys(gameState.players).find(id => id !== playerState.uid)!;
     const opponent = gameState.players[opponentId];
-    const targets = opponent.unitZone.filter(u => u !== null) as Card[];
+    const targets = opponent.unitZone.filter(u => u !== null && (u.displayState === 'FRONT_UPRIGHT' || !u.displayState.includes('EXHAUSTED')) && !u.isExhausted) as Card[];
 
     if (targets.length > 0) {
       gameState.pendingQuery = {

@@ -9,7 +9,7 @@ const effect_10400009_counter: CardEffect = {
   condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
     // Check phase and blue unit condition
     if (gameState.phase !== 'COUNTERING') return false;
-    const blueUnitCount = playerState.unitZone.filter(u => u && u.color === 'BLUE').length;
+    const blueUnitCount = playerState.unitZone.filter(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE')).length;
     if (blueUnitCount < 2) return false;
 
     // Check if there is an opponent's card play to counter

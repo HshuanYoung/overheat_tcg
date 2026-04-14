@@ -69,7 +69,7 @@ const activation_10401008_2: CardEffect = {
     if (erosionCount < 1 || erosionCount > 4) return false;
 
     // EXACTLY 2 blue units on field
-    const blueUnitsCount = playerState.unitZone.filter(u => u && u.color === 'BLUE' && u.type === 'UNIT').length;
+    const blueUnitsCount = playerState.unitZone.filter(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE') && u.type === 'UNIT').length;
     if (blueUnitsCount < 2) return false;
 
     // Must have a '剑仙' card to discard (other than self)

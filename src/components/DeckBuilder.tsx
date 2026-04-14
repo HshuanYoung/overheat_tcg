@@ -1,6 +1,6 @@
 import { getAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X, Sparkles, ArrowLeft, Shuffle, ListFilter } from 'lucide-react';
 import { CARD_LIBRARY } from '../data/cards';
@@ -8,9 +8,11 @@ import { FACTIONS } from '../data/factions';
 import { Card as CardType, Deck } from '../types/game';
 import { CardComponent } from './Card';
 import { cn, getCardImageUrl } from '../lib/utils';
+import { CARD_BACKS } from '../data/customization';
 
 export const DeckBuilder: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [deck, setDeck] = useState<CardType[]>([]);
   const [deckName, setDeckName] = useState('我的新卡组');
   const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
@@ -23,6 +25,7 @@ export const DeckBuilder: React.FC = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [collection, setCollection] = useState<Record<string, number>>({});
   const [cardCrystals, setCardCrystals] = useState(0);
+  const [favoriteBackId, setFavoriteBackId] = useState('default');
   const [actionLoading, setActionLoading] = useState(false);
   const [filters, setFilters] = useState({
     ac: '',
@@ -71,6 +74,7 @@ export const DeckBuilder: React.FC = () => {
       const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json();
       setCardCrystals(data.cardCrystals || 0);
+      setFavoriteBackId(data.favoriteBackId || 'default');
     } catch (e) { console.error(e); }
   };
 
@@ -144,7 +148,12 @@ export const DeckBuilder: React.FC = () => {
       const data = await res.json();
       const decks: Deck[] = data.decks || [];
       setMyDecks(decks);
-      if (decks.length > 0 && !selectedDeckId) {
+      
+      const deckIdFromUrl = searchParams.get('id');
+      if (deckIdFromUrl) {
+        const targetDeck = decks.find(d => d.id === deckIdFromUrl);
+        if (targetDeck) loadDeckToEditor(targetDeck);
+      } else if (decks.length > 0 && !selectedDeckId) {
         loadDeckToEditor(decks[0]);
       }
     } catch (e) {
@@ -391,7 +400,7 @@ export const DeckBuilder: React.FC = () => {
                 <>
                   <p className="font-bold text-sm truncate pr-16">{d.name}</p>
                   <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{d.cards.length} CARDS</p>
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
                     <button onClick={(e) => { e.stopPropagation(); setIsRenaming(d.id); setNewName(d.name); }} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400"><Edit3 className="w-3.5 h-3.5" /></button>
                     <button onClick={(e) => copyDeck(d, e)} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400"><Copy className="w-3.5 h-3.5" /></button>
                     <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(d.id); }} className="p-1.5 hover:bg-zinc-800 rounded text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -440,8 +449,8 @@ export const DeckBuilder: React.FC = () => {
       </AnimatePresence>
 
       {/* Middle: Deck Editor */}
-      <div className="flex-1 flex flex-col bg-black">
-        <div className="p-6 border-b border-zinc-900 flex items-center justify-between bg-zinc-950/50">
+      <div className="flex-1 flex flex-col bg-black overflow-hidden">
+        <div className="flex-shrink-0 p-6 border-b border-zinc-900 flex items-center justify-between bg-zinc-950/50">
           <div className="flex items-center gap-4">
             <input 
               className="bg-transparent text-2xl font-black italic tracking-tighter focus:outline-none border-b-2 border-transparent focus:border-red-600 transition-all"
@@ -490,13 +499,18 @@ export const DeckBuilder: React.FC = () => {
                   className="transition-transform hover:scale-105 cursor-zoom-in"
                   onClick={() => setZoomedCard(card)}
                 >
-                  <CardComponent card={card} disableZoom={true} displayMode="deck" />
+                  <CardComponent 
+                    card={card} 
+                    disableZoom={true} 
+                    displayMode="deck" 
+                    cardBackUrl={CARD_BACKS.find(b => b.id === favoriteBackId)?.url} 
+                  />
                 </div>
                 <button 
                   onClick={() => removeFromDeck(index)}
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110 z-10"
+                  className="absolute -top-3 -right-3 w-10 h-10 bg-red-600 rounded-full flex items-center justify-center shadow-2xl opacity-60 group-hover:opacity-100 transition-all hover:scale-110 z-10 border-2 border-white/20"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-6 h-6 text-white" />
                 </button>
               </div>
             ))}
@@ -637,7 +651,7 @@ export const DeckBuilder: React.FC = () => {
                 {isOwned && (
                   <button 
                     onClick={() => addToDeck(card)}
-                    className="absolute top-2 right-2 p-1 bg-red-600 hover:bg-red-700 rounded-full text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all z-10"
+                    className="absolute top-2 right-2 p-1 bg-red-600 hover:bg-red-700 rounded-full text-white shadow-lg opacity-60 group-hover:opacity-100 transition-all z-10"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -675,9 +689,9 @@ export const DeckBuilder: React.FC = () => {
                   <img 
                     src={getCardImageUrl(zoomedCard.id, zoomedCard.rarity, false)} 
                     alt={zoomedCard.fullName} 
-                    className="relative w-full rounded-[1.5rem] shadow-2xl border-4 border-white/10"
+                    className="relative w-full aspect-[3/4] object-cover rounded-[1.5rem] shadow-2xl border-4 border-white/10"
                   />
-                  <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12">
+                  <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12 z-20">
                     x{collection[zoomedCard.uniqueId] || 0}
                   </div>
                 </div>

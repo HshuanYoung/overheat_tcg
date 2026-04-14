@@ -16,6 +16,7 @@ interface CardProps {
   disableZoom?: boolean;
   statusBorder?: 'red' | 'blue';
   displayMode?: 'deck' | 'unit' | 'erosion_item' | 'hand' | 'none';
+  cardBackUrl?: string;
 }
 
 const getRarityClass = (rarity: Rarity) => {
@@ -31,7 +32,7 @@ const getRarityClass = (rarity: Rarity) => {
   }
 };
 
-export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, count, isBack, disableZoom, statusBorder, isExhausted, displayMode }) => {
+export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, count, isBack, disableZoom, statusBorder, isExhausted, displayMode, cardBackUrl }) => {
   if (isBack || !card) {
     return (
       <motion.div
@@ -42,7 +43,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
         )}
       >
         <img
-          src="/assets/card_bg/default_card_bg.jpg"
+          src={cardBackUrl || "/assets/card_bg/default_card_bg.jpg"}
           alt="Card Back"
           className="absolute inset-0 w-full h-full object-cover"
           referrerPolicy="no-referrer"
@@ -102,8 +103,8 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
         </div>
 
-        {/* Top Left: Keyword Indicators */}
-        <div className="absolute top-1 left-1 z-10 flex flex-col gap-0.5">
+        {/* Top Right: Keyword Indicators */}
+        <div className="absolute top-1 right-1 z-10 flex flex-col items-end gap-0.5">
           {card.isrush && (
             <div className="w-5 h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="速攻">
               <span className="text-[10px] font-black text-white italic">速</span>
@@ -126,9 +127,9 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
           )}
         </div>
 
-        {/* Top Right: Access Cost (Ac值) */}
+        {/* Top Left: Access Cost (Ac值) */}
         {showAC && (
-          <div className="absolute top-1 right-1 z-10">
+          <div className="absolute top-1 left-1 z-10">
             <div className={clsx(
               "w-7 h-7 rounded-full border-1.5 flex flex-col items-center justify-center font-bold shadow-lg",
               isNegativeCost

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Search, Loader2, Filter, Layout, CreditCard, Image as ImageIcon, Copy, Trash2, Plus, Check, Save, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '../lib/utils';
+import { cn, getCardImageUrl } from '../lib/utils';
+import { CARD_BACKS, RAY_CARDS } from '../data/customization';
 import { CARD_LIBRARY } from '../data/cards';
 import { FACTIONS } from '../data/factions';
 import { Card, Deck } from '../types/game';
@@ -14,21 +15,6 @@ const RARITY_BADGE: Record<string, string> = {
   SR: 'bg-purple-900 text-purple-300', UR: 'bg-amber-900 text-amber-300', SER: 'bg-amber-800 text-amber-200', PR: 'bg-rose-900 text-rose-300',
 };
 
-const RAY_CARDS = [
-  { id: 'fav_card', name: '默认雷亚卡', url: '/assets/fav_card/fav_card.jpg' },
-  { id: 'fav_card_1', name: '雷亚卡:风花', url: '/assets/fav_card/fav_card_1.jpg' },
-  { id: 'fav_card_2', name: '雷亚卡:真理', url: '/assets/fav_card/fav_card_2.jpg' },
-  { id: 'fav_card_3', name: '雷亚卡:萨拉拉', url: '/assets/fav_card/fav_card_3.jpg' },
-  { id: 'fav_card_4', name: '雷亚卡:王女', url: '/assets/fav_card/fav_card_4.jpg' },
-  { id: 'fav_card_5', name: '雷亚卡:小天使', url: '/assets/fav_card/fav_card_5.jpg' },
-];
-
-const CARD_BACKS = [
-  { id: 'default', name: '默认卡背', url: '/assets/card_bg/default_card_bg.jpg' },
-  { id: 'back_1', name: '萨拉拉', url: '/assets/card_bg/card_bg_1.jpg' },
-  { id: 'back_2', name: '小天使', url: '/assets/card_bg/card_bg_2.jpg' },
-  { id: 'back_3', name: '真理', url: '/assets/card_bg/card_bg_3.jpg' },
-];
 
 type CollectionTab = 'DECKS' | 'CARDS' | 'BACKS' | 'RAY_CARDS';
 
@@ -44,6 +30,7 @@ export const Collection: React.FC = () => {
   const [profile, setProfile] = useState<{ favoriteCardId: string; favoriteBackId: string; coins: number; cardCrystals: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   // Card Filters
@@ -156,6 +143,21 @@ export const Collection: React.FC = () => {
     setActionLoading(false);
   };
 
+  const deleteDeck = async (id: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/user/decks/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setDecks(prev => prev.filter(d => d.id !== id));
+        setConfirmDeleteId(null);
+      }
+    } catch (e) {
+      console.error('Failed to delete deck:', e);
+    }
+  };
+
   const handleUpdateProfile = async (updates: Partial<{ favoriteCardId: string; favoriteBackId: string }>) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/user/profile`, {
@@ -246,7 +248,12 @@ export const Collection: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {decks.map(deck => (
-                  <DeckCard key={deck.id} deck={deck} onClick={() => navigate(`/deck-builder?id=${deck.id}`)} />
+                  <DeckCard 
+                    key={deck.id} 
+                    deck={deck} 
+                    onClick={() => navigate(`/deck-builder?id=${deck.id}`)} 
+                    onDelete={() => setConfirmDeleteId(deck.id)}
+                  />
                 ))}
                 {decks.length === 0 && (
                   <div className="col-span-full py-20 bg-zinc-900/20 border-2 border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-500">
@@ -360,7 +367,11 @@ export const Collection: React.FC = () => {
                       onClick={() => setSelectedCard(card)}
                       className={cn("relative group transition-all duration-300 cursor-pointer", !isOwned && "opacity-40 grayscale-[0.8] hover:grayscale-0 hover:opacity-80")}
                     >
-                      <CardComponent card={card} displayMode="deck" />
+                      <CardComponent 
+                        card={card} 
+                        displayMode="deck" 
+                        cardBackUrl={CARD_BACKS.find(b => b.id === profile?.favoriteBackId)?.url}
+                      />
                       <div className="absolute -top-2 -right-2 z-10">
                         <div className={cn(
                           "px-2.5 py-1 rounded-lg border font-black italic text-xs shadow-xl min-w-[30px] text-center",
@@ -474,9 +485,9 @@ export const Collection: React.FC = () => {
                       selectedCard.rarity === 'UR' || selectedCard.rarity === 'SER' ? 'bg-amber-500' : 'bg-red-600'
                     )} />
                     <img
-                      src={selectedCard.imageUrl}
+                      src={getCardImageUrl(selectedCard.id, selectedCard.rarity, false)}
                       alt={selectedCard.fullName}
-                      className="relative w-full rounded-[1.5rem] shadow-2xl border-4 border-white/10"
+                      className="relative w-full aspect-[3/4] object-cover rounded-[1.5rem] shadow-2xl border-4 border-white/10"
                     />
                     <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12">
                       x{collection[selectedCard.uniqueId] || 0}
@@ -561,6 +572,52 @@ export const Collection: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Delete Confirmation Modal */}
+        <AnimatePresence>
+          {confirmDeleteId && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={() => setConfirmDeleteId(null)}
+            >
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-zinc-900 border border-white/10 p-8 rounded-[2.5rem] max-w-md w-full shadow-2xl relative overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-50" />
+                
+                <div className="flex flex-col items-center text-center mb-8">
+                  <div className="w-16 h-16 bg-red-600/10 rounded-2xl flex items-center justify-center mb-6 text-red-600 border border-red-600/20">
+                    <Trash2 className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl font-black italic tracking-tighter uppercase mb-2">删除卡组?</h3>
+                  <p className="text-zinc-500 font-medium">确定要永久删除这个卡组吗？<br/>此操作无法被撤销。</p>
+                </div>
+
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="flex-1 py-4 bg-zinc-800 hover:bg-zinc-700 text-white font-black italic rounded-2xl transition-all uppercase tracking-widest text-xs"
+                  >
+                    取消 CANCEL
+                  </button>
+                  <button 
+                    onClick={() => deleteDeck(confirmDeleteId)}
+                    className="flex-1 py-4 bg-red-600 hover:bg-red-700 text-white font-black italic rounded-2xl transition-all shadow-lg shadow-red-600/20 uppercase tracking-widest text-xs"
+                  >
+                    确定 DELETE
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -579,15 +636,18 @@ const TabButton = ({ active, onClick, icon, label }: any) => (
   </button>
 );
 
-const DeckCard = ({ deck, onClick }: { deck: Deck; onClick: () => void }) => (
+const DeckCard = ({ deck, onClick, onDelete }: { deck: Deck; onClick: () => void; onDelete: () => void }) => (
   <div
-    onClick={onClick}
-    className="group relative bg-zinc-900/40 border border-white/5 rounded-3xl p-6 hover:bg-zinc-900/60 hover:border-red-600/50 transition-all cursor-pointer overflow-hidden"
+    className="group relative bg-zinc-900/40 border border-white/5 rounded-3xl p-6 hover:bg-zinc-900/60 hover:border-red-600/50 transition-all overflow-hidden"
   >
-    <div className="absolute -right-8 -bottom-8 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
+    <div 
+      onClick={onClick}
+      className="absolute inset-0 z-0 cursor-pointer" 
+    />
+    <div className="absolute -right-8 -bottom-8 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity pointer-events-none">
       <Layout className="w-48 h-48" />
     </div>
-    <div className="relative z-10 text-left">
+    <div className="relative z-10 text-left pointer-events-none">
       <div className="flex justify-between items-start mb-4">
         <div className="p-3 bg-red-600/10 rounded-2xl text-red-600 group-hover:bg-red-600 group-hover:text-white transition-all">
           <CreditCard className="w-6 h-6" />
@@ -600,9 +660,19 @@ const DeckCard = ({ deck, onClick }: { deck: Deck; onClick: () => void }) => (
       <p className="text-zinc-500 text-sm mb-6 flex items-center gap-2 font-bold uppercase">
         {deck.cards.length} CARDS • {new Date(deck.createdAt).toLocaleDateString()}
       </p>
-      <div className="flex gap-2">
-        <button className="flex-1 py-3.5 bg-zinc-800 hover:bg-red-600 text-white font-black rounded-2xl transition-all text-xs uppercase italic">
+      <div className="flex gap-2 pointer-events-auto">
+        <button 
+          onClick={onClick}
+          className="flex-1 py-3.5 bg-zinc-800 hover:bg-red-600 text-white font-black rounded-2xl transition-all text-xs uppercase italic"
+        >
           EDIT DECK
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="w-14 flex items-center justify-center bg-zinc-800 hover:bg-red-900/50 text-red-500 rounded-2xl transition-all"
+          title="Delete Deck"
+        >
+          <Trash2 className="w-5 h-5" />
         </button>
       </div>
     </div>

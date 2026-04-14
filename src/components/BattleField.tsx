@@ -84,7 +84,12 @@ export const BattleField: React.FC = () => {
       const elapsed = now - (game.phaseTimerStart || now);
 
       const me = game.players[myUid];
-      let remaining = me ? Math.max(0, (me.timeRemaining || 0) - (me.uid === (game.pendingQuery?.playerUid || game.priorityPlayerId || game.playerIds[game.currentTurnPlayer]) ? elapsed : 0)) : 0;
+      const isWaiting = game.isResolvingStack || 
+        game.currentProcessingItem || 
+        game.pendingQuery || 
+        (game.battleState && game.battleState.askConfront);
+
+      let remaining = me ? Math.max(0, (me.timeRemaining || 0) - ((!isWaiting && me.uid === (game.priorityPlayerId || game.playerIds[game.currentTurnPlayer])) ? elapsed : 0)) : 0;
 
       const newTimerValue = Math.ceil(remaining / 1000);
       setTimer(prev => prev !== newTimerValue ? newTimerValue : prev);
@@ -1115,7 +1120,7 @@ export const BattleField: React.FC = () => {
               initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
               animate={{ opacity: 1, backdropFilter: "blur(12px)" }}
               exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
-              className="fixed inset-0 z-[600] bg-black/40 flex items-center justify-center pointer-events-none"
+              className="fixed inset-0 z-[600] bg-black/40 flex items-center justify-center pointer-events-auto"
             >
               <div className="flex flex-col items-center gap-12">
                 <motion.div
@@ -1854,6 +1859,24 @@ export const BattleField: React.FC = () => {
                 <button onClick={() => GameService.advancePhase(gameId!, 'CONFIRM_CONFRONTATION')} className="px-8 py-3 bg-[#f27d26] text-black font-black uppercase rounded-lg hover:bg-orange-400">COUNTER</button>
                 <button onClick={() => GameService.advancePhase(gameId!, 'DECLINE_CONFRONTATION')} className="px-8 py-3 bg-zinc-700 text-white font-black uppercase rounded-lg hover:bg-zinc-600">PASS</button>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {game.pendingQuery && game.pendingQuery.playerUid !== myUid && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[650] flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-auto"
+          >
+            <div className="bg-black/80 px-8 py-4 rounded-full border border-[#f27d26]/30 flex items-center gap-4 shadow-[0_0_30px_rgba(242,125,38,0.2)]">
+              <Loader2 className="w-5 h-5 text-[#f27d26] animate-spin" />
+              <span className="text-[#f27d26] font-black tracking-widest uppercase italic text-sm">
+                Waiting for opponent to resolve effect...
+              </span>
             </div>
           </motion.div>
         )}

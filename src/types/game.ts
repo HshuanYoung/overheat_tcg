@@ -271,6 +271,7 @@ export interface StackItem {
   data?: any; // Generic data for effects (e.g. query results)
   timestamp: number;
   isNegated?: boolean;
+  isInterrupted?: boolean;
 }
 
 

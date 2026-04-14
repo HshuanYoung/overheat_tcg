@@ -533,6 +533,7 @@ export const ServerGameService = {
     }
 
     gameState.isCountering = 1;
+    gameState.counterStack.forEach(item => item.isInterrupted = true);
     gameState.counterStack.push(stackItem);
 
     // Combo Link Numbering (Link 1 is the trigger, Link 2 is the first response, etc.)
@@ -545,6 +546,9 @@ export const ServerGameService = {
   },
 
   async playCard(gameState: GameState, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }) {
+    if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
+      throw new Error('当前有未结算步骤，请等待处理完毕。');
+    }
     const player = gameState.players[playerId];
     let card = player.hand.find(c => c.gamecardId === cardId);
     let sourceZone: TriggerLocation = 'HAND';
@@ -601,6 +605,9 @@ export const ServerGameService = {
   },
 
   async activateEffect(gameState: GameState, playerId: string, cardId: string, effectIndex: number) {
+    if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
+      throw new Error('当前有未结算步骤，请等待处理完毕。');
+    }
     // Find card in hand or on field
     const player = gameState.players[playerId];
     let card: Card | undefined;
@@ -712,7 +719,7 @@ export const ServerGameService = {
 
     gameState.isResolvingStack = true;
     gameState.priorityPlayerId = undefined;
-    const isPhaseEndOnly = gameState.counterStack.length === 1 && gameState.counterStack[0].type === 'PHASE_END';
+    const isPhaseEndOnly = gameState.counterStack.length === 1 && gameState.counterStack[0].type === 'PHASE_END' && !gameState.counterStack[0].isInterrupted;
     const phaseEndItem = isPhaseEndOnly ? gameState.counterStack[0] : null;
 
     if (isPhaseEndOnly) {
@@ -1248,7 +1255,9 @@ export const ServerGameService = {
   },
 
   async declareAttack(gameState: GameState, playerId: string, attackerIds: string[], isAlliance: boolean, targetId?: string) {
-
+    if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
+      throw new Error('当前有未结算步骤，请等待处理完毕。');
+    }
     if (gameState.phase !== 'BATTLE_DECLARATION') throw new Error('Not in battle declaration phase');
 
     const player = gameState.players[playerId];
@@ -1328,7 +1337,9 @@ export const ServerGameService = {
   },
 
   async declareDefense(gameState: GameState, playerId: string, defenderId?: string) {
-
+    if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
+      throw new Error('当前有未结算步骤，请等待处理完毕。');
+    }
     if (gameState.phase !== 'DEFENSE_DECLARATION') throw new Error('Not in defense declaration phase');
     if (!gameState.battleState) throw new Error('No battle state found');
 
@@ -1798,9 +1809,13 @@ export const ServerGameService = {
   checkBattleInterruption(gameState: GameState) {
     if (!gameState.battleState) return;
 
-    // We only check for interruption during strictly the BATTLE_DECLARATION, DEFENSE_DECLARATION and BATTLE_FREE phase
+    let contextPhase = gameState.phase;
+    if (gameState.phase === 'COUNTERING' || gameState.phase === 'SHENYI_CHOICE') {
+      contextPhase = gameState.previousPhase || gameState.phase;
+    }
+
     const battlePhases: GamePhase[] = ['BATTLE_DECLARATION', 'DEFENSE_DECLARATION', 'BATTLE_FREE'];
-    if (!battlePhases.includes(gameState.phase)) return;
+    if (!battlePhases.includes(contextPhase)) return;
 
     const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const opponentId = gameState.playerIds[gameState.currentTurnPlayer === 0 ? 1 : 0];
@@ -1808,7 +1823,6 @@ export const ServerGameService = {
     const turnPlayer = gameState.players[turnPlayerId];
     const opponent = gameState.players[opponentId];
 
-    // Check defenders
     let defenderGone = false;
     if (gameState.battleState.defender) {
       const defenderFound = opponent.unitZone.some(c => c && c.gamecardId === gameState.battleState!.defender);
@@ -1817,7 +1831,13 @@ export const ServerGameService = {
       }
     }
 
-    // Check attackers
+    if (gameState.battleState.unitTargetId) {
+      const explicitFound = opponent.unitZone.some(c => c && c.gamecardId === gameState.battleState!.unitTargetId);
+      if (!explicitFound) {
+        defenderGone = true;
+      }
+    }
+
     const attackersFound = gameState.battleState.attackers.filter(id => {
       return turnPlayer.unitZone.some(c => c && c.gamecardId === id);
     });
@@ -1825,17 +1845,36 @@ export const ServerGameService = {
     const allAttackersGone = attackersFound.length === 0;
 
     if (defenderGone || allAttackersGone) {
-      gameState.logs.push(`[战斗中止] ${defenderGone ? '防御单位' : '所有攻击单位'}已离开字段，战斗中止。`);
-      gameState.phase = 'MAIN';
+      gameState.logs.push(`[战斗中止] ${defenderGone ? '防御/目标单位' : '所有攻击单位'}已离开字段，战斗中止。`);
+      
+      const inConfrontation = gameState.isResolvingStack || (gameState.counterStack && gameState.counterStack.length > 0) || gameState.isCountering > 0;
+
+      if (inConfrontation) {
+        if (gameState.phase === 'COUNTERING') {
+          gameState.previousPhase = 'MAIN';
+        } else {
+          gameState.phase = 'MAIN';
+        }
+        if (gameState.counterStack) {
+          gameState.counterStack.forEach(item => {
+            if (item.type === 'PHASE_END') {
+              item.nextPhase = 'MAIN';
+            }
+          });
+        }
+      } else {
+        gameState.phase = 'MAIN';
+        if (gameState.previousPhase && battlePhases.includes(gameState.previousPhase)) {
+          gameState.previousPhase = undefined;
+        }
+        gameState.phaseTimerStart = Date.now();
+      }
+
       gameState.battleState = undefined;
-      gameState.phaseTimerStart = Date.now();
       EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } });
     } else if (gameState.battleState.attackers.length !== attackersFound.length) {
-      // At least one attacker remains, update battle state attackers list
       gameState.logs.push(`[战斗继续] 其中一个攻击单位已离开，剩余单位继续攻击。`);
       gameState.battleState.attackers = attackersFound;
-      // Requirement: "the remaining units will continue to attack, which is also considered a coalition attack"
-      // So we keep isAlliance=true if it was already true.
     }
   },
 
@@ -1944,6 +1983,10 @@ export const ServerGameService = {
   },
 
   async advancePhase(gameState: GameState, action?: string, playerId?: string, onUpdate?: (state: GameState) => Promise<void>) {
+    if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
+      throw new Error('当前有未结算骤，请等待处理完毕。');
+    }
+
     // Identity of the player performing the action
     const actingPlayerId = playerId || gameState.playerIds[gameState.currentTurnPlayer];
     const actingPlayer = gameState.players[actingPlayerId];
@@ -1952,12 +1995,14 @@ export const ServerGameService = {
     const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const turnPlayer = gameState.players[turnPlayerId];
 
-    // Standardized Shared Timer Docking
     const now = Date.now();
     const elapsed = now - (gameState.phaseTimerStart || now);
     const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
     const isWaiting = (gameState.counterStack && gameState.counterStack.length > 0) ||
-      (gameState.battleState && gameState.battleState.askConfront);
+      (gameState.battleState && gameState.battleState.askConfront) || 
+      gameState.isResolvingStack || 
+      gameState.currentProcessingItem || 
+      gameState.pendingQuery;
 
     if (sharedPhases.includes(gameState.phase) && !isWaiting) {
       if (actingPlayer) {

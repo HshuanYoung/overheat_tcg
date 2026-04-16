@@ -10,6 +10,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
   const location = useLocation();
   const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [coins, setCoins] = useState<number | null>(null);
+  const [crystals, setCrystals] = useState<number | null>(null);
 
   const isInGame = location.pathname.startsWith('/battle/');
 

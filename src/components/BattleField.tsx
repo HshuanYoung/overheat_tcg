@@ -709,9 +709,12 @@ export const BattleField: React.FC = () => {
                 className="w-full max-w-5xl bg-zinc-900/50 border border-white/10 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in fade-in zoom-in duration-300 pointer-events-auto"
                 onClick={e => e.stopPropagation()}
               >
-                {/* Left: Card Image */}
-                <div className="w-full md:w-2/5 aspect-[3/4] p-4 md:p-8 bg-black/20">
-                  <div className="relative h-full w-full rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+                {/* Left: Card Name & Image */}
+                <div className="w-full md:w-2/5 p-4 md:p-8 flex flex-col items-center">
+                  <h2 className="text-4xl md:text-5xl font-black italic text-white uppercase tracking-tighter mb-4 text-center md:hidden">
+                    {previewCard.fullName}
+                  </h2>
+                  <div className="relative aspect-[3/4] w-full max-w-[300px] md:max-w-none rounded-2xl overflow-hidden shadow-2xl ring-2 ring-[#f27d26]/30 bg-black/40">
                     <img
                       src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false)}
                       alt={previewCard.fullName}
@@ -719,56 +722,82 @@ export const BattleField: React.FC = () => {
                       referrerPolicy="no-referrer"
                     />
                     {/* Floating Rarity Badge */}
-                    <div className="absolute top-4 right-4 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/20 text-xs font-black italic">
+                    <div className="absolute top-4 right-4 px-3 py-1 bg-black/80 backdrop-blur-md rounded-xl border border-white/20 text-xs font-black italic text-[#f27d26]">
                       {previewCard.rarity}
                     </div>
                   </div>
                 </div>
 
                 {/* Right: Card Information */}
-                <div className="flex-1 flex flex-col p-6 md:p-10 overflow-hidden">
-                  <div className="flex justify-between items-start mb-6">
+                <div className="flex-1 flex flex-col p-4 md:p-10 overflow-hidden">
+                  <div className="hidden md:flex justify-between items-start mb-6">
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.2em]">{previewCard.id}</span>
                         <div className="h-px w-12 bg-[#f27d26]/30" />
                         <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">{previewCard.type}</span>
                       </div>
-                      <h2 className="text-3xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-none">
+                      <h2 className="text-5xl font-black italic text-white uppercase tracking-tighter leading-none">
                         {previewCard.fullName}
                       </h2>
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-8">
-                    {/* Stats Row */}
-                    <div className="grid grid-cols-4 gap-4">
-                      <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                        <span className="text-[8px] text-zinc-500 uppercase font-black block mb-1">Access Cost</span>
-                        <span className="text-xl font-black text-red-500">{previewCard.acValue >= 0 ? `+${previewCard.acValue}` : previewCard.acValue}</span>
-                      </div>
-                      <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                        <span className="text-[8px] text-zinc-500 uppercase font-black block mb-1">Color</span>
-                        <span className="text-xl font-black text-blue-400">{previewCard.color}</span>
-                      </div>
-                      {previewCard.type === 'UNIT' && (
-                        <>
-                          <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                            <span className="text-[8px] text-zinc-500 uppercase font-black block mb-1">Power</span>
-                            <span className="text-xl font-black text-blue-400">{previewCard.power}</span>
+                  <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                    {/* Registry Data Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-[11px] font-black text-white/60 uppercase tracking-[0.4em] flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                        Registry Data
+                      </h3>
+                      
+                      <div className="grid gap-2">
+                        {/* Type Box */}
+                        <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-5 flex items-center justify-between">
+                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Type</span>
+                          <span className="text-xl font-black italic text-orange-500 uppercase">{previewCard.type}</span>
+                        </div>
+
+                        {/* AC Value Box */}
+                        <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-5 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Shield className="w-5 h-5 text-blue-500" />
+                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">AC Value</span>
                           </div>
-                          <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                            <span className="text-[8px] text-zinc-500 uppercase font-black block mb-1">Damage</span>
-                            <span className="text-xl font-black text-red-500">{previewCard.damage}</span>
+                          <span className="text-2xl font-black text-white">{previewCard.acValue}</span>
+                        </div>
+
+                        {/* God Mark Box */}
+                        <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-5 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Zap className={cn("w-5 h-5", previewCard.godMark ? "text-red-500" : "text-zinc-600")} />
+                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">God Mark</span>
                           </div>
-                        </>
-                      )}
+                          <span className={cn("text-xl font-black italic uppercase", previewCard.godMark ? "text-red-500" : "text-zinc-600")}>
+                            {previewCard.godMark ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
+                    {/* Stats Grid (Only for Units) */}
+                    {previewCard.type === 'UNIT' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
+                          <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Power</span>
+                          <span className="text-3xl font-black text-blue-400">{previewCard.power}</span>
+                        </div>
+                        <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
+                          <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Damage</span>
+                          <span className="text-3xl font-black text-red-500">{previewCard.damage}</span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Effects Section */}
-                    <div className="space-y-4">
+                    <div className="space-y-4 pt-4">
                       <h3 className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.3em] flex items-center gap-3">
-                        Special Abilities
+                        Abilities
                         <div className="h-px flex-1 bg-gradient-to-r from-[#f27d26]/20 to-transparent" />
                       </h3>
                       <div className="grid gap-3">
@@ -1597,17 +1626,17 @@ export const BattleField: React.FC = () => {
           <>
             <div className="fixed inset-0 z-[190]" onClick={() => setCardMenu(null)}></div>
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, x: 0, y: 20 }}
-              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, x: 0, y: 20 }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className={cn(
-                "fixed z-[200] flex flex-col gap-3 w-48 md:w-40 bg-zinc-900/95 backdrop-blur-xl p-4 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-[70vh] overflow-y-auto custom-scrollbar",
-                window.innerWidth < 768 ? "items-center" : ""
+                "fixed z-[200] flex flex-col gap-3 w-[260px] md:w-40 bg-zinc-900/95 backdrop-blur-xl p-6 md:p-4 rounded-[2rem] md:rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] max-h-[70vh] overflow-y-auto custom-scrollbar",
+                window.innerWidth < 768 ? "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" : ""
               )}
-              style={{
-                left: window.innerWidth < 768 ? '50%' : (cardMenu.x + 85),
-                top: window.innerWidth < 768 ? '50%' : cardMenu.y,
-                transform: window.innerWidth < 768 ? 'translate(-50%, -50%)' : 'translate(0, -50%)'
+              style={window.innerWidth < 768 ? {} : {
+                left: cardMenu.x + 85,
+                top: cardMenu.y,
+                transform: 'translate(0, -50%)'
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -2357,202 +2386,6 @@ export const BattleField: React.FC = () => {
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_rgba(242,125,38,0.05)_0%,_transparent_50%)]" />
       </div>
-
-      {/* Detailed Card Information Overlay */}
-      <AnimatePresence>
-        {previewCard && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 md:p-8 cursor-pointer"
-            onClick={() => setPreviewCard(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 30 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 30 }}
-              className="relative flex flex-col md:flex-row items-stretch gap-12 max-h-[92vh] w-full max-w-6xl p-10 bg-[#120a12]/95 rounded-[3.5rem] border-2 border-[#4a0d4a]/30 shadow-[0_0_150px_rgba(74,13,74,0.3)] overflow-hidden backdrop-blur-3xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Premium Decorative Accents */}
-              <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-[#4a0d4a]/10 blur-[180px] rounded-full -translate-y-1/2 translate-x-1/2 animate-pulse" />
-              <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-red-600/5 blur-[180px] rounded-full translate-y-1/2 -translate-x-1/2" />
-
-              {/* Left Column: Name & Image Area */}
-              <div className="relative shrink-0 flex flex-col gap-6 w-[45%]">
-                <div className="text-center">
-                  <h2 className="text-4xl font-black italic text-white uppercase tracking-tighter leading-none mb-1">
-                    {previewCard.fullName}
-                  </h2>
-                  <div className="h-1 w-24 bg-gradient-to-r from-transparent via-[#f27d26] to-transparent mx-auto mt-2 opacity-50" />
-                </div>
-
-                <div className="relative aspect-[3/4] rounded-3xl overflow-hidden border-2 border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] group">
-                  <img
-                    src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false)}
-                    alt={previewCard.fullName}
-                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                    referrerPolicy="no-referrer"
-                  />
-                  {/* Floating Rarity Badge */}
-                  <div className="absolute top-6 left-6 px-4 py-1.5 bg-black/60 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl">
-                    <span className="text-lg font-black italic text-white uppercase tracking-widest">{previewCard.rarity}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Structured Information List */}
-              <div className="flex-1 flex flex-col min-w-0 h-full">
-                <div className="h-full border-2 border-white/5 bg-black/20 rounded-[2.5rem] p-8 flex flex-col gap-6 overflow-hidden relative">
-                  {/* Container Header */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-[#f27d26] shadow-[0_0_10px_#f27d26]" />
-                      <span className="text-xs font-black uppercase text-white/40 tracking-[0.4em]">Registry Data</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {previewCard.isrush && (
-                      <div className="px-5 py-2 bg-[#4a0d4a] border-2 border-white/20 rounded-xl text-white text-xs font-black group/kw relative cursor-help uppercase italic shadow-[0_0_20px_rgba(74,13,74,0.6)]">
-                        速攻
-                        <div className="absolute bottom-full left-0 mb-3 w-64 p-4 bg-[#1a0f1a] border-2 border-[#4a0d4a] rounded-2xl text-white text-[11px] opacity-0 group-hover/kw:opacity-100 transition-all duration-300 z-[1000] pointer-events-none shadow-[0_10px_40px_rgba(0,0,0,0.8)] leading-relaxed normal-case font-medium">
-                          <span className="text-[#f27d26] font-black italic block mb-1">【速攻】</span>
-                          此单位在登场的第一个回合可以进行攻击。
-                        </div>
-                      </div>
-                    )}
-                    {previewCard.isAnnihilation && (
-                      <div className="px-5 py-2 bg-[#4a0d4a] border-2 border-white/20 rounded-xl text-white text-xs font-black group/kw relative cursor-help uppercase italic shadow-[0_0_20px_rgba(74,13,74,0.6)]">
-                        歼灭
-                        <div className="absolute bottom-full left-0 mb-3 w-72 p-4 bg-[#1a0f1a] border-2 border-[#4a0d4a] rounded-2xl text-white text-[11px] opacity-0 group-hover/kw:opacity-100 transition-all duration-300 z-[1000] pointer-events-none shadow-[0_10px_40px_rgba(0,0,0,0.8)] leading-relaxed normal-case font-medium">
-                          <span className="text-[#f27d26] font-black italic block mb-1">【歼灭】</span>
-                          此单位参加攻击并在战斗中破坏对手单位时，给予对手等同于此单位伤害值的战斗伤害。
-                        </div>
-                      </div>
-                    )}
-                    {previewCard.isShenyi && (
-                      <div className="px-5 py-2 bg-[#4a0d4a] border-2 border-white/20 rounded-xl text-white text-xs font-black group/kw relative cursor-help uppercase italic shadow-[0_0_20px_rgba(74,13,74,0.6)]">
-                        神依
-                        <div className="absolute bottom-full left-0 mb-3 w-72 p-4 bg-[#1a0f1a] border-2 border-[#4a0d4a] rounded-2xl text-white text-[11px] opacity-0 group-hover/kw:opacity-100 transition-all duration-300 z-[1000] pointer-events-none shadow-[0_10px_40px_rgba(0,0,0,0.8)] leading-relaxed normal-case font-medium">
-                          <span className="text-[#f27d26] font-black italic block mb-1">【神依】</span>
-                          每回合一次，当玩家进入女神化状态时，可以将此单位由横置变为竖置。
-                        </div>
-                      </div>
-                    )}
-                    {previewCard.isHeroic && (
-                      <div className="px-5 py-2 bg-[#4a0d4a] border-2 border-white/20 rounded-xl text-white text-xs font-black group/kw relative cursor-help uppercase italic shadow-[0_0_20px_rgba(74,13,74,0.6)]">
-                        英勇
-                        <div className="absolute bottom-full left-0 mb-3 w-72 p-4 bg-[#1a0f1a] border-2 border-[#4a0d4a] rounded-2xl text-white text-[11px] opacity-0 group-hover/kw:opacity-100 transition-all duration-300 z-[1000] pointer-events-none shadow-[0_10px_40px_rgba(0,0,0,0.8)] leading-relaxed normal-case font-medium">
-                          <span className="text-[#f27d26] font-black italic block mb-1">【英勇】</span>
-                          如果此单位在本回合发动过攻击，在回合结束时重置。
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-4">
-                    {/* Item: Type */}
-                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                      <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Type</span>
-                      <span className="text-sm font-black italic text-[#f27d26] uppercase">{previewCard.type}</span>
-                    </div>
-
-                    {/* Stats List */}
-                    {[
-                      { label: 'AC VALUE', val: previewCard.acValue, base: previewCard.baseAcValue, icon: Shield, theme: '#3b82f6', show: true },
-                      { label: 'DAMAGE', val: previewCard.damage ?? 0, base: previewCard.baseDamage, icon: Zap, theme: '#ef4444', show: previewCard.type === 'UNIT' },
-                      { label: 'POWER', val: previewCard.power ?? 0, base: previewCard.basePower, icon: Sword, theme: '#facc15', show: previewCard.type === 'UNIT' }
-                    ].filter(s => s.show).map((stat, i) => {
-                      const isIncrease = stat.base !== undefined && stat.val > stat.base;
-                      const isDecrease = stat.base !== undefined && stat.val < stat.base;
-                      return (
-                        <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <stat.icon className="w-4 h-4" style={{ color: stat.theme }} />
-                            <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">{stat.label}</span>
-                          </div>
-                          <div className="flex items-baseline gap-2">
-                            <span className={cn(
-                              "text-xl font-black italic tabular-nums",
-                              isIncrease ? "text-red-500" : isDecrease ? "text-green-500" : "text-white"
-                            )}>
-                              {stat.val}
-                            </span>
-                            {stat.base !== undefined && stat.val !== stat.base && (
-                              <span className="text-xs font-bold text-white/20 italic">
-                                ({stat.base})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {/* God Mark */}
-                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-3">
-                        <Zap className="w-4 h-4 text-red-500" />
-                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">God Mark</span>
-                      </div>
-                      <span className={cn(
-                        "text-xs font-black uppercase tracking-widest italic",
-                        previewCard.godMark ? "text-red-500" : "text-white/20"
-                      )}>
-                        {previewCard.godMark ? 'ACTIVE' : 'INACTIVE'}
-                      </span>
-                    </div>
-
-                    {/* Faction / Influence */}
-                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                      <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Faction / Influence</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black italic text-white uppercase">{previewCard.faction || 'None'}</span>
-                        {previewCard.baseFaction && previewCard.baseFaction !== previewCard.faction && (
-                          <span className="text-xs font-bold text-white/40 italic">({previewCard.baseFaction})</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Influenced By Section */}
-                    <div className="pt-4">
-                      <div className="px-1 mb-4 flex items-center gap-2">
-                        <Layers className="w-3 h-3 text-[#f27d26]" />
-                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Influenced By</span>
-                      </div>
-
-                      <div className="space-y-3">
-                        {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 ? (
-                          previewCard.influencingEffects.map((eff, i) => (
-                            <div key={i} className="flex gap-4 p-4 bg-black/40 border border-white/5 rounded-2xl hover:border-white/10 transition-colors">
-                              <span className="text-[10px] font-black text-[#f27d26] opacity-50">{i + 1}.</span>
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-black uppercase text-white/20 tracking-widest">Source: {eff.sourceCardName}</span>
-                                <p className="text-sm text-zinc-300 leading-relaxed font-semibold">{eff.description}</p>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="py-8 text-center border border-dashed border-white/5 rounded-2xl opacity-20">
-                            <span className="text-[10px] font-bold uppercase tracking-widest italic">No modifiers active</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Return Button */}
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={() => setPreviewCard(null)}
-                    className="px-10 py-4 bg-white text-black rounded-2xl text-xs font-black uppercase tracking-[0.2em] italic hover:scale-105 transition-all shadow-xl active:scale-95"
-                  >
-                    CLOSE REGISTRY
-                  </button>
-                </div>
-              </div>
 
               {/* Close Button Icon */}
               <button

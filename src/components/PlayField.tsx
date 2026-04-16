@@ -115,8 +115,10 @@ const CardListModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onPreviewCard?: (card: Card) => void;
+  onCardClick?: (card: Card, zone: string, index?: number, e?: React.MouseEvent) => void;
   cardBackUrl?: string;
-}> = ({ title, cards = [], isOpen, onClose, onPreviewCard, cardBackUrl }) => {
+  zoneType: string;
+}> = ({ title, cards = [], isOpen, onClose, onPreviewCard, onCardClick, cardBackUrl, zoneType }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm" onClick={onClose}>
@@ -129,7 +131,18 @@ const CardListModal: React.FC<{
         </div>
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4 custom-scrollbar">
           {cards?.map((card, i) => (
-            <div key={i} className="aspect-[3/4] cursor-pointer" onClick={() => onPreviewCard?.(card)}>
+            <div 
+              key={i} 
+              className="aspect-[3/4] cursor-pointer" 
+              onClick={(e) => {
+                if (onCardClick) {
+                  onCardClick(card, zoneType, i, e);
+                  onClose();
+                } else {
+                  onPreviewCard?.(card);
+                }
+              }}
+            >
               <CardComponent card={card} disableZoom cardBackUrl={cardBackUrl} />
             </div>
           ))}
@@ -155,7 +168,7 @@ const PlayerHalf: React.FC<{
   cardBackUrl?: string;
 }> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl }) => {
   const romanNumerals = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ'];
-  const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[] } | null>(null);
+  const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[], type: string } | null>(null);
   if (!player) return null;
 
 
@@ -169,7 +182,9 @@ const PlayerHalf: React.FC<{
         onClose={() => setViewingZone(null)}
         title={viewingZone?.title || ''}
         cards={viewingZone?.cards || []}
+        zoneType={viewingZone?.type || ''}
         onPreviewCard={onPreviewCard}
+        onCardClick={onCardClick}
         cardBackUrl={cardBackUrl}
       />
 
@@ -186,14 +201,14 @@ const PlayerHalf: React.FC<{
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
+              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [], type: 'grave' })}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
             <CardSlot
               card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
+              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [], type: 'exile' })}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
           </>
@@ -201,16 +216,18 @@ const PlayerHalf: React.FC<{
           // Player Left: Item, Erosion, Play
           <>
             <CardSlot
-              card={null} label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
+              card={player.itemZone?.filter(Boolean).slice(-1)[0] || null} 
+              label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: '道具区 (Item Zone)', cards: player.itemZone?.filter(Boolean) as Card[] })}
-              displayMode="erosion_item"
+              onClick={() => setViewingZone({ title: '道具区 (Item Zone)', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
+              isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
-              card={null} label="ERISON" count={(player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)}
+              card={[...(player.erosionFront || []), ...(player.erosionBack || [])].filter(Boolean).slice(-1)[0] || null}
+              label="ERISON" count={`${(player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)} (${player.erosionBack?.length || 0})` as any}
               className="border-red-600/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: '侵蚀区 (Erosion Zone)', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[] })}
-              displayMode="erosion_item"
+              onClick={() => setViewingZone({ title: '侵蚀区 (Erosion Zone)', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], type: 'erosion' })}
+              isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
               card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
@@ -417,16 +434,18 @@ const PlayerHalf: React.FC<{
               onPreview={onPreviewCard} isOpponent={isOpponent}
             />
             <CardSlot
-              card={null} label="ERISON" count={(player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)}
+              card={[...(player.erosionFront || []), ...(player.erosionBack || [])].filter(Boolean).slice(-1)[0] || null}
+              label="ERISON" count={`${(player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)} (${player.erosionBack?.length || 0})` as any}
               className="border-red-600/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: '敌方侵蚀区', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[] })}
-              isOpponent={isOpponent} displayMode="erosion_item"
+              onClick={() => setViewingZone({ title: '敌方侵蚀区', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], type: 'erosion' })}
+              isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
             <CardSlot
-              card={null} label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
+              card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}
+              label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: '敌方道具区', cards: player.itemZone?.filter(Boolean) as Card[] })}
-              isOpponent={isOpponent} displayMode="erosion_item"
+              onClick={() => setViewingZone({ title: '敌方道具区', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
+              isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
           </>
         ) : (
@@ -436,14 +455,14 @@ const PlayerHalf: React.FC<{
               card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
+              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [], type: 'exile' })}
               isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
+              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [], type: 'grave' })}
               isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot

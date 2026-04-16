@@ -50,7 +50,7 @@ const CardSlot: React.FC<{
   const heightScale = isStackArea ? 1 + Math.min(count / 100, 0.2) : 1;
 
   return (
-    <div 
+    <div
       className={cn(
         "relative transition-all duration-300",
         displayMode === 'unit' ? "w-full aspect-[3/4] max-w-[130px]" : "w-full aspect-[3/4]"
@@ -127,15 +127,15 @@ const CardListModal: React.FC<{
       <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="p-4 border-bottom border-white/10 flex justify-between items-center">
           <h3 className="text-lg font-bold uppercase tracking-widest text-[#f27d26]">{title} ({cards?.length || 0})</h3>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
-            <LogOut className="w-5 h-5" />
+          <button onClick={onClose} className="p-2 hover:bg-white/10 hover:text-red-500 rounded-full transition-all group">
+            <X className="w-6 h-6 group-hover:rotate-90 transition-transform" />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 custom-scrollbar">
           {cards?.map((card, i) => (
-            <div 
-              key={i} 
-              className="aspect-[3/4] cursor-pointer" 
+            <div
+              key={i}
+              className="aspect-[3/4] cursor-pointer"
               onClick={(e) => {
                 if (onCardClick) {
                   onCardClick(card, zoneType, i, e);
@@ -144,10 +144,10 @@ const CardListModal: React.FC<{
                 }
               }}
             >
-              <CardComponent 
-                card={card} 
-                disableZoom 
-                cardBackUrl={cardBackUrl} 
+              <CardComponent
+                card={card}
+                disableZoom
+                cardBackUrl={cardBackUrl}
                 isBack={zoneType === 'erosion' && erosionBackIds.includes(card.gamecardId)}
               />
             </div>
@@ -224,23 +224,23 @@ const PlayerHalf: React.FC<{
           // Player Left: Item, Erosion, Play
           <>
             <CardSlot
-              card={player.itemZone?.filter(Boolean).slice(-1)[0] || null} 
+              card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}
               label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onClick={() => setViewingZone?.({ title: '道具区 (Item Zone)', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
               isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
-              card={(player.erosionFront?.filter(Boolean).length || 0) > 0 
-                ? player.erosionFront?.filter(Boolean).slice(-1)[0] 
-                : (player.erosionBack?.filter(Boolean).length || 0) > 0 
-                  ? player.erosionBack?.filter(Boolean).slice(-1)[0] 
+              card={(player.erosionFront?.filter(Boolean).length || 0) > 0
+                ? player.erosionFront?.filter(Boolean).slice(-1)[0]
+                : (player.erosionBack?.filter(Boolean).length || 0) > 0
+                  ? player.erosionBack?.filter(Boolean).slice(-1)[0]
                   : null}
               label="ERISON" count={`${(player.erosionBack?.filter(Boolean).length || 0) + (player.erosionFront?.filter(Boolean).length || 0)} (${player.erosionBack?.filter(Boolean).length || 0})` as any}
               className="border-red-600/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone?.({ 
-                title: '侵蚀区 (Erosion Zone)', 
-                cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], 
+              onClick={() => setViewingZone?.({
+                title: '侵蚀区 (Erosion Zone)',
+                cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[],
                 type: 'erosion',
                 erosionBackIds: player.erosionBack?.filter(Boolean).map(c => c.gamecardId)
               })}

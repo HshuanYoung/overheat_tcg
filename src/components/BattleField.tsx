@@ -1103,7 +1103,7 @@ export const BattleField: React.FC = () => {
                 <div className="w-1 h-1 bg-[#f27d26] rounded-full" />
                 Battle Areas
               </span>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 {/* Me Stats */}
                 <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
@@ -2544,7 +2544,7 @@ export const BattleField: React.FC = () => {
             className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-md flex flex-col md:flex-row items-center justify-center p-4 md:p-12 cursor-pointer"
             onClick={() => setPreviewCard(null)}
           >
-            <div 
+            <div
               className="w-full max-w-5xl bg-zinc-900/50 border border-white/10 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in fade-in zoom-in duration-300 pointer-events-auto"
               onClick={e => e.stopPropagation()}
             >
@@ -2589,7 +2589,7 @@ export const BattleField: React.FC = () => {
                       <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
                       Registry Data
                     </h3>
-                    
+
                     <div className="grid gap-2">
                       {/* Type Box */}
                       <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 md:p-5 flex items-center justify-between">
@@ -2674,7 +2674,7 @@ export const BattleField: React.FC = () => {
             </div>
 
             {/* Fixed Close Button for Mobile Accessibility */}
-            <button 
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 setPreviewCard(null);
@@ -2695,7 +2695,7 @@ export const BattleField: React.FC = () => {
               className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
               onClick={() => setShowFullLogs(false)}
             >
-              <div 
+              <div
                 className="max-w-2xl w-full bg-zinc-900 border border-white/10 rounded-[2.5rem] flex flex-col p-8 md:p-12 gap-8 shadow-[0_0_100px_rgba(242,125,38,0.1)] relative"
                 onClick={e => e.stopPropagation()}
               >
@@ -2704,14 +2704,14 @@ export const BattleField: React.FC = () => {
                     <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.4em]">Chronicle</span>
                     <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter">BATTLE LOGS</h2>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setShowFullLogs(false)}
                     className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all"
                   >
                     <X className="w-6 h-6 text-white" />
                   </button>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-4 max-h-[60vh]">
                   {game.logs.slice().reverse().map((log, i) => (
                     <div key={i} className="group flex gap-4">
@@ -2724,7 +2724,7 @@ export const BattleField: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 <div className="flex justify-center pt-4 opacity-20">
                   <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-widest">End of Record</span>
                 </div>

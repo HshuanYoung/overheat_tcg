@@ -38,7 +38,8 @@ export const DeckBuilder: React.FC = () => {
     ownership: 'ALL' // ALL, OWNED, NOT_OWNED
   });
   const [showDecksMobile, setShowDecksMobile] = useState(false);
-  const [showLibraryMobile, setShowLibraryMobile] = useState(false);
+  const [showDecksMobile, setShowDecksMobile] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false); // Changed from showLibraryMobile
 
   const CRYSTAL_VALUES: Record<string, { decompose: number, produce: number }> = {
     C: { decompose: 1, produce: 5 },
@@ -483,7 +484,14 @@ export const DeckBuilder: React.FC = () => {
         </div>
           <div className="flex items-center gap-2 md:gap-4 overflow-x-auto pb-2 md:pb-0">
             <button 
-              onClick={() => setShowLibraryMobile(true)}
+              onClick={() => setShowLibrary(true)}
+              className="lg:flex hidden items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400"
+            >
+              <Search className="w-4 h-4" />
+              <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">搜索卡牌 Library</span>
+            </button>
+            <button 
+              onClick={() => setShowLibrary(true)}
               className="lg:hidden flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400"
             >
               <Search className="w-4 h-4" />
@@ -553,17 +561,24 @@ export const DeckBuilder: React.FC = () => {
 
       {/* Right: Card Library */}
       <div className={cn(
-        "absolute lg:relative right-0 z-40 w-80 h-full border-l border-zinc-800 flex flex-col bg-zinc-900 transition-transform duration-300",
-        showLibraryMobile ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+        "absolute lg:relative right-0 z-40 w-80 h-full border-l border-zinc-800 flex flex-col bg-zinc-900 transition-transform duration-300 shadow-2xl lg:shadow-none",
+        showLibrary ? "translate-x-0" : "translate-x-full lg:hidden"
       )}>
         <button 
-          onClick={() => setShowLibraryMobile(false)}
-          className="lg:hidden absolute top-4 left-4 p-2 text-zinc-400 flex items-center gap-2 hover:text-white transition-colors"
+          onClick={() => setShowLibrary(false)}
+          className="absolute top-4 left-4 p-2 text-zinc-400 flex items-center gap-2 hover:text-white transition-colors z-50 bg-black/40 rounded-full"
         >
           <ArrowLeft className="w-6 h-6" />
           <span className="text-xs font-black italic uppercase tracking-widest">返回 BACK</span>
         </button>
-        <div className="p-4 border-b border-zinc-800">
+        <div className="p-4 border-b border-zinc-800 flex flex-col gap-4">
+          <button 
+            onClick={() => setShowLibrary(false)}
+            className="flex items-center gap-3 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl border border-white/10 transition-all w-full text-zinc-300 md:hidden"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="font-black italic tracking-tighter uppercase text-sm">隐藏库 HIDE LIBRARY</span>
+          </button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input 
@@ -707,24 +722,26 @@ export const DeckBuilder: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setZoomedCard(null)}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 cursor-default"
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 lg:p-24 cursor-default"
           >
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setZoomedCard(null);
-              }}
-              className="fixed top-4 right-4 md:top-10 md:right-10 z-[110] p-3 md:p-4 bg-zinc-800/80 border border-white/10 rounded-2xl text-white shadow-2xl hover:bg-zinc-700 transition-all group"
-            >
-              <X className="w-6 h-6 md:w-8 md:h-8 group-hover:scale-110 transition-transform" />
-            </button>
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-6 md:p-10 max-w-4xl w-full flex flex-col md:flex-row gap-8 md:gap-12 relative overflow-hidden shadow-2xl"
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-6 md:p-10 max-w-4xl w-full flex flex-col md:flex-row gap-8 md:gap-12 relative overflow-hidden shadow-2xl max-h-[90vh]"
               onClick={e => e.stopPropagation()}
             >
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoomedCard(null);
+                }}
+                className="absolute top-6 right-6 z-[110] px-4 py-2 bg-red-600/90 hover:bg-red-500 border border-white/20 rounded-xl text-white shadow-2xl transition-all group flex items-center gap-2"
+                title="返回"
+              >
+                <X className="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-90 transition-transform" />
+                <span className="text-[10px] font-black italic uppercase tracking-widest hidden md:block">返回 BACK</span>
+              </button>
               {/* Large Card Image */}
               <div className="w-full md:w-1/2 flex items-center justify-center">
                 <div className="relative group w-full max-w-[280px] md:max-w-[320px]">
@@ -750,10 +767,10 @@ export const DeckBuilder: React.FC = () => {
                      {zoomedCard.rarity} RARITY
                   </span>
                 </div>
-                <h2 className="text-3xl md:text-4xl font-black italic mb-2 tracking-tighter uppercase">{zoomedCard.fullName}</h2>
-                <p className="text-zinc-500 font-bold mb-6 md:mb-8 uppercase tracking-widest text-sm">{zoomedCard.specialName || '---'}</p>
+                <h2 className="text-3xl md:text-5xl font-black italic mb-2 tracking-tighter uppercase text-white">{zoomedCard.fullName}</h2>
+                <p className="text-zinc-500 font-bold mb-6 md:mb-10 uppercase tracking-widest text-sm">{zoomedCard.specialName || '---'}</p>
 
-                <div className="space-y-4 md:space-y-6">
+                <div className="grid grid-cols-1 gap-4 md:gap-6">
                   {/* Decompose */}
                   <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
                     <div>

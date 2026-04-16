@@ -97,7 +97,7 @@ const CardSlot: React.FC<{
         )}
 
         {/* Count Badge - Repositioned to center and enlarged */}
-        {showCount && count > 0 && (
+        {showCount && (count > 0 || typeof count === 'string') && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
             <div className="bg-black/60 backdrop-blur-sm text-[16px] font-black px-3 py-1 rounded-full border border-white/30 text-white shadow-2xl">
               {count}
@@ -228,6 +228,7 @@ const PlayerHalf: React.FC<{
               className="border-red-600/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onClick={() => setViewingZone({ title: '侵蚀区 (Erosion Zone)', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], type: 'erosion' })}
               isFaceUp={true} displayMode="erosion_item"
+               isDeck={((player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)) > 0}
             />
             <CardSlot
               card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
@@ -439,6 +440,7 @@ const PlayerHalf: React.FC<{
               className="border-red-600/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onClick={() => setViewingZone({ title: '敌方侵蚀区', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], type: 'erosion' })}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
+              isDeck={((player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)) > 0}
             />
             <CardSlot
               card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}

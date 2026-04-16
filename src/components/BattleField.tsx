@@ -695,174 +695,7 @@ export const BattleField: React.FC = () => {
         </button>
 
         {/* Full Image Overlay for Mulligan */}
-        {/* Card Details Overlay */}
-        <AnimatePresence>
-          {previewCard && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-md flex flex-col md:flex-row items-center justify-center p-4 md:p-12 cursor-pointer"
-              onClick={() => setPreviewCard(null)}
-            >
-              <div 
-                className="w-full max-w-5xl bg-zinc-900/50 border border-white/10 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in fade-in zoom-in duration-300 pointer-events-auto"
-                onClick={e => e.stopPropagation()}
-              >
-                {/* Left: Card Name & Image */}
-                <div className="w-full md:w-2/5 p-4 md:p-8 flex flex-col items-center">
-                  <h2 className="text-4xl md:text-5xl font-black italic text-white uppercase tracking-tighter mb-4 text-center md:hidden">
-                    {previewCard.fullName}
-                  </h2>
-                  <div className="relative aspect-[3/4] w-full max-w-[300px] md:max-w-none rounded-2xl overflow-hidden shadow-2xl ring-2 ring-[#f27d26]/30 bg-black/40">
-                    <img
-                      src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false)}
-                      alt={previewCard.fullName}
-                      className="w-full h-full object-contain"
-                      referrerPolicy="no-referrer"
-                    />
-                    {/* Floating Rarity Badge */}
-                    <div className="absolute top-4 right-4 px-3 py-1 bg-black/80 backdrop-blur-md rounded-xl border border-white/20 text-xs font-black italic text-[#f27d26]">
-                      {previewCard.rarity}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Card Information */}
-                <div className="flex-1 flex flex-col p-4 md:p-10 overflow-hidden">
-                  <div className="hidden md:flex justify-between items-start mb-6">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.2em]">{previewCard.id}</span>
-                        <div className="h-px w-12 bg-[#f27d26]/30" />
-                        <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">{previewCard.type}</span>
-                      </div>
-                      <h2 className="text-5xl font-black italic text-white uppercase tracking-tighter leading-none">
-                        {previewCard.fullName}
-                      </h2>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
-                    {/* Registry Data Section */}
-                    <div className="space-y-4">
-                      <h3 className="text-[11px] font-black text-white/60 uppercase tracking-[0.4em] flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
-                        Registry Data
-                      </h3>
-                      
-                      <div className="grid gap-2">
-                        {/* Type Box */}
-                        <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-5 flex items-center justify-between">
-                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Type</span>
-                          <span className="text-xl font-black italic text-orange-500 uppercase">{previewCard.type}</span>
-                        </div>
-
-                        {/* AC Value Box */}
-                        <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-5 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Shield className="w-5 h-5 text-blue-500" />
-                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">AC Value</span>
-                          </div>
-                          <span className="text-2xl font-black text-white">{previewCard.acValue}</span>
-                        </div>
-
-                        {/* God Mark Box */}
-                        <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-5 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Zap className={cn("w-5 h-5", previewCard.godMark ? "text-red-500" : "text-zinc-600")} />
-                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">God Mark</span>
-                          </div>
-                          <span className={cn("text-xl font-black italic uppercase", previewCard.godMark ? "text-red-500" : "text-zinc-600")}>
-                            {previewCard.godMark ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stats Grid (Only for Units) */}
-                    {previewCard.type === 'UNIT' && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
-                          <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Power</span>
-                          <span className="text-3xl font-black text-blue-400">{previewCard.power}</span>
-                        </div>
-                        <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
-                          <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Damage</span>
-                          <span className="text-3xl font-black text-red-500">{previewCard.damage}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Effects Section */}
-                    <div className="space-y-4 pt-4">
-                      <h3 className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.3em] flex items-center gap-3">
-                        Abilities
-                        <div className="h-px flex-1 bg-gradient-to-r from-[#f27d26]/20 to-transparent" />
-                      </h3>
-                      <div className="grid gap-3">
-                        {previewCard.effects && previewCard.effects.length > 0 ? (
-                          previewCard.effects.map((effect, i) => (
-                            <div key={i} className="bg-white/5 rounded-2xl p-5 border border-white/10 space-y-2 group hover:bg-white/[0.07] transition-colors">
-                              <div className="flex items-center justify-between">
-                                <span className={cn(
-                                  "text-[10px] font-black px-3 py-1 rounded-full border shadow-lg",
-                                  effect.type === 'ACTIVATE' ? "bg-green-500/20 border-green-500/50 text-green-400" :
-                                  effect.type === 'AUTO' ? "bg-blue-500/20 border-blue-500/50 text-blue-400" :
-                                  "bg-zinc-800 border-white/10 text-zinc-400"
-                                )}>
-                                  {effect.type}
-                                </span>
-                                {effect.limitPerTurn && (
-                                  <span className="text-[8px] font-black text-orange-500/60 flex items-center gap-1 uppercase">
-                                    <Star className="w-2.5 h-2.5 fill-current" />
-                                    Limit Once Per Turn
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-white/80 text-sm leading-relaxed font-medium">
-                                {effect.description}
-                              </p>
-                              {effect.cost && (
-                                <div className="pt-2 flex items-center gap-2">
-                                  <span className="text-[8px] font-black text-zinc-500 uppercase">Cost</span>
-                                  <span className="text-[10px] font-bold text-zinc-300 bg-white/5 px-2 py-0.5 rounded-md border border-white/5">{effect.cost}</span>
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="py-12 text-center opacity-20 italic text-sm tracking-widest">No active effects</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Footer: Description */}
-                    {previewCard.description && (
-                      <div className="pt-8 border-t border-white/5 opacity-40">
-                        <p className="text-[11px] font-medium leading-relaxed italic text-zinc-400">
-                          {previewCard.description}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Fixed Close Button for Mobile Accessibility */}
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPreviewCard(null);
-                }}
-                className="fixed top-6 right-6 md:top-10 md:right-10 z-[1100] p-4 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl text-white shadow-2xl hover:bg-white/10 transition-all group"
-              >
-                <X className="w-8 h-8 md:w-10 md:h-10 group-hover:scale-110 transition-transform" />
-                <span className="sr-only">Close Details</span>
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Card Details Overlay - MOVED TO FINAL RETURN */}
       </div>
     );
   }
@@ -892,7 +725,7 @@ export const BattleField: React.FC = () => {
           >
             <div className="max-w-4xl w-full flex flex-col items-center gap-4 md:gap-8 overflow-y-auto max-h-screen">
               <div className="text-center">
-                <h2 className="text-2xl md:text-4xl font-black italic text-[#f27d26] mb-1 md:mb-2 uppercase tracking-tighter">EROSION PHASE</h2>
+                <h2 className="text-xl md:text-4xl font-black italic text-[#f27d26] mb-1 md:mb-2 uppercase tracking-tighter">EROSION PHASE</h2>
                 <p className="text-zinc-400 uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-sm">Choose how to process face-up erosion cards</p>
               </div>
 
@@ -900,7 +733,7 @@ export const BattleField: React.FC = () => {
                 <button
                   onClick={() => setErosionChoice('A')}
                   className={cn(
-                    "p-4 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 text-center",
+                    "p-3 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 md:gap-4 text-center",
                     erosionChoice === 'A' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
                   )}
                 >
@@ -912,7 +745,7 @@ export const BattleField: React.FC = () => {
                 <button
                   onClick={() => setErosionChoice('B')}
                   className={cn(
-                    "p-4 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 text-center",
+                    "p-3 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 md:gap-4 text-center",
                     erosionChoice === 'B' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
                   )}
                 >
@@ -924,7 +757,7 @@ export const BattleField: React.FC = () => {
                 <button
                   onClick={() => setErosionChoice('C')}
                   className={cn(
-                    "p-4 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 text-center",
+                    "p-3 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 md:gap-4 text-center",
                     erosionChoice === 'C' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
                   )}
                 >
@@ -978,7 +811,7 @@ export const BattleField: React.FC = () => {
           >
             <div className="max-w-6xl w-full flex flex-col items-center gap-4 md:gap-6 p-4 md:p-8 overflow-y-auto max-h-screen">
               <div className="text-center">
-                <h3 className="text-2xl md:text-4xl font-black italic text-[#f27d26] uppercase tracking-tighter mb-2">支付费用 (PAY COST)</h3>
+                <h3 className="text-xl md:text-4xl font-black italic text-[#f27d26] uppercase tracking-tighter mb-2">支付费用 (PAY COST)</h3>
                 <div className="flex items-center justify-center gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Required:</span>
@@ -1335,7 +1168,7 @@ export const BattleField: React.FC = () => {
                 >
                   <div className="flex items-center gap-4 text-red-500">
                     <Zap className="w-8 h-8 animate-pulse" />
-                    <h2 className="text-5xl font-black italic uppercase tracking-tighter">
+                    <h2 className="text-2xl md:text-5xl font-black italic uppercase tracking-tighter">
                       RESOLVING EFFECT
                     </h2>
                     <Zap className="w-8 h-8 animate-pulse" />
@@ -1841,7 +1674,7 @@ export const BattleField: React.FC = () => {
                 <div className="w-12 h-12 md:w-16 md:h-16 bg-orange-500/10 rounded-2xl flex items-center justify-center shadow-inner">
                   <Sword className="w-8 h-8 md:w-10 md:h-10 text-orange-500" />
                 </div>
-                <h2 className="text-xl md:text-3xl font-black italic text-white uppercase tracking-tighter mt-2 md:mt-4 text-center">确认联军宣告 (CONFIRM ALLIANCE)</h2>
+                <h2 className="text-lg md:text-3xl font-black italic text-white uppercase tracking-tighter mt-2 md:mt-4 text-center">确认联军宣告 (CONFIRM ALLIANCE)</h2>
                 <p className="text-zinc-400 text-[10px] md:text-sm font-medium tracking-wide text-center">是否宣告这两个单位进行联军攻击？</p>
               </div>
 
@@ -1931,7 +1764,7 @@ export const BattleField: React.FC = () => {
               className="bg-zinc-900 border border-white/10 rounded-2xl max-w-2xl w-full p-4 md:p-8 shadow-2xl overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter">选择要发动的效果</h3>
+              <h3 className="text-xl md:text-2xl font-black italic text-red-500 mb-4 md:mb-6 uppercase tracking-tighter">选择要发动的效果</h3>
               <div className="space-y-4">
                 {effectSelection.effects.map((e, i) => (
                   <button
@@ -1993,7 +1826,7 @@ export const BattleField: React.FC = () => {
               className="bg-zinc-900 border border-red-500/30 rounded-2xl max-w-xl w-full p-5 md:p-8 shadow-[0_0_50px_rgba(220,38,38,0.15)] overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter flex items-center gap-3">
+              <h3 className="text-xl md:text-2xl font-black italic text-red-500 mb-4 md:mb-6 uppercase tracking-tighter flex items-center gap-3">
                 <Zap className="w-6 h-6" />
                 CONFIRM EFFECT
               </h3>
@@ -2116,12 +1949,12 @@ export const BattleField: React.FC = () => {
                   {(game.pendingQuery.title.includes('舍弃') || game.pendingQuery.title.includes('Discard')) && (
                     <Trash2 className="w-10 h-10 animate-bounce" />
                   )}
-                  <h2 className="text-2xl md:text-5xl font-black italic uppercase tracking-tighter">
+                  <h2 className="text-xl md:text-5xl font-black italic uppercase tracking-tighter">
                     {game.pendingQuery.title}
                   </h2>
                 </div>
 
-                <p className="text-zinc-400 uppercase tracking-[0.2em] md:tracking-[0.4em] text-[10px] md:text-sm max-w-2xl mx-auto leading-relaxed">
+                <p className="text-zinc-400 uppercase tracking-[0.15em] md:tracking-[0.4em] text-[9px] md:text-sm max-w-2xl mx-auto leading-relaxed">
                   {game.pendingQuery.description}
                 </p>
                 {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' && (
@@ -2148,7 +1981,7 @@ export const BattleField: React.FC = () => {
               </div>
 
               {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? (
-                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-10 max-h-[50vh] md:max-h-[55vh] overflow-y-auto p-4 md:p-6 custom-scrollbar w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-10 max-h-[45vh] md:max-h-[55vh] overflow-y-auto p-2 md:p-6 custom-scrollbar w-full">
                   {game.pendingQuery.options.map((option, i) => {
                     const isSelected = selectedQueryIds.includes(option.card.gamecardId);
                     const isDiscardQuery = game.pendingQuery!.title.includes('舍弃') || game.pendingQuery!.title.includes('Discard');
@@ -2366,7 +2199,7 @@ export const BattleField: React.FC = () => {
                   <button
                     onClick={handleQuerySubmit}
                     disabled={game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' && selectedQueryIds.length < game.pendingQuery.minSelections}
-                    className="px-16 py-5 bg-[#f27d26] text-white font-black italic uppercase tracking-[0.2em] rounded-2xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_20px_50px_rgba(242,125,38,0.3)] hover:scale-105 active:scale-95"
+                    className="px-8 md:px-16 py-3 md:py-5 bg-[#f27d26] text-white font-black italic uppercase tracking-[0.2em] rounded-2xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_20px_50px_rgba(242,125,38,0.3)] hover:scale-105 active:scale-95 text-xs md:text-base"
                   >
                     {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? 'CONFIRM SELECTION' : 'CONFIRM PAYMENT'}
                   </button>
@@ -2667,6 +2500,163 @@ export const BattleField: React.FC = () => {
                 确认
               </motion.button>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Card Details Overlay */}
+      <AnimatePresence>
+        {previewCard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-md flex flex-col md:flex-row items-center justify-center p-4 md:p-12 cursor-pointer"
+            onClick={() => setPreviewCard(null)}
+          >
+            <div 
+              className="w-full max-w-5xl bg-zinc-900/50 border border-white/10 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in fade-in zoom-in duration-300 pointer-events-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Left: Card Name & Image */}
+              <div className="w-full md:w-2/5 p-4 md:p-8 flex flex-col items-center">
+                <h2 className="text-2xl md:text-5xl font-black italic text-white uppercase tracking-tighter mb-4 text-center md:hidden">
+                  {previewCard.fullName}
+                </h2>
+                <div className="relative aspect-[3/4] w-full max-w-[240px] md:max-w-none rounded-2xl overflow-hidden shadow-2xl ring-2 ring-[#f27d26]/30 bg-black/40">
+                  <img
+                    src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false)}
+                    alt={previewCard.fullName}
+                    className="w-full h-full object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                  {/* Floating Rarity Badge */}
+                  <div className="absolute top-4 right-4 px-3 py-1 bg-black/80 backdrop-blur-md rounded-xl border border-white/20 text-xs font-black italic text-[#f27d26]">
+                    {previewCard.rarity}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Card Information */}
+              <div className="flex-1 flex flex-col p-4 md:p-10 overflow-hidden">
+                <div className="hidden md:flex justify-between items-start mb-6">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.2em]">{previewCard.id}</span>
+                      <div className="h-px w-12 bg-[#f27d26]/30" />
+                      <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">{previewCard.type}</span>
+                    </div>
+                    <h2 className="text-5xl font-black italic text-white uppercase tracking-tighter leading-none">
+                      {previewCard.fullName}
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                  {/* Registry Data Section */}
+                  <div className="space-y-4">
+                    <h3 className="text-[11px] font-black text-white/60 uppercase tracking-[0.4em] flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                      Registry Data
+                    </h3>
+                    
+                    <div className="grid gap-2">
+                      {/* Type Box */}
+                      <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 md:p-5 flex items-center justify-between">
+                        <span className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest">Type</span>
+                        <span className="text-lg md:text-xl font-black italic text-orange-500 uppercase">{previewCard.type}</span>
+                      </div>
+
+                      {/* AC Value Box */}
+                      <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 md:p-5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Shield className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
+                          <span className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest">AC Value</span>
+                        </div>
+                        <span className="text-xl md:text-2xl font-black text-white">{previewCard.acValue}</span>
+                      </div>
+
+                      {/* God Mark Box */}
+                      <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 md:p-5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Zap className={cn("w-4 h-4 md:w-5 md:h-5", previewCard.godMark ? "text-red-500" : "text-zinc-600")} />
+                          <span className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest">God Mark</span>
+                        </div>
+                        <span className={cn("text-lg md:text-xl font-black italic uppercase", previewCard.godMark ? "text-red-500" : "text-zinc-600")}>
+                          {previewCard.godMark ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats Grid (Only for Units) */}
+                  {previewCard.type === 'UNIT' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Power</span>
+                        <span className="text-2xl md:text-3xl font-black text-blue-400">{previewCard.power}</span>
+                      </div>
+                      <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Damage</span>
+                        <span className="text-2xl md:text-3xl font-black text-red-500">{previewCard.damage}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Effects Section */}
+                  <div className="space-y-4 pt-4">
+                    <h3 className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.3em] flex items-center gap-3">
+                      Abilities
+                      <div className="h-px flex-1 bg-gradient-to-r from-[#f27d26]/20 to-transparent" />
+                    </h3>
+                    <div className="grid gap-3">
+                      {previewCard.effects && previewCard.effects.length > 0 ? (
+                        previewCard.effects.map((effect, i) => (
+                          <div key={i} className="bg-white/5 rounded-2xl p-4 md:p-5 border border-white/10 space-y-2 group hover:bg-white/[0.07] transition-colors">
+                            <div className="flex items-center justify-between">
+                              <span className={cn(
+                                "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 rounded-full border shadow-lg",
+                                effect.type === 'ACTIVATE' ? "bg-green-500/20 border-green-500/50 text-green-400" :
+                                effect.type === 'AUTO' ? "bg-blue-500/20 border-blue-500/50 text-blue-400" :
+                                "bg-zinc-800 border-white/10 text-zinc-400"
+                              )}>
+                                {effect.type}
+                              </span>
+                            </div>
+                            <p className="text-white/80 text-xs md:text-sm leading-relaxed font-medium">
+                              {effect.description}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-8 md:py-12 text-center opacity-20 italic text-sm tracking-widest">No active effects</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer: Description */}
+                  {previewCard.description && (
+                    <div className="pt-8 border-t border-white/5 opacity-40">
+                      <p className="text-[10px] md:text-[11px] font-medium leading-relaxed italic text-zinc-400">
+                        {previewCard.description}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Fixed Close Button for Mobile Accessibility */}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewCard(null);
+              }}
+              className="fixed top-4 right-4 md:top-10 md:right-10 z-[1100] p-3 md:p-4 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl text-white shadow-2xl hover:bg-white/10 transition-all group"
+            >
+              <X className="w-6 h-6 md:w-10 md:h-10 group-hover:scale-110 transition-transform" />
+              <span className="sr-only">Close Details</span>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

@@ -20,8 +20,10 @@ interface PlayFieldProps {
   selectedAttackers?: string[];
   selectedDefender?: string;
   allianceInitiator?: string;
-  timer: number;
+  timer?: number;
   cardBackUrl?: string;
+  viewingZone?: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null;
+  setViewingZone?: (zone: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null) => void;
 }
 
 const CardSlot: React.FC<{
@@ -46,7 +48,6 @@ const CardSlot: React.FC<{
   // Dynamic height scaling for stack areas (Deck, Grave, Exile)
   const isStackArea = isDeck || label === 'GRAVE' || label === 'EXILE';
   const heightScale = isStackArea ? 1 + Math.min(count / 100, 0.2) : 1;
-  const isErosion = displayMode === 'erosion_item' && !isStackArea && label?.startsWith('ITEM') === false && label !== 'PLAY';
 
   return (
     <div 
@@ -171,9 +172,9 @@ const PlayerHalf: React.FC<{
   game?: GameState;
   allianceInitiator?: string;
   cardBackUrl?: string;
-}> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl }) => {
-  const romanNumerals = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ'];
-  const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null>(null);
+  viewingZone?: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null;
+  setViewingZone?: (zone: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null) => void;
+}> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone }) => {
   if (!player) return null;
 
 
@@ -184,7 +185,7 @@ const PlayerHalf: React.FC<{
     )}>
       <CardListModal
         isOpen={!!viewingZone}
-        onClose={() => setViewingZone(null)}
+        onClose={() => setViewingZone?.(null)}
         title={viewingZone?.title || ''}
         cards={viewingZone?.cards || []}
         zoneType={viewingZone?.type || ''}
@@ -207,14 +208,14 @@ const PlayerHalf: React.FC<{
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [], type: 'grave' })}
+              onClick={() => setViewingZone?.({ title: 'Grave', cards: player.grave || [], type: 'grave' })}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
             <CardSlot
               card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [], type: 'exile' })}
+              onClick={() => setViewingZone?.({ title: 'Exile', cards: player.exile || [], type: 'exile' })}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
           </>
@@ -225,7 +226,7 @@ const PlayerHalf: React.FC<{
               card={player.itemZone?.filter(Boolean).slice(-1)[0] || null} 
               label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: '道具区 (Item Zone)', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
+              onClick={() => setViewingZone?.({ title: '道具区 (Item Zone)', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
               isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
@@ -236,7 +237,7 @@ const PlayerHalf: React.FC<{
                   : null}
               label="ERISON" count={`${(player.erosionBack?.filter(Boolean).length || 0) + (player.erosionFront?.filter(Boolean).length || 0)} (${player.erosionBack?.filter(Boolean).length || 0})` as any}
               className="border-red-600/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ 
+              onClick={() => setViewingZone?.({ 
                 title: '侵蚀区 (Erosion Zone)', 
                 cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], 
                 type: 'erosion',
@@ -244,7 +245,6 @@ const PlayerHalf: React.FC<{
               })}
               isFaceUp={(player.erosionFront?.filter(Boolean).length || 0) > 0}
               displayMode="erosion_item"
-              isDeck={((player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)) > 0}
             />
             <CardSlot
               card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
@@ -454,15 +454,14 @@ const PlayerHalf: React.FC<{
               card={[...(player.erosionFront || []), ...(player.erosionBack || [])].filter(Boolean).slice(-1)[0] || null}
               label="ERISON" count={`${(player.erosionBack?.filter(Boolean).length || 0) + (player.erosionFront?.filter(Boolean).length || 0)} (${player.erosionBack?.filter(Boolean).length || 0})` as any}
               className="border-red-600/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: '敌方侵蚀区', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], type: 'erosion' })}
+              onClick={() => setViewingZone?.({ title: '敌方侵蚀区', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[], type: 'erosion' })}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
-              isDeck={((player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)) > 0}
             />
             <CardSlot
               card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}
               label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: '敌方道具区', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
+              onClick={() => setViewingZone?.({ title: '敌方道具区', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
           </>
@@ -473,14 +472,14 @@ const PlayerHalf: React.FC<{
               card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="EXILE" count={player.exile?.length || 0}
               className="border-purple-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [], type: 'exile' })}
+              onClick={() => setViewingZone?.({ title: 'Exile', cards: player.exile || [], type: 'exile' })}
               isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="GRAVE" count={player.grave?.length || 0}
               className="border-red-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [], type: 'grave' })}
+              onClick={() => setViewingZone?.({ title: 'Grave', cards: player.grave || [], type: 'grave' })}
               isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
@@ -494,7 +493,8 @@ const PlayerHalf: React.FC<{
   );
 };
 
-export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers, selectedDefender, allianceInitiator, timer, cardBackUrl }) => {
+export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers, selectedDefender, allianceInitiator, timer, cardBackUrl, viewingZone, setViewingZone }) => {
+  if (!player || !opponent || !game) return null;
   return (
     <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-y md:border-2 border-[#1a1a1a] md:rounded-xl shadow-2xl font-sans text-white select-none flex flex-col">
       {/* Background Overlay */}
@@ -504,15 +504,15 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
       <div className="hidden md:flex absolute top-4 right-4 z-50 items-center gap-3">
         <div className={cn(
           "bg-black/60 backdrop-blur-md border px-4 py-2 rounded-xl flex items-center gap-3 shadow-2xl transition-all",
-          timer < 30 ? "border-red-500/50 animate-pulse" : "border-[#f27d26]/30"
+          (timer || 0) < 30 ? "border-red-500/50 animate-pulse" : "border-[#f27d26]/30"
         )}>
           <div className="flex flex-col">
             <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">My Remaining Time</span>
             <span className={cn(
               "text-xl font-black tabular-nums leading-none",
-              timer < 30 ? "text-red-500" : "text-white"
+              (timer || 0) < 30 ? "text-red-500" : "text-white"
             )}>
-              {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}
+              {Math.floor((timer || 0) / 60)}:{String((timer || 0) % 60).padStart(2, '0')}
             </span>
           </div>
         </div>
@@ -531,10 +531,14 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
           paymentSelection={paymentSelection}
           pendingPlayCard={pendingPlayCard}
           allianceInitiator={allianceInitiator}
+          timer={timer}
           cardBackUrl={cardBackUrl}
+          viewingZone={viewingZone}
+          setViewingZone={setViewingZone}
         />
       </div>
 
+      <div className="h-0.5 md:h-2 w-full bg-white/5 relative z-10" />
 
       {/* Player Half */}
       <div className="flex-1 min-h-0">
@@ -549,6 +553,8 @@ export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, on
           game={game}
           allianceInitiator={allianceInitiator}
           cardBackUrl={cardBackUrl}
+          viewingZone={viewingZone}
+          setViewingZone={setViewingZone}
         />
       </div>
 

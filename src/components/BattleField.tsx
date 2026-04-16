@@ -42,6 +42,7 @@ export const BattleField: React.FC = () => {
   const [selectedQueryIds, setSelectedQueryIds] = useState<string[]>([]);
   const [favoriteBackId, setFavoriteBackId] = useState<string>('default');
   const [showFullLogs, setShowFullLogs] = useState(false);
+  const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null>(null);
 
   const [timer, setTimer] = useState<number>(30);
   const [cardMenu, setCardMenu] = useState<{
@@ -898,17 +899,17 @@ export const BattleField: React.FC = () => {
                             <Sword className="w-4 h-4" />
                             横置支付 (Exhaust Payment - Cost -1)
                           </div>
-                          <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                          <div className="grid grid-cols-2 gap-3 pb-2">
                             {me.unitZone.filter(c => c && !c.isExhausted).map(card => {
                               const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
                               return (
                                 <motion.div
                                   key={card!.gamecardId}
-                                  whileHover={{ y: -5 }}
+                                  whileHover={{ y: -3 }}
                                   whileTap={{ scale: 0.95 }}
                                   onClick={() => togglePaymentExhaust(card!.gamecardId)}
                                   className={cn(
-                                    "w-28 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                    "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
                                     isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
                                   )}
                                 >
@@ -927,17 +928,17 @@ export const BattleField: React.FC = () => {
                         <Trash2 className="w-4 h-4" />
                         侵蚀支付 (Erosion Payment - Select {Math.abs(pendingPlayCard.acValue)} cards)
                       </div>
-                      <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
                         {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map(card => {
                           const isSelected = paymentSelection.erosionFrontIds.includes(card!.gamecardId);
                           return (
                             <motion.div
                               key={card!.gamecardId}
-                              whileHover={{ y: -5 }}
+                              whileHover={{ y: -3 }}
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentErosionFront(card!.gamecardId)}
                               className={cn(
-                                "w-28 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
                                 isSelected ? "border-red-500 scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
                               )}
                             >
@@ -979,7 +980,7 @@ export const BattleField: React.FC = () => {
         {/* Top Bar: Phase & Turn */}
         <div className={cn(
           "h-auto md:h-16 flex flex-col md:flex-row items-center justify-between px-2 md:px-6 py-1 md:py-0 bg-black/40 border-b border-white/5 backdrop-blur-md relative z-[1100] gap-1 md:gap-2 transition-all duration-300",
-          previewCard && "opacity-0 pointer-events-none"
+          (previewCard || viewingZone) && "opacity-0 pointer-events-none"
         )}>
           <div className="flex items-center gap-2 md:gap-8 w-full md:w-auto justify-between md:justify-start">
             {/* Round Display */}
@@ -1173,6 +1174,8 @@ export const BattleField: React.FC = () => {
                   allianceInitiator={allianceTargetSelection || undefined}
                   timer={timer}
                   cardBackUrl={cardBackUrl}
+                  viewingZone={viewingZone}
+                  setViewingZone={setViewingZone}
                 />
               )}
             </div>
@@ -2008,7 +2011,7 @@ export const BattleField: React.FC = () => {
               </div>
 
               {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-10 max-h-[45vh] md:max-h-[55vh] overflow-y-auto p-2 md:p-6 custom-scrollbar w-full">
+                <div className="grid grid-cols-2 gap-3 md:gap-6 max-h-[45vh] md:max-h-[55vh] overflow-y-auto p-2 md:p-6 custom-scrollbar w-full">
                   {game.pendingQuery.options.map((option, i) => {
                     const isSelected = selectedQueryIds.includes(option.card.gamecardId);
                     const isDiscardQuery = game.pendingQuery!.title.includes('舍弃') || game.pendingQuery!.title.includes('Discard');
@@ -2030,14 +2033,14 @@ export const BattleField: React.FC = () => {
                               });
                             }}
                             className={cn(
-                              "w-24 md:w-48 cursor-pointer transition-all rounded-lg md:rounded-2xl overflow-hidden border-2 relative group-hover:shadow-2xl",
+                              "w-full cursor-pointer transition-all rounded-lg md:rounded-2xl overflow-hidden border-2 relative group-hover:shadow-2xl",
                               isSelected
                                 ? isDiscardQuery ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.4)] scale-105" : "border-[#f27d26] shadow-[0_0_40px_rgba(242,125,38,0.4)] scale-105"
                                 : "border-white/5 opacity-80 hover:opacity-100"
                             )}
                           >
                             {(option.card.id === 'PLAYER_SELF' || option.card.id === 'PLAYER_OPPONENT') ? (
-                              <div className="w-24 md:w-48 aspect-[3/4] bg-zinc-800 rounded-lg md:rounded-2xl flex flex-col items-center justify-center p-2 md:p-4 border border-white/10">
+                              <div className="w-full aspect-[3/4] bg-zinc-800 rounded-lg md:rounded-2xl flex flex-col items-center justify-center p-2 md:p-4 border border-white/10">
                                 <img
                                   src={`/assets/icons/${option.card.id === 'PLAYER_SELF' ? 'myself' : 'opponent'}.JPG`}
                                   alt={option.card.fullName}
@@ -2130,24 +2133,26 @@ export const BattleField: React.FC = () => {
                   )}
 
                   {/* Exhaust Section */}
-                  {(game.pendingQuery.paymentCost || 0) > 0 && me.unitZone.some(c => c && !c.isExhausted) && (
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
-                        <Sword className="w-4 h-4" />
-                        横置支付 (Exhaust Payment - Cost -1)
-                      </div>
-                      <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                  {(game.pendingQuery.paymentCost || 0) > 0 && me.unitZone.some(c => c && !c.isExhaust                       <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
                         {me.unitZone.filter(c => c && !c.isExhausted).map(card => {
                           const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
                           return (
                             <motion.div
                               key={card!.gamecardId}
-                              whileHover={{ y: -5 }}
+                              whileHover={{ y: -3 }}
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentExhaust(card!.gamecardId)}
                               className={cn(
-                                "w-32 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
                                 isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
+                              )}
+                            >
+                              <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >
                               <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
@@ -2159,24 +2164,26 @@ export const BattleField: React.FC = () => {
                   )}
 
                   {/* Erosion Front Section (Horizontal Units) - Only for negative costs */}
-                  {(game.pendingQuery.paymentCost || 0) < 0 && me.erosionFront.some(c => c && c.displayState === 'FRONT_UPRIGHT') && (
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2 text-red-400 font-black uppercase italic tracking-widest text-sm">
-                        <Layers className="w-4 h-4" />
-                        水平支付 (Level Payment - Cost -1)
-                      </div>
-                      <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                  {(game.pendingQuery.paymentCost || 0) < 0 && me.erosionFront.some(c => c && c.displayState === 'F                       <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
                         {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map(card => {
                           const isSelected = paymentSelection.erosionFrontIds.includes(card!.gamecardId);
                           return (
                             <motion.div
                               key={card!.gamecardId}
-                              whileHover={{ y: -5 }}
+                              whileHover={{ y: -3 }}
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentErosionFront(card!.gamecardId)}
                               className={cn(
-                                "w-32 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
                                 isSelected ? "border-red-500 scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
+                              )}
+                            >
+                              <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+,68,68,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >
                               <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />

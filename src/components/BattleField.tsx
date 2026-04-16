@@ -2387,17 +2387,7 @@ export const BattleField: React.FC = () => {
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_rgba(242,125,38,0.05)_0%,_transparent_50%)]" />
       </div>
 
-              {/* Close Button Icon */}
-              <button
-                onClick={() => setPreviewCard(null)}
-                className="absolute top-8 right-8 p-3 bg-black/40 backdrop-blur-2xl rounded-2xl border border-white/10 hover:bg-white/10 transition-all z-50 group"
-              >
-                <X className="w-6 h-6 text-white/60 group-hover:text-white group-hover:rotate-90 transition-all" />
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
 
       {/* Central Phase Action Menu Modal */}

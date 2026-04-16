@@ -7,7 +7,6 @@ import { CARD_LIBRARY } from '../data/cards';
 import { FACTIONS } from '../data/factions';
 import { Card as CardType, Deck } from '../types/game';
 import { CardComponent } from './Card';
-import { CardComponent } from './Card';
 import { cn, getCardImageUrl } from '../lib/utils';
 import { CARD_BACKS } from '../data/customization';
 import { TriggerLocation } from '../types/game';

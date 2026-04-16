@@ -68,25 +68,31 @@ export const PracticeSetup: React.FC = () => {
     <div className="pt-20 px-8 min-h-screen bg-black text-white pb-20">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-10">
-          <button onClick={() => navigate('/')} className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors">
-            <ArrowLeft className="w-5 h-5" />
+        {/* Header */}
+        <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-10 px-2 md:px-0">
+          <button onClick={() => navigate('/')} className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors shrink-0">
+            <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
           </button>
           <div>
-            <h1 className="text-3xl font-black italic tracking-tighter">练习模式</h1>
-            <p className="text-zinc-500 text-sm">与AI对手进行练习对战，机器人将使用与你相同的卡组</p>
+            <h1 className="text-xl md:text-3xl font-black italic tracking-tighter uppercase">练习模式</h1>
+            <p className="text-zinc-500 text-[10px] md:text-sm font-bold uppercase tracking-widest leading-none">镜像对战 PRACTICE MODE</p>
           </div>
         </div>
 
         {/* Bot Info */}
-        <div className="mb-10 p-6 rounded-2xl bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-800 flex items-center gap-6">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-red-600 to-orange-600 flex items-center justify-center shadow-[0_0_30px_rgba(220,38,38,0.3)]">
-            <Bot className="w-10 h-10 text-white" />
+        {/* Bot Info */}
+        <div className="mb-8 md:mb-10 p-4 md:p-6 rounded-2xl bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-800 flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-6 text-center md:text-left">
+          <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-red-600 to-orange-600 flex items-center justify-center shadow-[0_0_30px_rgba(220,38,38,0.3)] shrink-0">
+            <Bot className="w-8 h-8 md:w-10 md:h-10 text-white" />
           </div>
           <div>
-            <h2 className="text-xl font-black italic tracking-tighter">AI 对手</h2>
-            <p className="text-zinc-500 text-sm mt-1">机器人将镜像你的卡组进行对战</p>
-            <p className="text-zinc-600 text-xs mt-0.5">• 自动出牌 • 无限重赛 • 不影响排名</p>
+            <h2 className="text-lg md:text-xl font-black italic tracking-tighter uppercase">AI 对手</h2>
+            <p className="text-zinc-500 text-[10px] md:text-sm mt-1">机器人将镜像你的卡组进行对战</p>
+            <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2">
+              <span className="px-2 py-0.5 bg-white/5 rounded text-[8px] md:text-[10px] text-zinc-500 font-bold uppercase tracking-widest">• 自动出牌</span>
+              <span className="px-2 py-0.5 bg-white/5 rounded text-[8px] md:text-[10px] text-zinc-500 font-bold uppercase tracking-widest">• 无限重赛</span>
+              <span className="px-2 py-0.5 bg-white/5 rounded text-[8px] md:text-[10px] text-zinc-500 font-bold uppercase tracking-widest">• 不影响排名</span>
+            </div>
           </div>
         </div>
 
@@ -147,16 +153,17 @@ export const PracticeSetup: React.FC = () => {
         </div>
 
         {/* Start Button */}
-        <div className="flex justify-center">
+        {/* Start Button */}
+        <div className="flex justify-center mt-8 px-4 md:px-0">
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             onClick={handleStart}
             disabled={starting || !selectedDeckId}
-            className="px-12 py-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-xl tracking-tighter flex items-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all"
+            className="w-full md:w-auto px-8 md:px-12 py-3 md:py-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-base md:text-xl tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all uppercase"
           >
-            {starting ? <Loader2 className="w-6 h-6 animate-spin" /> : <Play className="w-6 h-6" />}
-            开始练习
+            {starting ? <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" /> : <Play className="w-5 h-5 md:w-6 md:h-6" />}
+            开始练习 START
           </motion.button>
         </div>
       </div>

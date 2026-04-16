@@ -1932,7 +1932,7 @@ export const BattleField: React.FC = () => {
                   "flex items-center justify-center gap-4 mb-3",
                   (game.pendingQuery.title.includes('舍弃') || game.pendingQuery.title.includes('Discard')) ? "text-red-500" : "text-[#f27d26]"
                 )}>
-                  {(game.pendingQuery.title.includes('舍弃') || game.pendingQuery.title.includes('Discard')) ? (
+                  {(game.pendingQuery.title.includes('舍弃') || game.pendingQuery.title.includes('Discard')) && (
                     <Trash2 className="w-10 h-10 animate-bounce" />
                   )}
                   <h2 className="text-2xl md:text-5xl font-black italic uppercase tracking-tighter">

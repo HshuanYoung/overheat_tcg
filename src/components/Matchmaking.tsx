@@ -120,13 +120,13 @@ export const Matchmaking: React.FC = () => {
     <div className="pt-20 px-8 min-h-screen bg-black text-white pb-20">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-10">
-          <button onClick={() => searching ? handleCancelSearch() : navigate('/')} className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors">
+        <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-10">
+          <button onClick={() => searching ? handleCancelSearch() : navigate('/')} className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-3xl font-black italic tracking-tighter">匹配模式</h1>
-            <p className="text-zinc-500 text-sm">选择卡组，自动匹配对手</p>
+            <h1 className="text-xl md:text-3xl font-black italic tracking-tighter uppercase">匹配模式</h1>
+            <p className="text-zinc-500 text-[10px] md:text-sm font-bold uppercase tracking-widest leading-none">自动匹配对手</p>
           </div>
         </div>
 
@@ -144,13 +144,13 @@ export const Matchmaking: React.FC = () => {
                   <Swords className="w-8 h-8 text-red-500" />
                 </div>
               </div>
-              <h2 className="text-2xl font-black italic tracking-tighter mb-2">正在寻找对手...</h2>
-              <p className="text-zinc-500 text-lg font-mono mb-6">{formatTime(searchTimer)}</p>
+              <h2 className="text-xl md:text-2xl font-black italic tracking-tighter mb-2">正在寻找对手...</h2>
+              <p className="text-zinc-500 text-base md:text-lg font-mono mb-6">{formatTime(searchTimer)}</p>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={handleCancelSearch}
-                className="px-8 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-bold flex items-center gap-2 mx-auto transition-colors"
+                className="px-6 md:px-8 py-2 md:py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-bold flex items-center gap-2 mx-auto transition-colors text-sm md:text-base"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 md:w-5 md:h-5" />
                 取消匹配
               </motion.button>
             </motion.div>
@@ -194,16 +194,16 @@ export const Matchmaking: React.FC = () => {
             </div>
 
             {/* Start Button */}
-            <div className="flex justify-center">
+            <div className="flex justify-center mt-8">
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleStartSearch}
                 disabled={!selectedDeckId}
-                className="px-12 py-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-xl tracking-tighter flex items-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all"
+                className="w-full md:w-auto px-8 md:px-12 py-3 md:py-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-base md:text-xl tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all font-black uppercase"
               >
-                <Swords className="w-6 h-6" />
-                开始匹配
+                <Swords className="w-5 h-5 md:w-6 md:h-6" />
+                开始匹配 START
               </motion.button>
             </div>
           </>

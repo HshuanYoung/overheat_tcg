@@ -161,7 +161,7 @@ const PlayerHalf: React.FC<{
 
   return (
     <div className={cn(
-      "flex-1 grid grid-cols-[100px_1fr_100px] gap-2 p-2 relative h-full min-h-0",
+      "flex-1 grid grid-cols-[60px_1fr_60px] md:grid-cols-[100px_1fr_100px] gap-1 md:gap-2 p-1 md:p-2 relative h-full min-h-0",
       isOpponent ? "bg-red-500/5" : "bg-blue-500/5"
     )}>
       <CardListModal
@@ -409,8 +409,8 @@ const PlayerHalf: React.FC<{
             </div>
 
             {/* Player Hand Area */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 relative min-h-[150px] flex items-center justify-center bg-black/20 rounded-xl border border-white/5">
+            <div className="flex items-center gap-1 md:gap-2">
+              <div className="flex-1 relative min-h-[100px] md:min-h-[150px] flex items-center justify-center bg-black/20 rounded-xl border border-white/5 overflow-hidden">
                 {player.hand?.map((card, i) => {
                   const total = player.hand.length;
                   const middle = (total - 1) / 2;
@@ -421,9 +421,9 @@ const PlayerHalf: React.FC<{
                   return (
                     <div
                       key={card.gamecardId || i}
-                      className="absolute w-16 transition-all duration-300 cursor-pointer"
+                      className="absolute w-10 md:w-16 transition-all duration-300 cursor-pointer"
                       style={{
-                        transform: `translateX(${xPos}px) ${isFeijingSelected ? 'translateY(-40px) scale(1.5)' : ''}`,
+                        transform: `translateX(${xPos * (window.innerWidth < 768 ? 0.6 : 1)}px) ${isFeijingSelected ? 'translateY(-20px) md:translateY(-40px) scale(1.2) md:scale(1.5)' : ''}`,
                         zIndex: isFeijingSelected ? 100 : i
                       }}
                       onClick={(e) => {
@@ -517,7 +517,7 @@ const PlayerHalf: React.FC<{
 
 export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers, selectedDefender, allianceInitiator, timer, cardBackUrl }) => {
   return (
-    <div className="relative w-full h-full max-w-7xl mx-auto bg-[#0a0a0a] border-2 border-[#1a1a1a] rounded-xl shadow-2xl font-mono text-white select-none flex flex-col">
+    <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-2 border-[#1a1a1a] rounded-xl shadow-2xl font-mono text-white select-none flex flex-col">
       {/* Background Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
 

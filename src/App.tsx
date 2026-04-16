@@ -98,10 +98,10 @@ export default function App() {
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="max-w-md w-full bg-zinc-900 border border-white/10 p-8 rounded-3xl"
+          className="w-full max-w-md bg-zinc-900 border border-white/10 p-6 md:p-8 rounded-3xl mx-4"
         >
-          <h1 className="text-6xl font-black text-red-600 italic mb-4 tracking-tighter">神蚀创痕</h1>
-          <p className="text-zinc-400 mb-8 uppercase tracking-[0.3em] text-sm">OVERHEAT TCG ONLINE</p>
+          <h1 className="text-4xl md:text-6xl font-black text-red-600 italic mb-4 tracking-tighter">神蚀创痕</h1>
+          <p className="text-zinc-400 mb-8 uppercase tracking-[0.2em] text-[10px] md:text-sm">OVERHEAT TCG ONLINE</p>
           
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <input 

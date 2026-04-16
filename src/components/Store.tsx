@@ -154,24 +154,24 @@ export const Store: React.FC = () => {
     <div className="pt-20 px-8 min-h-screen bg-black text-white pb-20 overflow-x-hidden">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-12">
-          <div className="flex items-center gap-6">
+        <div className="flex flex-col md:flex-row items-center justify-between mb-8 md:mb-12 gap-6">
+          <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
             <button onClick={() => navigate('/')} className="p-3 rounded-2xl bg-zinc-900 hover:bg-zinc-800 transition-all border border-white/5 group">
               <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1" />
             </button>
             <div>
-              <h1 className="text-4xl font-black italic tracking-tighter uppercase">Card Store</h1>
-              <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest">扩充你的卡牌收藏</p>
+              <h1 className="text-2xl md:text-4xl font-black italic tracking-tighter uppercase">Card Store</h1>
+              <p className="text-zinc-500 text-[10px] md:text-sm font-bold uppercase tracking-widest leading-none">扩充你的卡牌收藏</p>
             </div>
           </div>
-          <div className="flex gap-4">
-            <div className="flex items-center gap-2 bg-gradient-to-r from-amber-900/30 to-amber-800/10 border border-amber-500/30 rounded-full px-6 py-2.5">
-              <Coins className="w-5 h-5 text-amber-400" />
-              <span className="text-amber-300 font-bold text-xl">{coins.toLocaleString()}</span>
+          <div className="flex gap-2 md:gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+            <div className="flex items-center gap-2 bg-gradient-to-r from-amber-900/30 to-amber-800/10 border border-amber-500/30 rounded-full px-4 md:px-6 py-1.5 md:py-2.5 shrink-0">
+              <Coins className="w-4 h-4 md:w-5 md:h-5 text-amber-400" />
+              <span className="text-amber-300 font-bold text-base md:text-xl">{coins.toLocaleString()}</span>
             </div>
-            <div className="flex items-center gap-2 bg-gradient-to-r from-cyan-900/30 to-cyan-800/10 border border-cyan-500/30 rounded-full px-6 py-2.5">
-              <Sparkles className="w-5 h-5 text-cyan-400" />
-              <span className="text-cyan-300 font-bold text-xl">{cardCrystals.toLocaleString()}</span>
+            <div className="flex items-center gap-2 bg-gradient-to-r from-cyan-900/30 to-cyan-800/10 border border-cyan-500/30 rounded-full px-4 md:px-6 py-1.5 md:py-2.5 shrink-0">
+              <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-cyan-400" />
+              <span className="text-cyan-300 font-bold text-base md:text-xl">{cardCrystals.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -183,20 +183,19 @@ export const Store: React.FC = () => {
             <motion.div
               whileHover={{ rotateY: 5, scale: 1.02 }}
               className={cn(
-                "relative w-72 h-96 rounded-3xl border-4 overflow-hidden transition-all group",
+                "relative w-64 md:w-72 h-80 md:h-96 rounded-3xl border-4 overflow-hidden transition-all group",
                 "border-red-600/30 shadow-[0_0_50px_rgba(220,38,38,0.1)] hover:border-red-500 hover:shadow-[0_0_60px_rgba(220,38,38,0.3)]"
               )}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-red-950/40 via-black to-red-950/20" />
               <img src="assets/cardpack/basic.JPG" className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" />
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 z-10 text-center px-6">
-                {/* <ShoppingBag className="w-20 h-20 text-red-500 group-hover:scale-110 transition-transform duration-500" /> */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 md:gap-6 z-10 text-center px-6">
                 <div>
-                  <h2 className="text-3xl font-black italic tracking-tighter uppercase mb-1">基础包</h2>
-                  <p className="text-zinc-500 text-[10px] font-black tracking-[0.2em] uppercase">Basic Edition</p>
+                  <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter uppercase mb-1">基础包</h2>
+                  <p className="text-zinc-500 text-[8px] md:text-[10px] font-black tracking-[0.2em] uppercase">Basic Edition</p>
                 </div>
                 <div className="w-full h-px bg-gradient-to-r from-transparent via-red-600/50 to-transparent" />
-                <p className="text-xs text-zinc-400 font-bold leading-relaxed px-4">包含5张卡牌<br />保底一张R及以上稀有度</p>
+                <p className="text-[10px] md:text-xs text-zinc-400 font-bold leading-relaxed px-4">包含5张卡牌<br />保底一张R及以上稀有度</p>
               </div>
               {buying?.startsWith('basic') && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/80 backdrop-blur-sm">
@@ -246,20 +245,19 @@ export const Store: React.FC = () => {
             <motion.div
               whileHover={{ rotateY: -5, scale: 1.02 }}
               className={cn(
-                "relative w-72 h-96 rounded-3xl border-4 overflow-hidden transition-all group",
+                "relative w-64 md:w-72 h-80 md:h-96 rounded-3xl border-4 overflow-hidden transition-all group",
                 "border-rose-600/30 shadow-[0_0_50px_rgba(244,63,94,0.1)] hover:border-rose-500 hover:shadow-[0_0_60px_rgba(244,63,94,0.3)]"
               )}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-rose-950/40 via-black to-rose-950/20" />
               <img src="assets/cardpack/prize.JPG" className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" />
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 z-10 text-center px-6">
-                {/* <Sparkles className="w-20 h-20 text-rose-500 group-hover:scale-110 transition-transform duration-500" /> */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 md:gap-6 z-10 text-center px-6">
                 <div>
-                  <h2 className="text-3xl font-black italic tracking-tighter uppercase mb-1">奖品包</h2>
-                  <p className="text-zinc-500 text-[10px] font-black tracking-[0.2em] uppercase">Prize Collector</p>
+                  <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter uppercase mb-1">奖品包</h2>
+                  <p className="text-zinc-500 text-[8px] md:text-[10px] font-black tracking-[0.2em] uppercase">Prize Collector</p>
                 </div>
                 <div className="w-full h-px bg-gradient-to-r from-transparent via-rose-600/50 to-transparent" />
-                <p className="text-xs text-zinc-400 font-bold leading-relaxed px-4">包含1张卡牌<br />必得PR稀有度奖品卡</p>
+                <p className="text-[10px] md:text-xs text-zinc-400 font-bold leading-relaxed px-4">包含1张卡牌<br />必得PR稀有度奖品卡</p>
               </div>
               {buying?.startsWith('prize') && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/80 backdrop-blur-sm">
@@ -316,7 +314,7 @@ export const Store: React.FC = () => {
             >
               {/* Portal Background Glow */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-600/20 blur-[120px] rounded-full animate-pulse" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] md:w-[800px] h-[300px] md:h-[800px] bg-red-600/20 blur-[60px] md:blur-[120px] rounded-full animate-pulse" />
               </div>
 
               <motion.div
@@ -325,29 +323,29 @@ export const Store: React.FC = () => {
                 className="w-full max-w-7xl flex-1 flex flex-col relative z-10"
               >
                 {/* Result Info */}
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex flex-col md:flex-row items-center justify-between mb-4 md:mb-8 gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                      <Sparkles className="w-6 h-6 text-red-500" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-red-500" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black italic uppercase tracking-tighter">开包成果 Drawn Result</h2>
-                      <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-                        第 {currentPackIndex + 1} / {allDrawnPacks.length} 包 • 点击卡牌以揭开
+                      <h2 className="text-lg md:text-2xl font-black italic uppercase tracking-tighter">开包成果</h2>
+                      <p className="text-zinc-500 text-[8px] md:text-[10px] font-black uppercase tracking-widest leading-none">
+                        第 {currentPackIndex + 1} / {allDrawnPacks.length} 包
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={revealAll}
-                    className="px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black italic text-sm transition-all uppercase"
+                    className="w-full md:w-auto px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase"
                   >
                     全部揭开 Reveal All
                   </button>
                 </div>
 
                 {/* Cards Grid - Centered items with larger size */}
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  <div className="flex flex-wrap items-center justify-center gap-10 p-4 max-w-6xl mx-auto">
+                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto">
+                  <div className="flex flex-wrap items-center justify-center gap-4 md:gap-10 p-4 max-w-6xl mx-auto">
                     {drawnCards.map((drawn, i) => {
                       const card = getCardInfo(drawn.id);
                       return (
@@ -366,7 +364,7 @@ export const Store: React.FC = () => {
                             stiffness: 100,
                             delay: i * 0.05
                           }}
-                          className="relative w-56 sm:w-64 aspect-[3/4] perspective-1000 group cursor-pointer"
+                          className="relative w-40 md:w-64 aspect-[3/4] perspective-1000 group cursor-pointer shrink-0"
                           onClick={() => revealCard(i)}
                         >
                           {/* Hover Halo */}
@@ -426,7 +424,7 @@ export const Store: React.FC = () => {
                   <button
                     onClick={nextPack}
                     className={cn(
-                      "px-20 py-5 rounded-full text-xl font-black italic tracking-tighter uppercase transition-all hover:scale-110 active:scale-95",
+                      "px-10 md:px-20 py-3 md:py-5 rounded-full text-base md:text-xl font-black italic tracking-tighter uppercase transition-all hover:scale-110 active:scale-95",
                       drawnCards.every(c => c.revealed)
                         ? "bg-red-600 shadow-[0_0_50px_rgba(220,38,38,0.4)] text-white"
                         : "bg-zinc-900 text-zinc-500 cursor-not-allowed"

@@ -208,8 +208,8 @@ export const Collection: React.FC = () => {
               <ArrowLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
             </button>
             <div>
-              <h1 className="text-4xl font-black italic tracking-tighter uppercase">我的收藏</h1>
-              <div className="flex gap-2 mt-4">
+              <h1 className="text-2xl md:text-4xl font-black italic tracking-tighter uppercase">我的收藏</h1>
+              <div className="flex gap-2 mt-4 overflow-x-auto pb-2 custom-scrollbar">
                 <TabButton active={activeTab === 'DECKS'} onClick={() => setActiveTab('DECKS')} icon={<Layout className="w-4 h-4" />} label="卡组" />
                 <TabButton active={activeTab === 'CARDS'} onClick={() => setActiveTab('CARDS')} icon={<CreditCard className="w-4 h-4" />} label="卡牌" />
                 <TabButton active={activeTab === 'BACKS'} onClick={() => setActiveTab('BACKS')} icon={<ImageIcon className="w-4 h-4" />} label="卡背" />
@@ -218,20 +218,20 @@ export const Collection: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 bg-zinc-900/50 p-2 rounded-2xl border border-white/5">
-            <div className="px-4 py-2 text-center">
-              <p className="text-[10px] text-zinc-500 uppercase font-bold">已拥有种数</p>
-              <p className="text-xl font-black italic">{Object.keys(collection).length}</p>
+          <div className="flex items-center gap-2 md:gap-4 bg-zinc-900/50 p-2 rounded-2xl border border-white/5 overflow-x-auto">
+            <div className="px-3 md:px-4 py-1 md:py-2 text-center shrink-0">
+              <p className="text-[8px] md:text-[10px] text-zinc-500 uppercase font-bold">已拥有</p>
+              <p className="text-sm md:text-xl font-black italic">{Object.keys(collection).length}</p>
             </div>
-            <div className="w-px h-8 bg-white/10" />
-            <div className="px-4 py-2 text-center">
-              <p className="text-[10px] text-zinc-500 uppercase font-bold">金币</p>
-              <p className="text-xl font-black italic text-amber-400">{(profile?.coins || 0).toLocaleString()}</p>
+            <div className="w-px h-6 md:h-8 bg-white/10 shrink-0" />
+            <div className="px-3 md:px-4 py-1 md:py-2 text-center shrink-0">
+              <p className="text-[8px] md:text-[10px] text-zinc-500 uppercase font-bold">金币</p>
+              <p className="text-sm md:text-xl font-black italic text-amber-400">{(profile?.coins || 0).toLocaleString()}</p>
             </div>
-            <div className="w-px h-8 bg-white/10" />
-            <div className="px-4 py-2 text-center">
-              <p className="text-[10px] text-zinc-500 uppercase font-bold">卡晶</p>
-              <p className="text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
+            <div className="w-px h-6 md:h-8 bg-white/10 shrink-0" />
+            <div className="px-3 md:px-4 py-1 md:py-2 text-center shrink-0">
+              <p className="text-[8px] md:text-[10px] text-zinc-500 uppercase font-bold">卡晶</p>
+              <p className="text-sm md:text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -268,89 +268,89 @@ export const Collection: React.FC = () => {
           {activeTab === 'CARDS' && (
             <motion.div key="cards" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
               {/* Filters */}
-              <div className="flex flex-col gap-4 mb-8">
-                <div className="flex gap-4 flex-wrap">
-                  <div className="relative flex-1 min-w-[300px]">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                    <input
-                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all font-medium"
-                      placeholder="搜索卡牌名称..."
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                    />
+                <div className="flex flex-col md:flex-row gap-4 mb-8">
+                  <div className="flex gap-4 flex-wrap w-full md:w-auto md:flex-1">
+                    <div className="relative flex-1 min-w-[200px] md:min-w-[300px]">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-zinc-500" />
+                      <input
+                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-10 md:pl-12 pr-4 py-2 md:py-3.5 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all font-medium text-sm"
+                        placeholder="搜索卡牌名称..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-1.5 p-1.5 bg-zinc-900/50 rounded-2xl border border-white/5 overflow-x-auto">
+                      {['RED', 'BLUE', 'GREEN', 'YELLOW', 'WHITE'].map(c => (
+                        <button
+                          key={c}
+                          onClick={() => setFilterColor(filterColor === c ? null : c)}
+                          className={cn(
+                            "w-8 h-8 md:w-10 md:h-10 rounded-xl border-2 transition-all flex items-center justify-center shrink-0",
+                            filterColor === c ? 'border-white scale-105' : 'border-transparent hover:scale-105',
+                            c === 'RED' && 'bg-red-700', c === 'BLUE' && 'bg-blue-700',
+                            c === 'GREEN' && 'bg-green-700', c === 'YELLOW' && 'bg-yellow-600',
+                            c === 'WHITE' && 'bg-zinc-300',
+                          )}
+                        >
+                          {filterColor === c && <Check className={cn("w-4 h-4 md:w-5 md:h-5", c === 'WHITE' ? 'text-black' : 'text-white')} />}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-1.5 p-1.5 bg-zinc-900/50 rounded-2xl border border-white/5">
-                    {['RED', 'BLUE', 'GREEN', 'YELLOW', 'WHITE'].map(c => (
+
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 md:gap-3">
+                    {['C', 'U', 'R', 'SR', 'UR', 'SER', 'PR'].map(r => (
                       <button
-                        key={c}
-                        onClick={() => setFilterColor(filterColor === c ? null : c)}
+                        key={r}
+                        onClick={() => setFilterRarity(filterRarity === r ? null : r)}
                         className={cn(
-                          "w-10 h-10 rounded-xl border-2 transition-all flex items-center justify-center",
-                          filterColor === c ? 'border-white scale-105' : 'border-transparent hover:scale-105',
-                          c === 'RED' && 'bg-red-700', c === 'BLUE' && 'bg-blue-700',
-                          c === 'GREEN' && 'bg-green-700', c === 'YELLOW' && 'bg-yellow-600',
-                          c === 'WHITE' && 'bg-zinc-300',
+                          "py-2 md:py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all border",
+                          filterRarity === r ? `${RARITY_BADGE[r]} border-white` : "bg-zinc-900/50 border-white/5 text-zinc-500 hover:bg-zinc-800"
                         )}
                       >
-                        {filterColor === c && <Check className={cn("w-5 h-5", c === 'WHITE' ? 'text-black' : 'text-white')} />}
+                        {r}
                       </button>
                     ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                  {['C', 'U', 'R', 'SR', 'UR', 'SER', 'PR'].map(r => (
-                    <button
-                      key={r}
-                      onClick={() => setFilterRarity(filterRarity === r ? null : r)}
-                      className={cn(
-                        "py-2.5 rounded-xl text-xs font-black transition-all border",
-                        filterRarity === r ? `${RARITY_BADGE[r]} border-white` : "bg-zinc-900/50 border-white/5 text-zinc-500 hover:bg-zinc-800"
-                      )}
+                    <select
+                      className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
+                      value={filters.ownership}
+                      onChange={e => setFilters({ ...filters, ownership: e.target.value })}
                     >
-                      {r}
-                    </button>
-                  ))}
-                  <select
-                    className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
-                    value={filters.ownership}
-                    onChange={e => setFilters({ ...filters, ownership: e.target.value })}
-                  >
-                    <option value="ALL">全部状态</option>
-                    <option value="OWNED">已拥有</option>
-                    <option value="NOT_OWNED">未拥有</option>
-                  </select>
+                      <option value="ALL">全部状态</option>
+                      <option value="OWNED">已拥有</option>
+                      <option value="NOT_OWNED">未拥有</option>
+                    </select>
 
-                  <select
-                    className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
-                    value={filters.faction}
-                    onChange={e => setFilters({ ...filters, faction: e.target.value })}
-                  >
-                    <option value="ALL">全部势力</option>
-                    {FACTIONS.map(f => (
-                      <option key={f} value={f}>{f}</option>
-                    ))}
-                  </select>
+                    <select
+                      className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
+                      value={filters.faction}
+                      onChange={e => setFilters({ ...filters, faction: e.target.value })}
+                    >
+                      <option value="ALL">全部势力</option>
+                      {FACTIONS.map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
 
-                  <input
-                    className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
-                    placeholder="AC (费用)"
-                    value={filters.ac}
-                    onChange={e => setFilters({ ...filters, ac: e.target.value })}
-                  />
-                  <input
-                    className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
-                    placeholder="Damage (伤害)"
-                    value={filters.damage}
-                    onChange={e => setFilters({ ...filters, damage: e.target.value })}
-                  />
-                  <input
-                    className="bg-zinc-900/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none"
-                    placeholder="Power (力量)"
-                    value={filters.power}
-                    onChange={e => setFilters({ ...filters, power: e.target.value })}
-                  />
-                </div>
+                    <input
+                      className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
+                      placeholder="AC (费用)"
+                      value={filters.ac}
+                      onChange={e => setFilters({ ...filters, ac: e.target.value })}
+                    />
+                    <input
+                      className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
+                      placeholder="Damage (伤害)"
+                      value={filters.damage}
+                      onChange={e => setFilters({ ...filters, damage: e.target.value })}
+                    />
+                    <input
+                      className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
+                      placeholder="Power (力量)"
+                      value={filters.power}
+                      onChange={e => setFilters({ ...filters, power: e.target.value })}
+                    />
+                  </div>
               </div>
 
               {/* Grid */}
@@ -627,7 +627,7 @@ const TabButton = ({ active, onClick, icon, label }: any) => (
   <button
     onClick={onClick}
     className={cn(
-      "flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all border uppercase italic tracking-tighter",
+      "flex items-center gap-1 md:gap-2 px-3 md:px-6 py-2 md:py-3 rounded-2xl font-black text-[10px] md:text-sm transition-all border uppercase italic tracking-tighter shrink-0",
       active ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-600/40" : "bg-zinc-900 border-white/5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
     )}
   >

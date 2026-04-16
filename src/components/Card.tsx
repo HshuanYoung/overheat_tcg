@@ -104,40 +104,40 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
         </div>
 
         {/* Top Right: Keyword Indicators */}
-        <div className="absolute top-1 right-1 z-10 flex flex-col items-end gap-0.5">
+        <div className="absolute top-0.5 right-0.5 md:top-1 md:right-1 z-10 flex flex-col items-end gap-0.5">
           {card.isrush && (
-            <div className="w-5 h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="速攻">
-              <span className="text-[10px] font-black text-white italic">速</span>
+            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="速攻">
+              <span className="text-[8px] md:text-[10px] font-black text-white italic">速</span>
             </div>
           )}
           {card.isAnnihilation && (
-            <div className="w-5 h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="歼灭">
-              <span className="text-[10px] font-black text-white italic">歼</span>
+            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="歼灭">
+              <span className="text-[8px] md:text-[10px] font-black text-white italic">歼</span>
             </div>
           )}
           {card.isShenyi && (
-            <div className="w-5 h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="神依">
-              <span className="text-[10px] font-black text-white italic">依</span>
+            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="神依">
+              <span className="text-[8px] md:text-[10px] font-black text-white italic">依</span>
             </div>
           )}
           {card.isHeroic && (
-            <div className="w-5 h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="英勇">
-              <span className="text-[10px] font-black text-white italic">勇</span>
+            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="英勇">
+              <span className="text-[8px] md:text-[10px] font-black text-white italic">勇</span>
             </div>
           )}
         </div>
 
         {/* Top Left: Access Cost (Ac值) */}
         {showAC && (
-          <div className="absolute top-1 left-1 z-10">
+          <div className="absolute top-0.5 left-0.5 md:top-1 md:left-1 z-10">
             <div className={clsx(
-              "w-7 h-7 rounded-full border-1.5 flex flex-col items-center justify-center font-bold shadow-lg",
+              "w-5 h-5 md:w-7 md:h-7 rounded-full border-1 md:border-1.5 flex flex-col items-center justify-center font-bold shadow-lg",
               isNegativeCost
                 ? "bg-blue-600/90 border-blue-200 text-white"
                 : "bg-red-600/90 border-red-200 text-white"
             )}>
-              <span className="text-[6px] leading-none opacity-80 uppercase font-black">Ac</span>
-              <span className="text-xs leading-none mt-0.5">
+              <span className="text-[4px] md:text-[6px] leading-none opacity-80 uppercase font-black">Ac</span>
+              <span className="text-[10px] md:text-xs leading-none mt-0 md:mt-0.5">
                 {isHand ? Math.abs(card.acValue) : (card.acValue >= 0 ? `+${card.acValue}` : card.acValue)}
               </span>
             </div>
@@ -148,18 +148,18 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
         {showUnitStats && (
           <>
             {/* Lower Left: Damage */}
-            <div className="absolute bottom-1.5 left-1.5">
-              <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md border border-red-500/40 rounded-md px-1.5 py-0.5 shadow-lg">
-                <Sword className="w-3 h-3 text-red-500" />
-                <span className="text-xs font-black text-white">{card.damage}</span>
+            <div className="absolute bottom-1 right-1/2 translate-x-[-2px] md:bottom-1.5 md:left-1.5 md:translate-x-0">
+              <div className="flex items-center gap-0.5 md:gap-1 bg-black/60 backdrop-blur-md border border-red-500/40 rounded-sm md:rounded-md px-1 md:px-1.5 py-0.5 shadow-lg">
+                <Sword className="w-2.5 h-2.5 md:w-3 md:h-3 text-red-500" />
+                <span className="text-[10px] md:text-xs font-black text-white">{card.damage}</span>
               </div>
             </div>
 
             {/* Lower Right: Strength (Power) */}
-            <div className="absolute bottom-1.5 right-1.5">
-              <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md border border-blue-400/40 rounded-md px-1.5 py-0.5 shadow-lg">
-                <Shield className="w-3 h-3 text-blue-400" />
-                <span className="text-xs font-black text-white">{card.power}</span>
+            <div className="absolute bottom-1 left-1/2 translate-x-[2px] md:bottom-1.5 md:right-1.5 md:translate-x-0">
+              <div className="flex items-center gap-0.5 md:gap-1 bg-black/60 backdrop-blur-md border border-blue-400/40 rounded-sm md:rounded-md px-1 md:px-1.5 py-0.5 shadow-lg">
+                <Shield className="w-2.5 h-2.5 md:w-3 md:h-3 text-blue-400" />
+                <span className="text-[10px] md:text-xs font-black text-white">{card.power}</span>
               </div>
             </div>
           </>
@@ -167,9 +167,9 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
 
         {/* God Mark (神蚀标记) */}
         {card.godMark && (
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
-            <div className="w-7 h-7 rounded-full bg-zinc-950 border-2 border-red-500 flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.6)]">
-              <Zap className="w-4 h-4 text-red-500 fill-red-500" />
+          <div className="absolute bottom-6 md:bottom-2 left-1/2 -translate-x-1/2">
+            <div className="w-5 h-5 md:w-7 md:h-7 rounded-full bg-zinc-950 border-1.5 md:border-2 border-red-500 flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.6)]">
+              <Zap className="w-3 h-3 md:w-4 md:h-4 text-red-500 fill-red-500" />
             </div>
           </div>
         )}

@@ -1,16 +1,15 @@
 import { getAuthUser, removeAuthToken, removeAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { User, LayoutGrid, BookOpen, Coins, Sparkles, Lock, Flag, AlertTriangle, X } from 'lucide-react';
+import { User, LayoutGrid, BookOpen, Coins, Sparkles, Lock, Flag, AlertTriangle, X, Menu } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRulebook }) => {
   const user = getAuthUser();
   const location = useLocation();
-  const [coins, setCoins] = useState<number | null>(null);
-  const [crystals, setCrystals] = useState<number | null>(null);
   const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const isInGame = location.pathname.startsWith('/battle/');
 
@@ -69,8 +68,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
           </div>
         )}
 
-        {/* Right Section: Navigation */}
-        <div className="flex-1 flex items-center justify-end gap-6">
+        {/* Right Section: Navigation (Desktop) */}
+        <div className="hidden lg:flex flex-1 items-center justify-end gap-6">
           <div className="flex items-center gap-2">
             {/* Coins */}
             {coins !== null && (
@@ -130,7 +129,103 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
             个人信息
           </Link>
         </div>
+
+        {/* Mobile Menu Toggle */}
+        <div className="flex lg:hidden flex-1 justify-end items-center gap-4">
+          <div className="flex items-center gap-2 mr-2">
+            {coins !== null && (
+               <div className="flex items-center gap-1 bg-amber-900/20 border border-amber-500/20 rounded-full px-3 py-1">
+                 <Coins className="w-3.5 h-3.5 text-amber-400" />
+                 <span className="text-amber-300 font-bold text-xs">{coins.toLocaleString()}</span>
+               </div>
+            )}
+          </div>
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="p-2 text-zinc-400 hover:text-white transition-colors"
+          >
+            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
       </nav>
+
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: '100%' }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed inset-0 z-[49] bg-zinc-950 pt-20 px-6 lg:hidden"
+          >
+            <div className="flex flex-col gap-6">
+              <Link 
+                to={isInGame ? '#' : "/deck-builder"} 
+                onClick={() => setIsMenuOpen(false)}
+                className={cn(
+                  "flex items-center gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
+                  isInGame && "opacity-40 pointer-events-none"
+                )}
+              >
+                {isInGame ? <Lock className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5 flex-shrink-0" />}
+                <span>我的卡组</span>
+              </Link>
+              <button 
+                onClick={() => {
+                  onOpenRulebook();
+                  setIsMenuOpen(false);
+                }}
+                className="flex items-center gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider text-left"
+              >
+                <BookOpen className="w-5 h-5 flex-shrink-0" />
+                <span>简易规则书</span>
+              </button>
+              <Link 
+                to={isInGame ? '#' : "/profile"} 
+                onClick={() => setIsMenuOpen(false)}
+                className={cn(
+                  "flex items-center gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
+                  isInGame && "opacity-40 pointer-events-none"
+                )}
+              >
+                <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center overflow-hidden border border-white/10 shrink-0">
+                  {user?.photoURL ? <img src={user.photoURL} className="w-full h-full object-cover" /> : <img src="assets/icons/myself.JPG" className="w-full h-full object-cover" />}
+                </div>
+                <span>个人信息</span>
+              </Link>
+              <Link 
+                to={isInGame ? '#' : "/store"} 
+                onClick={() => setIsMenuOpen(false)}
+                className={cn(
+                  "flex items-center justify-between gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
+                  isInGame && "opacity-40 pointer-events-none"
+                )}
+              >
+                <div className="flex items-center gap-4">
+                  <Coins className="w-5 h-5 flex-shrink-0 text-amber-400" />
+                  <span>卡牌商店</span>
+                </div>
+                <span className="text-amber-300 text-sm">{coins?.toLocaleString()}</span>
+              </Link>
+              <Link 
+                to={isInGame ? '#' : "/collection?tab=CARDS"} 
+                onClick={() => setIsMenuOpen(false)}
+                className={cn(
+                  "flex items-center justify-between gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
+                  isInGame && "opacity-40 pointer-events-none"
+                )}
+              >
+                <div className="flex items-center gap-4">
+                  <Sparkles className="w-5 h-5 flex-shrink-0 text-cyan-400" />
+                  <span>我的卡牌</span>
+                </div>
+                <span className="text-cyan-300 text-sm">{crystals?.toLocaleString()}</span>
+              </Link>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Surrender Confirmation Modal */}
       <AnimatePresence>

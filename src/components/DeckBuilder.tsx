@@ -7,8 +7,10 @@ import { CARD_LIBRARY } from '../data/cards';
 import { FACTIONS } from '../data/factions';
 import { Card as CardType, Deck } from '../types/game';
 import { CardComponent } from './Card';
+import { CardComponent } from './Card';
 import { cn, getCardImageUrl } from '../lib/utils';
 import { CARD_BACKS } from '../data/customization';
+import { TriggerLocation } from '../types/game';
 
 export const DeckBuilder: React.FC = () => {
   const navigate = useNavigate();
@@ -36,6 +38,8 @@ export const DeckBuilder: React.FC = () => {
     rarity: 'ALL',
     ownership: 'ALL' // ALL, OWNED, NOT_OWNED
   });
+  const [showDecksMobile, setShowDecksMobile] = useState(false);
+  const [showLibraryMobile, setShowLibraryMobile] = useState(false);
 
   const CRYSTAL_VALUES: Record<string, { decompose: number, produce: number }> = {
     C: { decompose: 1, produce: 5 },
@@ -357,9 +361,18 @@ export const DeckBuilder: React.FC = () => {
   });
 
   return (
-    <div className="flex h-[calc(100vh-64px)] mt-16 overflow-hidden bg-zinc-950">
+    <div className="flex h-[calc(100vh-64px)] mt-16 overflow-hidden bg-zinc-950 relative">
       {/* Left: My Decks */}
-      <div className="w-72 border-r border-zinc-800 flex flex-col bg-zinc-900/30">
+      <div className={cn(
+        "absolute lg:relative z-40 w-72 h-full border-r border-zinc-800 flex flex-col bg-zinc-900 shadow-2xl lg:shadow-none transition-transform duration-300",
+        showDecksMobile ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      )}>
+        <button 
+          onClick={() => setShowDecksMobile(false)}
+          className="lg:hidden absolute top-4 right-4 p-2 text-zinc-400"
+        >
+          <X className="w-6 h-6" />
+        </button>
         <div className="p-4 border-b border-zinc-800 flex flex-col gap-4">
           <button 
             onClick={() => navigate('/')} 
@@ -449,9 +462,16 @@ export const DeckBuilder: React.FC = () => {
       </AnimatePresence>
 
       {/* Middle: Deck Editor */}
-      <div className="flex-1 flex flex-col bg-black overflow-hidden">
-        <div className="flex-shrink-0 p-6 border-b border-zinc-900 flex items-center justify-between bg-zinc-950/50">
-          <div className="flex items-center gap-4">
+      <div className="flex-1 flex flex-col bg-black overflow-hidden w-full">
+        <div className="flex-shrink-0 p-4 md:p-6 border-b border-zinc-900 flex flex-col md:flex-row md:items-center justify-between bg-zinc-950/50 gap-4">
+          <div className="flex items-center justify-between md:justify-start gap-4">
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowDecksMobile(true)}
+                className="lg:hidden p-2 bg-zinc-900 rounded-lg text-zinc-400"
+              >
+                <ListFilter className="w-5 h-5" />
+              </button>
             <input 
               className="bg-transparent text-2xl font-black italic tracking-tighter focus:outline-none border-b-2 border-transparent focus:border-red-600 transition-all"
               value={deckName}
@@ -461,7 +481,14 @@ export const DeckBuilder: React.FC = () => {
               {deck.length} / 50
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 overflow-x-auto pb-2 md:pb-0">
+            <button 
+              onClick={() => setShowLibraryMobile(true)}
+              className="lg:hidden flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400"
+            >
+              <Search className="w-4 h-4" />
+              <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">搜索卡牌 Library</span>
+            </button>
             <div className="flex gap-2">
               <button 
                 onClick={sortDeck}
@@ -483,16 +510,16 @@ export const DeckBuilder: React.FC = () => {
             <button 
               onClick={handleSave}
               disabled={saving}
-              className="px-8 py-2 bg-red-600 hover:bg-red-700 rounded-full font-black italic text-sm tracking-tighter flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)]"
+              className="px-6 md:px-8 py-2 bg-red-600 hover:bg-red-700 rounded-full font-black italic text-[10px] md:text-sm tracking-tighter flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)] shrink-0"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              保存卡组
+              <span className="whitespace-nowrap">保存卡组</span>
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
             {deck.map((card, index) => (
               <div key={`${card.uniqueId}-${index}`} className="relative group">
                 <div 
@@ -525,7 +552,16 @@ export const DeckBuilder: React.FC = () => {
       </div>
 
       {/* Right: Card Library */}
-      <div className="w-80 border-l border-zinc-800 flex flex-col bg-zinc-900/30">
+      <div className={cn(
+        "absolute lg:relative right-0 z-40 w-80 h-full border-l border-zinc-800 flex flex-col bg-zinc-900 transition-transform duration-300",
+        showLibraryMobile ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+      )}>
+        <button 
+          onClick={() => setShowLibraryMobile(false)}
+          className="lg:hidden absolute top-4 left-4 p-2 text-zinc-400"
+        >
+          <X className="w-6 h-6" />
+        </button>
         <div className="p-4 border-b border-zinc-800">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />

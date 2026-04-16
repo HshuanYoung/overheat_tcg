@@ -647,14 +647,14 @@ export const BattleField: React.FC = () => {
   if (game.phase === 'MULLIGAN' && !me.mulliganDone) {
     return (
       <div className="h-screen bg-black flex flex-col items-center justify-center p-8">
-        <h2 className="text-4xl font-black italic text-[#f27d26] mb-4 uppercase tracking-tighter">MULLIGAN PHASE</h2>
-        <p className="text-zinc-400 mb-12 uppercase tracking-[0.3em] text-sm">Click cards to preview. Select cards to redraw.</p>
+        <h2 className="text-2xl md:text-4xl font-black italic text-[#f27d26] mb-2 md:mb-4 uppercase tracking-tighter">MULLIGAN PHASE</h2>
+        <p className="text-zinc-400 mb-8 md:mb-12 uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-sm text-center">Click cards to preview. Select cards to redraw.</p>
 
-        <div className="flex gap-6 mb-12">
+        <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-12 max-w-full overflow-x-auto px-4">
           {me.hand.map((card, i) => {
             const isSelected = selectedMulligan.includes(card.gamecardId);
             return (
-              <div key={`${card.gamecardId}-${i}`} className="flex flex-col items-center gap-4">
+              <div key={`${card.gamecardId}-${i}`} className="flex flex-col items-center gap-2 md:gap-4 shrink-0">
                 <motion.div
                   whileHover={{ y: -10 }}
                   onClick={(e) => {
@@ -662,7 +662,7 @@ export const BattleField: React.FC = () => {
                     setCardMenu({ card, zone: 'hand', index: i, x: e.clientX, y: e.clientY });
                   }}
                   className={cn(
-                    "w-40 cursor-pointer transition-all rounded-xl overflow-hidden border-2",
+                    "w-28 md:w-40 cursor-pointer transition-all rounded-xl overflow-hidden border-2",
                     isSelected ? "border-[#f27d26] scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]" : "border-transparent opacity-60"
                   )}
                 >
@@ -675,7 +675,7 @@ export const BattleField: React.FC = () => {
                     );
                   }}
                   className={cn(
-                    "px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-colors",
+                    "px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest transition-colors",
                     isSelected ? "bg-[#f27d26] text-black" : "bg-white/10 text-white hover:bg-white/20"
                   )}
                 >
@@ -742,47 +742,47 @@ export const BattleField: React.FC = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-md flex items-center justify-center p-8"
           >
-            <div className="max-w-4xl w-full flex flex-col items-center gap-8">
+            <div className="max-w-4xl w-full flex flex-col items-center gap-4 md:gap-8 overflow-y-auto max-h-screen">
               <div className="text-center">
-                <h2 className="text-4xl font-black italic text-[#f27d26] mb-2 uppercase tracking-tighter">EROSION PHASE</h2>
-                <p className="text-zinc-400 uppercase tracking-[0.3em] text-sm">Choose how to process face-up erosion cards</p>
+                <h2 className="text-2xl md:text-4xl font-black italic text-[#f27d26] mb-1 md:mb-2 uppercase tracking-tighter">EROSION PHASE</h2>
+                <p className="text-zinc-400 uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-sm">Choose how to process face-up erosion cards</p>
               </div>
 
-              <div className="grid grid-cols-3 gap-6 w-full">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 w-full">
                 <button
                   onClick={() => setErosionChoice('A')}
                   className={cn(
-                    "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 text-center",
+                    "p-4 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 text-center",
                     erosionChoice === 'A' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-xl font-bold">A</div>
-                  <div className="font-bold text-white">MOVE ALL TO GRAVE</div>
-                  <div className="text-xs text-zinc-500">Move all face-up cards in the Erosion Zone to the Graveyard</div>
+                  <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">A</div>
+                  <div className="font-bold text-white text-sm md:text-base">MOVE ALL TO GRAVE</div>
+                  <div className="text-[10px] md:text-xs text-zinc-500">Move all face-up cards in the Erosion Zone to the Graveyard</div>
                 </button>
 
                 <button
                   onClick={() => setErosionChoice('B')}
                   className={cn(
-                    "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 text-center",
+                    "p-4 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 text-center",
                     erosionChoice === 'B' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-xl font-bold">B</div>
-                  <div className="font-bold text-white">KEEP ONE</div>
-                  <div className="text-xs text-zinc-500">Choose one card to keep, move others to the Graveyard</div>
+                  <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">B</div>
+                  <div className="font-bold text-white text-sm md:text-base">KEEP ONE</div>
+                  <div className="text-[10px] md:text-xs text-zinc-500">Choose one card to keep, move others to the Graveyard</div>
                 </button>
 
                 <button
                   onClick={() => setErosionChoice('C')}
                   className={cn(
-                    "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 text-center",
+                    "p-4 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 text-center",
                     erosionChoice === 'C' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-xl font-bold">C</div>
-                  <div className="font-bold text-white">ADD TO HAND</div>
-                  <div className="text-xs text-zinc-500">Choose one to add to hand, move others to Grave, replenish one from deck</div>
+                  <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">C</div>
+                  <div className="font-bold text-white text-sm md:text-base">ADD TO HAND</div>
+                  <div className="text-[10px] md:text-xs text-zinc-500">Choose one to add to hand, move others to Grave, replenish one from deck</div>
                 </button>
               </div>
 
@@ -810,7 +810,7 @@ export const BattleField: React.FC = () => {
               <button
                 onClick={handleConfirmErosion}
                 disabled={!erosionChoice || ((erosionChoice === 'B' || erosionChoice === 'C') && !selectedErosionCardId)}
-                className="px-16 py-4 bg-[#f27d26] text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-xl shadow-[#f27d26]/20"
+                className="px-8 md:px-16 py-3 md:py-4 bg-[#f27d26] text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-xl shadow-[#f27d26]/20"
               >
                 CONFIRM CHOICE
               </button>
@@ -828,9 +828,9 @@ export const BattleField: React.FC = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center"
           >
-            <div className="max-w-6xl w-full flex flex-col items-center gap-6 p-8 overflow-y-auto max-h-screen">
+            <div className="max-w-6xl w-full flex flex-col items-center gap-4 md:gap-6 p-4 md:p-8 overflow-y-auto max-h-screen">
               <div className="text-center">
-                <h3 className="text-4xl font-black italic text-[#f27d26] uppercase tracking-tighter mb-2">支付费用 (PAY COST)</h3>
+                <h3 className="text-2xl md:text-4xl font-black italic text-[#f27d26] uppercase tracking-tighter mb-2">支付费用 (PAY COST)</h3>
                 <div className="flex items-center justify-center gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Required:</span>
@@ -853,15 +853,15 @@ export const BattleField: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-[300px_1fr] gap-12 w-full items-start">
+              <div className="flex flex-col md:grid md:grid-cols-[300px_1fr] gap-6 md:gap-12 w-full items-center md:items-start">
                 {/* Left: Card being played */}
-                <div className="flex flex-col items-center gap-4">
+                <div className="flex flex-col items-center gap-2 md:gap-4 w-48 md:w-full">
                   <div className="w-full aspect-[3/4] rounded-2xl border-2 border-[#f27d26] shadow-[0_0_50px_rgba(242,125,38,0.3)] overflow-hidden">
                     <CardComponent card={pendingPlayCard} disableZoom cardBackUrl={cardBackUrl} />
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-black text-white uppercase italic tracking-tight">{pendingPlayCard.fullName}</div>
-                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">{pendingPlayCard.type} / {pendingPlayCard.color}</div>
+                    <div className="text-sm md:text-lg font-black text-white uppercase italic tracking-tight">{pendingPlayCard.fullName}</div>
+                    <div className="text-[8px] md:text-[10px] text-zinc-500 uppercase tracking-widest mt-1">{pendingPlayCard.type} / {pendingPlayCard.color}</div>
                   </div>
                 </div>
 
@@ -958,16 +958,16 @@ export const BattleField: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex gap-6 mt-8">
+              <div className="flex flex-col sm:flex-row gap-4 md:gap-6 mt-4 md:mt-8 w-full md:w-auto">
                 <button
                   onClick={handleConfirmPlay}
-                  className="px-20 py-4 bg-[#f27d26] text-black font-black italic uppercase tracking-widest rounded-xl hover:bg-[#f27d26]/80 transition-all shadow-2xl shadow-[#f27d26]/20"
+                  className="flex-1 md:flex-none px-10 md:px-20 py-3 md:py-4 bg-[#f27d26] text-black font-black italic uppercase tracking-widest rounded-xl hover:bg-[#f27d26]/80 transition-all shadow-2xl shadow-[#f27d26]/20"
                 >
                   CONFIRM & PLAY
                 </button>
                 <button
                   onClick={() => setPendingPlayCard(null)}
-                  className="px-20 py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all border border-white/5"
+                  className="flex-1 md:flex-none px-10 md:px-20 py-3 md:py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all border border-white/5"
                 >
                   CANCEL
                 </button>
@@ -984,14 +984,14 @@ export const BattleField: React.FC = () => {
       {/* Main Arena */}
       <div className="flex-1 relative flex flex-col overflow-hidden bg-[#050505] p-2">
         {/* Top Bar: Phase & Turn */}
-        <div className="h-16 flex items-center justify-between px-6 bg-black/40 border-b border-white/5 backdrop-blur-md relative z-[1100]">
-          <div className="flex items-center gap-8">
+        <div className="h-auto md:h-16 flex flex-col md:flex-row items-center justify-between px-4 md:px-6 py-2 md:py-0 bg-black/40 border-b border-white/5 backdrop-blur-md relative z-[1100] gap-2">
+          <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto justify-between md:justify-start">
             <div className="flex flex-col">
-              <span className="text-[10px] text-white/40 uppercase font-black tracking-[0.2em]">Turn Count</span>
-              <span className="text-2xl font-black italic text-[#f27d26]">ROUND {game.turnCount}</span>
+              <span className="text-[8px] md:text-[10px] text-white/40 uppercase font-black tracking-[0.2em]">Turn Count</span>
+              <span className="text-lg md:text-2xl font-black italic text-[#f27d26]">ROUND {game.turnCount}</span>
             </div>
 
-            <div className="h-8 w-px bg-white/10" />
+            <div className="h-8 w-px bg-white/10 hidden md:block" />
             <div className="flex flex-col relative group">
               <div
                 className={cn(
@@ -1034,12 +1034,12 @@ export const BattleField: React.FC = () => {
           </div>
 
           <div className={cn(
-            "flex items-center gap-3 px-6 py-2 rounded-xl text-sm font-black uppercase italic tracking-[0.2em] shadow-2xl border border-white/10",
+            "flex items-center gap-2 md:gap-3 px-3 md:px-6 py-1.5 md:py-2 rounded-xl text-[10px] md:text-sm font-black uppercase italic tracking-[0.1em] md:tracking-[0.2em] shadow-2xl border border-white/10",
             game.playerIds[game.currentTurnPlayer] === myUid
               ? "bg-[#f27d26] text-black animate-pulse"
               : "bg-zinc-800 text-white/50"
           )}>
-            <div className="w-6 h-6 rounded-full overflow-hidden border border-white/20">
+            <div className="w-4 h-4 md:w-6 md:h-6 rounded-full overflow-hidden border border-white/20">
               {game.playerIds[game.currentTurnPlayer] === myUid
                 ? <img src={authUser?.photoURL || 'assets/icons/myself.JPG'} className="w-full h-full object-cover" />
                 : <img src="assets/icons/opponent.JPG" className="w-full h-full object-cover" />
@@ -1050,12 +1050,12 @@ export const BattleField: React.FC = () => {
         </div>
 
 
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex flex-col lg:flex-row min-h-0">
           {/* Playground Area */}
 
 
-          {/* Left Sidebar: Logs & Stats */}
-          <div className="w-96 flex flex-col border-r border-white/5 bg-black/20 p-4">
+          {/* Left Sidebar: Logs & Stats (Toggleable/Responsive) */}
+          <div className="hidden lg:flex w-96 flex-col border-r border-white/5 bg-black/20 p-4">
             {/* Game Status Summary */}
             <div className="mb-6 space-y-4">
               <span className="text-[10px] font-black uppercase italic tracking-widest text-white/40 flex items-center gap-2">
@@ -1118,8 +1118,8 @@ export const BattleField: React.FC = () => {
           </div>
 
           {/* Center: Play Field */}
-          <div className="flex-1 flex items-center justify-center p-4 bg-[radial-gradient(circle_at_center,_rgba(242,125,38,0.03)_0%,_transparent_70%)]">
-            <div className="w-[1920px] h-[1080px] shrink-0 shadow-[0_0_80px_rgba(0,0,0,0.9)] rounded-2xl overflow-hidden border-2 border-white/10 relative bg-black">
+          <div className="flex-1 flex items-center justify-center p-2 md:p-4 bg-[radial-gradient(circle_at_center,_rgba(242,125,38,0.03)_0%,_transparent_70%)] overflow-auto">
+            <div className="w-full lg:w-[1920px] aspect-video lg:shrink-0 shadow-[0_0_80px_rgba(0,0,0,0.9)] rounded-2xl overflow-hidden border-2 border-white/10 relative bg-black">
               {opponent && (
                 <PlayField
                   player={me}
@@ -1243,12 +1243,12 @@ export const BattleField: React.FC = () => {
                 "bg-zinc-900/90 border border-red-500/50 px-8 py-4 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.3)] backdrop-blur-sm flex items-center gap-6",
                 game.priorityPlayerId === myUid && "border-red-500 animate-pulse ring-2 ring-red-500/20 shadow-[0_0_40px_rgba(239,68,68,0.5)]"
               )}>
-                <div className="flex flex-col items-center">
-                  <p className="text-red-500 font-black tracking-widest uppercase flex items-center gap-3 text-lg italic">
-                    <ShieldCheck className="w-6 h-6 animate-pulse" />
+                <div className="flex flex-col items-center text-center">
+                  <p className="text-red-500 font-black tracking-widest uppercase flex items-center gap-2 md:gap-3 text-sm md:text-lg italic">
+                    <ShieldCheck className="w-5 h-5 md:w-6 md:h-6 animate-pulse" />
                     CONFRONTATION / 对抗阶段
                   </p>
-                  <p className="text-white text-[11px] uppercase tracking-[0.2em] font-black">
+                  <p className="text-white text-[9px] md:text-[11px] uppercase tracking-[0.1em] md:tracking-[0.2em] font-black">
                     {game.isResolvingStack
                       ? "RESOLVING CHAIN / 正在结算连锁"
                       : game.priorityPlayerId === myUid
@@ -1258,12 +1258,12 @@ export const BattleField: React.FC = () => {
                 </div>
 
                 {game.priorityPlayerId === myUid && !game.isResolvingStack && (
-                  <div className="flex items-center gap-3 pointer-events-auto">
+                  <div className="flex items-center gap-3 pointer-events-auto mt-2 md:mt-0">
                     <button
                       onClick={handleResolve}
-                      className="px-10 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black italic uppercase tracking-widest rounded-full transition-all flex items-center gap-2 border border-red-400 group shadow-lg shadow-red-600/40"
+                      className="px-6 md:px-10 py-2 md:py-2.5 bg-red-600 hover:bg-red-700 text-white font-black italic uppercase tracking-widest rounded-full transition-all flex items-center gap-2 border border-red-400 group shadow-lg shadow-red-600/40 text-[10px] md:text-xs"
                     >
-                      <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+                      <X className="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-90 transition-transform" />
                       PASS & SETTLE / 不对抗直接结算
                     </button>
                   </div>
@@ -1271,14 +1271,14 @@ export const BattleField: React.FC = () => {
               </div>
 
               {/* Stack Visualization */}
-              <div className="flex gap-6 mt-8">
+              <div className="flex flex-wrap justify-center gap-4 md:gap-6 mt-4 md:mt-8 px-4">
                 {game.counterStack.map((item, idx) => (
                   <motion.div
                     key={`${idx}-${item.timestamp}`}
                     initial={{ y: 20, opacity: 0, scale: 0.8 }}
-                    animate={{ y: 0, opacity: 1, scale: idx === game.counterStack.length - 1 ? 1.15 : 1 }}
+                    animate={{ y: 0, opacity: 1, scale: idx === game.counterStack.length - 1 ? (window.innerWidth < 768 ? 1.05 : 1.15) : 1 }}
                     className={cn(
-                      "w-36 h-52 rounded-xl overflow-hidden border-2 shadow-2xl relative transition-all duration-300",
+                      "w-24 md:w-36 h-36 md:h-52 rounded-xl overflow-hidden border-2 shadow-2xl relative transition-all duration-300 shrink-0",
                       idx === game.counterStack.length - 1
                         ? "border-red-500 z-10 ring-4 ring-red-500/20"
                         : "border-white/10 opacity-60 grayscale-[0.5]"
@@ -1366,16 +1366,16 @@ export const BattleField: React.FC = () => {
         <AnimatePresence>
           {game.phase === 'DISCARD' && me.uid === getAuthUser()?.uid && me.isTurn && me.hand.length > 6 && (
             <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-md">
-              <div className="flex flex-col items-center gap-8">
-                <h2 className="text-4xl font-black italic text-[#f27d26] uppercase tracking-widest">DISCARD CARDS</h2>
-                <p className="text-white/60 text-lg">Your hand exceeds 6 cards. Please choose cards to discard (Current: {me.hand.length})</p>
-                <div className="flex gap-4 overflow-x-auto max-w-5xl p-8 custom-scrollbar">
+              <div className="flex flex-col items-center gap-4 md:gap-8 max-w-full px-4 text-center">
+                <h2 className="text-2xl md:text-4xl font-black italic text-[#f27d26] uppercase tracking-widest">DISCARD CARDS</h2>
+                <p className="text-white/60 text-sm md:text-lg">Your hand exceeds 6 cards. Please choose cards to discard (Current: {me.hand.length})</p>
+                <div className="flex gap-4 overflow-x-auto w-full max-w-5xl p-4 md:p-8 custom-scrollbar">
                   {me.hand.map(card => (
                     <motion.div
                       key={card.gamecardId}
                       whileHover={{ y: -20, scale: 1.1 }}
                       onClick={() => handleDiscardCard(card.gamecardId)}
-                      className="w-32 cursor-pointer transition-all hover:shadow-[0_0_30px_rgba(242,125,38,0.4)]"
+                      className="w-24 md:w-32 shrink-0 cursor-pointer transition-all hover:shadow-[0_0_30px_rgba(242,125,38,0.4)]"
                     >
                       <CardComponent card={card} disableZoom cardBackUrl={cardBackUrl} />
                     </motion.div>
@@ -1396,21 +1396,21 @@ export const BattleField: React.FC = () => {
                 className="bg-[#1a0f1a] border-2 border-[#4a0d4a] p-10 rounded-3xl flex flex-col items-center gap-8 shadow-[0_0_100px_rgba(74,13,74,0.4)] max-w-2xl"
               >
                 <div className="flex flex-col items-center gap-2">
-                  <div className="w-20 h-20 bg-[#4a0d4a] rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(74,13,74,0.6)] animate-pulse">
-                    <Sparkles className="w-12 h-12 text-white" />
+                  <div className="w-12 h-12 md:w-20 md:h-20 bg-[#4a0d4a] rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(74,13,74,0.6)] animate-pulse">
+                    <Sparkles className="w-8 h-8 md:w-12 md:h-12 text-white" />
                   </div>
-                  <h2 className="text-4xl font-black italic text-white uppercase tracking-[0.15em] mt-4">女神之辉：神依</h2>
-                  <p className="text-zinc-400 text-center text-sm font-medium tracking-wide">
+                  <h2 className="text-2xl md:text-4xl font-black italic text-white uppercase tracking-[0.1em] md:tracking-[0.15em] mt-2 md:mt-4 text-center">女神之辉：神依</h2>
+                  <p className="text-zinc-400 text-center text-[10px] md:text-sm font-medium tracking-wide max-w-md">
                     你已进入女神化状态。是否触发【神依】效果，将指定单位重置为竖直状态？
                   </p>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex gap-4 overflow-x-auto max-w-full pb-2">
                   {game.pendingShenyi.cardIds.map(cid => {
                     const card = me.unitZone.find(u => u?.gamecardId === cid);
                     if (!card) return null;
                     return (
-                      <div key={cid} className="w-40 h-56 rounded-xl overflow-hidden border-2 border-[#4a0d4a]/50 shadow-2xl relative group">
+                      <div key={cid} className="w-28 h-40 md:w-40 md:h-56 shrink-0 rounded-xl overflow-hidden border-2 border-[#4a0d4a]/50 shadow-2xl relative group">
                         <CardComponent card={card} disableZoom cardBackUrl={cardBackUrl} />
                         <div className="absolute inset-0 bg-purple-500/20 animate-pulse pointer-events-none" />
                       </div>
@@ -1418,16 +1418,16 @@ export const BattleField: React.FC = () => {
                   })}
                 </div>
 
-                <div className="flex gap-6 w-full">
+                <div className="flex flex-col sm:flex-row gap-4 w-full">
                   <button
                     onClick={() => handleShenyiChoice('CONFIRM_SHENYI')}
-                    className="flex-1 py-5 bg-[#4a0d4a] hover:bg-[#5d115d] text-white font-black italic uppercase tracking-widest rounded-2xl transition-all shadow-2xl hover:scale-[1.02] border border-white/10"
+                    className="flex-1 py-3 md:py-5 bg-[#4a0d4a] hover:bg-[#5d115d] text-white font-black italic uppercase tracking-widest rounded-2xl transition-all shadow-2xl hover:scale-[1.02] border border-white/10 text-xs md:text-sm"
                   >
                     确认触发 (CONFIRM)
                   </button>
                   <button
                     onClick={() => handleShenyiChoice('DECLINE_SHENYI')}
-                    className="flex-1 py-5 bg-zinc-800 hover:bg-zinc-700 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all border border-white/10"
+                    className="flex-1 py-3 md:py-5 bg-zinc-800 hover:bg-zinc-700 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all border border-white/10 text-xs md:text-sm"
                   >
                     忽略 (SKIP)
                   </button>
@@ -1453,11 +1453,11 @@ export const BattleField: React.FC = () => {
               initial={{ opacity: 0, scale: 0.9, x: 20 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.9, x: 20 }}
-              className="fixed z-[200] flex flex-col gap-1 w-40"
+              className="fixed z-[200] flex flex-col gap-2 w-32 md:w-40"
               style={{
-                left: cardMenu.x + 85,
-                top: cardMenu.y,
-                transform: 'translate(0, -50%)'
+                left: window.innerWidth < 768 ? '50%' : (cardMenu.x + 85),
+                top: window.innerWidth < 768 ? '50%' : cardMenu.y,
+                transform: window.innerWidth < 768 ? 'translate(-50%, -50%)' : 'translate(0, -50%)'
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1474,7 +1474,7 @@ export const BattleField: React.FC = () => {
                     return (
                       <motion.button
                         whileHover={{ scale: 1.1 }}
-                        className="px-4 py-1.5 text-[10px] font-bold text-black bg-[#facc15] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
+                        className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-black bg-[#facc15] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                         onClick={() => {
                           playCardFromHand(cardMenu.card);
                           setCardMenu(null);
@@ -1524,7 +1524,7 @@ export const BattleField: React.FC = () => {
                   return (
                     <motion.button
                       whileHover={{ scale: 1.1 }}
-                      className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#22c55e] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
+                      className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#22c55e] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                       onClick={() => {
                         const triggerLocation = (cardMenu.zone === 'unit' ? 'UNIT' : cardMenu.zone === 'item' ? 'ITEM' : cardMenu.zone === 'erosion_front' ? 'EROSION_FRONT' : 'HAND') as TriggerLocation;
                         if (validEffects.length === 1) {
@@ -1557,11 +1557,11 @@ export const BattleField: React.FC = () => {
                   const isMyCard = me.unitZone.some(c => c?.gamecardId === cardMenu.card.gamecardId);
                   if (isMyCard && canUnitAttack(cardMenu.card)) {
                     return (
-                      <div className="flex flex-col gap-1 items-center">
+                      <div className="flex flex-col gap-2 md:gap-1 items-center">
                         {!cardMenu.card.inAllianceGroup && (
                           <motion.button
                             whileHover={{ scale: 1.1 }}
-                            className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
+                            className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                             onClick={() => {
                               handleDeclareAttack([cardMenu.card.gamecardId], false);
                               setCardMenu(null);
@@ -1572,7 +1572,7 @@ export const BattleField: React.FC = () => {
                         )}
                         <motion.button
                           whileHover={{ scale: 1.1 }}
-                          className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
+                          className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                           onClick={() => {
                             setAllianceTargetSelection(cardMenu.card.gamecardId);
                             setCardMenu(null);
@@ -1595,7 +1595,7 @@ export const BattleField: React.FC = () => {
                     return (
                       <motion.button
                         whileHover={{ scale: 1.1 }}
-                        className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#3b82f6] rounded-full shadow-lg border border-white/20 flex items-center justify-center min-w-[70px]"
+                        className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#3b82f6] rounded-full shadow-lg border border-white/20 flex items-center justify-center min-w-[100px] md:min-w-[70px]"
                         onClick={() => {
                           handleDeclareDefense(cardMenu.card.gamecardId);
                           setCardMenu(null);
@@ -1627,7 +1627,7 @@ export const BattleField: React.FC = () => {
               {/* Action: Details (Purple) */}
               <motion.button
                 whileHover={{ scale: 1.1 }}
-                className="px-4 py-1.5 text-[10px] font-bold text-white bg-[#9333ea] rounded-full shadow-lg border border-white/20 flex items-center justify-center min-w-[70px]"
+                className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#9333ea] rounded-full shadow-lg border border-white/20 flex items-center justify-center min-w-[100px] md:min-w-[70px]"
                 onClick={() => {
                   setPreviewCard(cardMenu.card);
                   setCardMenu(null);
@@ -1654,51 +1654,51 @@ export const BattleField: React.FC = () => {
             <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className="bg-zinc-900 border border-orange-500/50 p-10 rounded-3xl flex flex-col items-center gap-8 shadow-[0_0_100px_rgba(249,115,22,0.2)] max-w-3xl w-full"
+              className="bg-zinc-900 border border-orange-500/50 p-6 md:p-10 rounded-3xl flex flex-col items-center gap-6 md:gap-8 shadow-[0_0_100px_rgba(249,115,22,0.2)] max-w-3xl w-full overflow-y-auto max-h-screen"
             >
               <div className="flex flex-col items-center gap-2">
-                <div className="w-16 h-16 bg-orange-500/10 rounded-2xl flex items-center justify-center shadow-inner">
-                  <Sword className="w-10 h-10 text-orange-500" />
+                <div className="w-12 h-12 md:w-16 md:h-16 bg-orange-500/10 rounded-2xl flex items-center justify-center shadow-inner">
+                  <Sword className="w-8 h-8 md:w-10 md:h-10 text-orange-500" />
                 </div>
-                <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter mt-4">确认联军宣告 (CONFIRM ALLIANCE)</h2>
-                <p className="text-zinc-400 text-sm font-medium tracking-wide">是否宣告这两个单位进行联军攻击？</p>
+                <h2 className="text-xl md:text-3xl font-black italic text-white uppercase tracking-tighter mt-2 md:mt-4 text-center">确认联军宣告 (CONFIRM ALLIANCE)</h2>
+                <p className="text-zinc-400 text-[10px] md:text-sm font-medium tracking-wide text-center">是否宣告这两个单位进行联军攻击？</p>
               </div>
 
-              <div className="flex gap-8 items-center">
+              <div className="flex flex-row md:flex-row gap-4 md:gap-8 items-center">
                 <div className="flex flex-col items-center gap-3">
-                  <div className="w-40 aspect-[3/4] rounded-xl overflow-hidden border-2 border-white/10 shadow-2xl">
+                  <div className="w-24 md:w-40 aspect-[3/4] rounded-xl overflow-hidden border-2 border-white/10 shadow-2xl">
                     <CardComponent card={allianceConfirmation.attacker1} disableZoom cardBackUrl={cardBackUrl} />
                   </div>
-                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Attacker 1</span>
+                  <span className="text-[8px] md:text-[10px] font-black text-white/40 uppercase tracking-widest">Attacker 1</span>
                 </div>
 
                 <div className="flex flex-col items-center">
-                  <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-                    <Zap className="w-6 h-6 text-orange-500 animate-pulse" />
+                  <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                    <Zap className="w-4 h-4 md:w-6 md:h-6 text-orange-500 animate-pulse" />
                   </div>
                 </div>
 
                 <div className="flex flex-col items-center gap-3">
-                  <div className="w-40 aspect-[3/4] rounded-xl overflow-hidden border-2 border-white/10 shadow-2xl">
+                  <div className="w-24 md:w-40 aspect-[3/4] rounded-xl overflow-hidden border-2 border-white/10 shadow-2xl">
                     <CardComponent card={allianceConfirmation.attacker2} disableZoom cardBackUrl={cardBackUrl} />
                   </div>
-                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Attacker 2</span>
+                  <span className="text-[8px] md:text-[10px] font-black text-white/40 uppercase tracking-widest">Attacker 2</span>
                 </div>
               </div>
 
-              <div className="flex gap-6 w-full">
+              <div className="flex flex-col sm:flex-row gap-4 md:gap-6 w-full">
                 <button
                   onClick={() => {
                     handleDeclareAttack([allianceConfirmation.attacker1.gamecardId, allianceConfirmation.attacker2.gamecardId], true);
                     setAllianceConfirmation(null);
                   }}
-                  className="flex-1 py-5 bg-orange-600 hover:bg-orange-500 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all shadow-xl hover:scale-[1.02] border border-orange-400/50"
+                  className="flex-1 py-3 md:py-5 bg-orange-600 hover:bg-orange-500 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all shadow-xl hover:scale-[1.02] border border-orange-400/50 text-xs md:text-sm"
                 >
                   确认宣告 (CONFIRM ALLIANCE)
                 </button>
                 <button
                   onClick={() => setAllianceConfirmation(null)}
-                  className="flex-1 py-5 bg-zinc-800 hover:bg-zinc-700 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all border border-white/10"
+                  className="flex-1 py-3 md:py-5 bg-zinc-800 hover:bg-zinc-700 text-white font-black italic uppercase tracking-widest rounded-2xl transition-all border border-white/10 text-xs md:text-sm"
                 >
                   取消 (CANCEL)
                 </button>
@@ -1747,7 +1747,7 @@ export const BattleField: React.FC = () => {
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="bg-zinc-900 border border-white/10 rounded-2xl max-w-2xl w-full p-8 shadow-2xl"
+              className="bg-zinc-900 border border-white/10 rounded-2xl max-w-2xl w-full p-4 md:p-8 shadow-2xl overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter">选择要发动的效果</h3>
@@ -1766,16 +1766,16 @@ export const BattleField: React.FC = () => {
                     }}
                     className="w-full text-left p-4 rounded-xl border border-white/10 bg-black/40 hover:bg-white/5 hover:border-red-500/50 transition-all group flex items-start gap-4"
                   >
-                    <div className="shrink-0 w-8 h-8 bg-white/10 text-white rounded flex items-center justify-center font-bold">
+                    <div className="shrink-0 w-6 h-6 md:w-8 md:h-8 bg-white/10 text-white rounded flex items-center justify-center font-bold text-xs md:text-base">
                       {i + 1}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold text-white bg-red-600">
+                      <div className="flex items-center gap-2 mb-1 md:mb-2">
+                        <span className="px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-bold text-white bg-red-600">
                           {e.effect.type}
                         </span>
                       </div>
-                      <p className="text-sm text-zinc-300 leading-relaxed group-hover:text-white transition-colors">
+                      <p className="text-[10px] md:text-sm text-zinc-300 leading-relaxed group-hover:text-white transition-colors">
                         {e.effect.description}
                       </p>
                     </div>
@@ -1809,7 +1809,7 @@ export const BattleField: React.FC = () => {
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="bg-zinc-900 border border-red-500/30 rounded-2xl max-w-xl w-full p-8 shadow-[0_0_50px_rgba(220,38,38,0.15)]"
+              className="bg-zinc-900 border border-red-500/30 rounded-2xl max-w-xl w-full p-5 md:p-8 shadow-[0_0_50px_rgba(220,38,38,0.15)] overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-2xl font-black italic text-red-500 mb-6 uppercase tracking-tighter flex items-center gap-3">
@@ -1817,7 +1817,7 @@ export const BattleField: React.FC = () => {
                 CONFIRM EFFECT
               </h3>
 
-              <div className="bg-black/50 p-6 rounded-xl border border-white/5 mb-8">
+              <div className="bg-black/50 p-4 md:p-6 rounded-xl border border-white/5 mb-6 md:mb-8">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold text-white bg-red-600">
                     {effectConfirmation.effect.type}
@@ -1826,7 +1826,7 @@ export const BattleField: React.FC = () => {
                     {effectConfirmation.card.fullName}
                   </span>
                 </div>
-                <p className="text-base text-zinc-200 leading-relaxed">
+                <p className="text-sm md:text-base text-zinc-200 leading-relaxed">
                   {effectConfirmation.effect.description}
                 </p>
               </div>
@@ -1834,7 +1834,7 @@ export const BattleField: React.FC = () => {
               <div className="flex justify-end gap-4">
                 <button
                   onClick={() => setEffectConfirmation(null)}
-                  className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                  className="px-4 md:px-6 py-2 md:py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors text-xs md:text-base"
                 >
                   CANCEL
                 </button>
@@ -1848,7 +1848,7 @@ export const BattleField: React.FC = () => {
                     );
                     setEffectConfirmation(null);
                   }}
-                  className="px-8 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest shadow-lg shadow-red-600/20 transition-all hover:scale-105"
+                  className="px-5 md:px-8 py-2 md:py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest shadow-lg shadow-red-600/20 transition-all hover:scale-105 text-xs md:text-base"
                 >
                   CONFIRM
                 </button>
@@ -1934,15 +1934,13 @@ export const BattleField: React.FC = () => {
                 )}>
                   {(game.pendingQuery.title.includes('舍弃') || game.pendingQuery.title.includes('Discard')) ? (
                     <Trash2 className="w-10 h-10 animate-bounce" />
-                  ) : (
-                    <Zap className="w-10 h-10 animate-pulse" />
                   )}
-                  <h2 className="text-5xl font-black italic uppercase tracking-tighter">
+                  <h2 className="text-2xl md:text-5xl font-black italic uppercase tracking-tighter">
                     {game.pendingQuery.title}
                   </h2>
                 </div>
 
-                <p className="text-zinc-400 uppercase tracking-[0.4em] text-sm max-w-2xl mx-auto leading-relaxed">
+                <p className="text-zinc-400 uppercase tracking-[0.2em] md:tracking-[0.4em] text-[10px] md:text-sm max-w-2xl mx-auto leading-relaxed">
                   {game.pendingQuery.description}
                 </p>
                 {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' && (
@@ -1951,14 +1949,14 @@ export const BattleField: React.FC = () => {
                   </div>
                 )}
                 {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_PAYMENT' && (
-                  <div className="mt-4 flex items-center justify-center gap-6">
+                  <div className="mt-2 md:mt-4 flex items-center justify-center gap-3 md:gap-6">
                     <div className="flex items-center gap-2">
-                      <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Required:</span>
-                      <span className="text-3xl font-black text-red-500">{game.pendingQuery.paymentCost}</span>
+                      <span className="text-zinc-500 uppercase text-[8px] md:text-[10px] font-bold tracking-widest">Required:</span>
+                      <span className="text-xl md:text-3xl font-black text-red-500">{game.pendingQuery.paymentCost}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Selected:</span>
-                      <span className="text-3xl font-black text-white">
+                      <span className="text-zinc-500 uppercase text-[8px] md:text-[10px] font-bold tracking-widest">Selected:</span>
+                      <span className="text-xl md:text-3xl font-black text-white">
                         {(game.pendingQuery.paymentCost || 0) > 0
                           ? (paymentSelection.useFeijing.length * 3) + paymentSelection.exhaustIds.length
                           : paymentSelection.erosionFrontIds.length}
@@ -1969,7 +1967,7 @@ export const BattleField: React.FC = () => {
               </div>
 
               {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-10 max-h-[55vh] overflow-y-auto p-6 custom-scrollbar w-full">
+                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-10 max-h-[50vh] md:max-h-[55vh] overflow-y-auto p-4 md:p-6 custom-scrollbar w-full">
                   {game.pendingQuery.options.map((option, i) => {
                     const isSelected = selectedQueryIds.includes(option.card.gamecardId);
                     const isDiscardQuery = game.pendingQuery!.title.includes('舍弃') || game.pendingQuery!.title.includes('Discard');
@@ -1991,20 +1989,20 @@ export const BattleField: React.FC = () => {
                               });
                             }}
                             className={cn(
-                              "w-48 cursor-pointer transition-all rounded-2xl overflow-hidden border-2 relative group-hover:shadow-2xl",
+                              "w-24 md:w-48 cursor-pointer transition-all rounded-lg md:rounded-2xl overflow-hidden border-2 relative group-hover:shadow-2xl",
                               isSelected
                                 ? isDiscardQuery ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.4)] scale-105" : "border-[#f27d26] shadow-[0_0_40px_rgba(242,125,38,0.4)] scale-105"
                                 : "border-white/5 opacity-80 hover:opacity-100"
                             )}
                           >
                             {(option.card.id === 'PLAYER_SELF' || option.card.id === 'PLAYER_OPPONENT') ? (
-                              <div className="w-48 aspect-[3/4] bg-zinc-800 rounded-2xl flex flex-col items-center justify-center p-4 border border-white/10">
+                              <div className="w-24 md:w-48 aspect-[3/4] bg-zinc-800 rounded-lg md:rounded-2xl flex flex-col items-center justify-center p-2 md:p-4 border border-white/10">
                                 <img
                                   src={`/assets/icons/${option.card.id === 'PLAYER_SELF' ? 'myself' : 'opponent'}.JPG`}
                                   alt={option.card.fullName}
-                                  className="w-32 h-32 object-contain mb-4 rounded-full border-4 border-[#f27d26]/30"
+                                  className="w-16 h-16 md:w-32 md:h-32 object-contain mb-2 md:mb-4 rounded-full border-2 md:border-4 border-[#f27d26]/30"
                                 />
-                                <span className="text-[#f27d26] font-display font-black text-xl uppercase italic tracking-widest">{option.card.fullName}</span>
+                                <span className="text-[#f27d26] font-display font-black text-[10px] md:text-xl uppercase italic tracking-widest text-center">{option.card.fullName}</span>
                               </div>
                             ) : (
                               <div className="aspect-[3/4] drop-shadow-2xl">

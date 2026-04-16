@@ -119,56 +119,58 @@ export const FriendMatch: React.FC = () => {
     <div className="pt-20 px-8 min-h-screen bg-black text-white pb-20">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-10">
-          <button onClick={() => waitingForOpponent ? setWaitingForOpponent(false) : mode === 'select' ? navigate('/') : setMode('select')} className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors">
-            <ArrowLeft className="w-5 h-5" />
+        <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-10 px-2 md:px-0">
+          <button onClick={() => waitingForOpponent ? setWaitingForOpponent(false) : mode === 'select' ? navigate('/') : setMode('select')} className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors shrink-0">
+            <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
           </button>
           <div>
-            <h1 className="text-3xl font-black italic tracking-tighter">好友约战</h1>
-            <p className="text-zinc-500 text-sm">创建或加入一个私人对战房间</p>
+            <h1 className="text-xl md:text-3xl font-black italic tracking-tighter uppercase">好友约战</h1>
+            <p className="text-zinc-500 text-[10px] md:text-sm font-bold uppercase tracking-widest leading-none">私人对战房间 Private Room</p>
           </div>
         </div>
 
         {/* Waiting for opponent screen */}
         {waitingForOpponent && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
-            <Loader2 className="w-12 h-12 animate-spin text-red-500 mx-auto mb-6" />
-            <h2 className="text-2xl font-black italic tracking-tighter mb-4">等待对手加入...</h2>
-            <div className="inline-flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-2xl px-8 py-4 mb-4">
-              <span className="text-zinc-500 text-sm">房间码:</span>
-              <span className="text-3xl font-mono font-black tracking-[0.3em] text-amber-400">{createdRoomCode}</span>
-              <button onClick={copyCode} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                {copied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5 text-zinc-500" />}
-              </button>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8 md:py-16">
+            <Loader2 className="w-10 h-10 md:w-12 md:h-12 animate-spin text-red-500 mx-auto mb-6" />
+            <h2 className="text-xl md:text-2xl font-black italic tracking-tighter mb-4 md:mb-6 uppercase">等待对手加入...</h2>
+            <div className="inline-flex flex-col md:flex-row items-center gap-3 bg-zinc-900/50 border border-zinc-800 rounded-2xl px-6 md:px-8 py-4 md:py-6 mb-4 w-full md:w-auto">
+              <span className="text-zinc-500 text-[10px] md:text-sm font-bold uppercase tracking-widest leading-none">房间码 Code:</span>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl md:text-4xl font-mono font-black tracking-[0.2em] md:tracking-[0.3em] text-amber-400">{createdRoomCode}</span>
+                <button onClick={copyCode} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                  {copied ? <Check className="w-5 h-5 md:w-6 md:h-6 text-green-500" /> : <Copy className="w-5 h-5 md:w-6 md:h-6 text-zinc-500" />}
+                </button>
+              </div>
             </div>
-            <p className="text-zinc-600 text-sm">将房间码发送给你的好友</p>
+            <p className="text-zinc-600 text-[10px] md:text-sm font-bold uppercase tracking-widest">请将房间码发送给你的好友</p>
           </motion.div>
         )}
 
         {/* Mode selection */}
         {!waitingForOpponent && mode === 'select' && (
-          <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <motion.div 
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
               onClick={() => setMode('create')}
-              className="p-8 rounded-2xl bg-gradient-to-br from-red-900/20 to-zinc-900 border border-zinc-800 hover:border-red-600/50 cursor-pointer text-center transition-all group"
+              className="p-6 md:p-8 rounded-2xl bg-gradient-to-br from-red-900/10 to-zinc-900 border border-zinc-800 hover:border-red-600/50 cursor-pointer text-center transition-all group"
             >
-              <div className="w-16 h-16 rounded-full bg-red-600/20 group-hover:bg-red-600 flex items-center justify-center mx-auto mb-4 transition-colors">
-                <Plus className="w-8 h-8" />
+              <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-red-600/10 group-hover:bg-red-600 flex items-center justify-center mx-auto mb-3 md:mb-4 transition-colors">
+                <Plus className="w-6 h-6 md:w-8 md:h-8" />
               </div>
-              <h3 className="text-xl font-black italic tracking-tighter mb-1">创建房间</h3>
-              <p className="text-zinc-500 text-xs">生成房间码邀请好友</p>
+              <h3 className="text-lg md:text-xl font-black italic tracking-tighter mb-1 uppercase">创建房间</h3>
+              <p className="text-zinc-500 text-[10px] md:text-xs font-bold uppercase tracking-widest leading-none">邀请好友 Create Room</p>
             </motion.div>
             <motion.div
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
               onClick={() => setMode('join')}
-              className="p-8 rounded-2xl bg-gradient-to-br from-blue-900/20 to-zinc-900 border border-zinc-800 hover:border-blue-600/50 cursor-pointer text-center transition-all group"
+              className="p-6 md:p-8 rounded-2xl bg-gradient-to-br from-blue-900/10 to-zinc-900 border border-zinc-800 hover:border-blue-600/50 cursor-pointer text-center transition-all group"
             >
-              <div className="w-16 h-16 rounded-full bg-blue-600/20 group-hover:bg-blue-600 flex items-center justify-center mx-auto mb-4 transition-colors">
-                <LogIn className="w-8 h-8" />
+              <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-blue-600/10 group-hover:bg-blue-600 flex items-center justify-center mx-auto mb-3 md:mb-4 transition-colors">
+                <LogIn className="w-6 h-6 md:w-8 md:h-8" />
               </div>
-              <h3 className="text-xl font-black italic tracking-tighter mb-1">加入房间</h3>
-              <p className="text-zinc-500 text-xs">输入房间码加入对战</p>
+              <h3 className="text-lg md:text-xl font-black italic tracking-tighter mb-1 uppercase">加入房间</h3>
+              <p className="text-zinc-500 text-[10px] md:text-xs font-bold uppercase tracking-widest leading-none">输入房间码 Join Room</p>
             </motion.div>
           </div>
         )}
@@ -230,22 +232,22 @@ export const FriendMatch: React.FC = () => {
             )}
 
             {mode === 'create' && (
-              <div className="flex justify-center">
+              <div className="flex justify-center mt-6">
                 <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={handleCreateRoom}
                   disabled={creating || !selectedDeckId}
-                  className="px-10 py-3.5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-lg tracking-tighter flex items-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all"
+                  className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all uppercase"
                 >
                   {creating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                  创建房间
+                  创建房间 CREATE
                 </motion.button>
               </div>
             )}
 
             {mode === 'join' && (
-              <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-col items-center gap-6 mt-4">
                 <input
-                  className="text-center text-2xl font-mono font-bold tracking-[0.3em] bg-zinc-900 border border-zinc-800 rounded-xl px-6 py-4 w-80 focus:outline-none focus:border-red-600 transition-all"
+                  className="text-center text-xl md:text-2xl font-mono font-bold tracking-[0.2em] md:tracking-[0.3em] bg-zinc-900 border border-zinc-800 rounded-xl px-4 md:px-6 py-3 md:py-4 w-full md:w-80 focus:outline-none focus:border-red-600 transition-all"
                   placeholder="输入房间码"
                   maxLength={8}
                   value={roomCode}
@@ -254,10 +256,10 @@ export const FriendMatch: React.FC = () => {
                 <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={handleJoinRoom}
                   disabled={joining || !selectedDeckId || roomCode.length < 6}
-                  className="px-10 py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl font-black italic text-lg tracking-tighter flex items-center gap-3 shadow-[0_0_30px_rgba(37,99,235,0.3)] disabled:opacity-50 transition-all"
+                  className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(37,99,235,0.3)] disabled:opacity-50 transition-all uppercase"
                 >
                   {joining ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
-                  加入房间
+                  加入房间 JOIN
                 </motion.button>
               </div>
             )}

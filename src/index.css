@@ -8,7 +8,9 @@
 
 @layer base {
   body {
-    @apply bg-black text-white;
+    @apply bg-black text-white antialiased overflow-x-hidden;
+    /* Prevent pull-to-refresh on mobile if it interferes with game */
+    overscroll-behavior-y: contain;
   }
 }
 

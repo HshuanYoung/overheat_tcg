@@ -58,14 +58,14 @@ export const Home: React.FC = () => {
       <div className="absolute inset-0 bg-gradient-to-r from-black via-black/70 to-black/40 z-10" />
 
       {/* Content */}
-      <div className="relative z-20 pl-16 flex flex-col gap-6 max-w-2xl">
+      <div className="relative z-20 px-6 md:pl-16 flex flex-col gap-6 w-full max-w-2xl">
         {/* Battle Mode - expandable */}
         <div>
           <motion.div
             whileHover={{ x: 16, scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowBattleMenu(!showBattleMenu)}
-            className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
+            className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-full max-w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
           >
             <div className="flex items-center gap-5">
               <div className="p-3.5 rounded-full bg-black/50 group-hover:bg-red-600 transition-colors">
@@ -112,7 +112,7 @@ export const Home: React.FC = () => {
               // I'll make it toggle.
               setShowCollectionMenu(!showCollectionMenu);
             }}
-            className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
+            className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-full max-w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
           >
             <div className="flex items-center gap-5">
               <div className="p-3.5 rounded-full bg-black/50 group-hover:bg-red-600 transition-colors">
@@ -146,8 +146,8 @@ export const Home: React.FC = () => {
       </div>
 
       {/* Bottom quote */}
-      <div className="absolute bottom-12 right-12 z-20 text-right">
-        <p className="text-zinc-500 text-xs italic uppercase tracking-widest mb-2">"在神蚀的创痕中，寻找最后的希望。"</p>
+      <div className="absolute bottom-12 right-6 md:right-12 z-20 text-right">
+        <p className="text-zinc-500 text-[10px] md:text-xs italic uppercase tracking-widest mb-2">"在神蚀的创痕中，寻找最后的希望。"</p>
       </div>
     </div>
   );
@@ -158,7 +158,7 @@ const MenuButton = ({ title, icon, description, to }: any) => (
     <motion.div 
       whileHover={{ x: 16, scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
-      className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
+      className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-full max-w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
     >
       <div className="flex items-center gap-5">
         <div className="p-3.5 rounded-full bg-black/50 group-hover:bg-red-600 transition-colors">{icon}</div>
@@ -176,7 +176,7 @@ const SubMenuButton = ({ title, desc, icon, to, onClick }: any) => {
     <motion.div
       whileHover={{ x: 10, scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
-      className="p-3 pl-6 rounded-r-2xl border-l-2 border-red-600/50 cursor-pointer w-[360px] bg-zinc-900/40 hover:bg-red-600/10 group transition-all"
+      className="p-3 pl-6 rounded-r-2xl border-l-2 border-red-600/50 cursor-pointer w-full max-w-[360px] bg-zinc-900/40 hover:bg-red-600/10 group transition-all"
     >
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-full bg-black/40 group-hover:bg-red-600/80 transition-colors">{icon}</div>

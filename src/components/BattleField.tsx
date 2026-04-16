@@ -2110,17 +2110,17 @@ export const BattleField: React.FC = () => {
                         <Zap className="w-4 h-4" />
                         菲晶支付 (Feijing Payment - Cost -3)
                       </div>
-                      <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
                         {me.hand.filter(c => c.feijingMark && (c.color === game.pendingQuery?.paymentColor || !game.pendingQuery?.paymentColor || game.pendingQuery?.paymentColor === 'NONE')).map(card => {
                           const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
                           return (
                             <motion.div
                               key={card.gamecardId}
-                              whileHover={{ y: -5 }}
+                              whileHover={{ y: -3 }}
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentFeijing(card.gamecardId)}
                               className={cn(
-                                "w-32 shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
                                 isSelected ? "border-blue-500 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >

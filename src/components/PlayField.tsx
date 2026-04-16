@@ -131,7 +131,7 @@ const CardListModal: React.FC<{
             <LogOut className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 custom-scrollbar">
           {cards?.map((card, i) => (
             <div 
               key={i} 

@@ -42,7 +42,7 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
     <>
       <nav className="h-16 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center px-6 fixed top-0 left-0 right-0 z-50">
         {/* Left Section: Logo */}
-        <div className="flex-1 flex items-center justify-start">
+        {/* <div className={cn("flex-1 items-center justify-start", isInGame ? "hidden lg:flex" : "flex")}>
           <Link 
             to={isInGame ? '#' : "/"} 
             className={cn(
@@ -53,7 +53,7 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
             <img src="/assets/logo.jpg" alt="Logo" className="w-10 h-10 rounded-lg object-cover border border-red-500/30" />
             <span className="text-xl font-black italic text-red-600 tracking-tighter">神蚀创痕</span>
           </Link>
-        </div>
+        </div> */}
 
         {/* Middle Section: Surrender Button */}
         {isInGame && (
@@ -75,8 +75,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
           <div className="flex items-center gap-2">
             {/* Coins */}
             {coins !== null && (
-              <Link 
-                to={isInGame ? '#' : "/store"} 
+              <Link
+                to={isInGame ? '#' : "/store"}
                 className={cn(
                   "flex items-center gap-1.5 bg-amber-900/20 border border-amber-500/20 rounded-full px-4 py-1.5 hover:border-amber-500/40 transition-colors",
                   isInGame && "opacity-50 cursor-not-allowed pointer-events-none"
@@ -88,8 +88,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
             )}
             {/* Crystals */}
             {crystals !== null && (
-              <Link 
-                to={isInGame ? '#' : "/collection?tab=CARDS"} 
+              <Link
+                to={isInGame ? '#' : "/collection?tab=CARDS"}
                 className={cn(
                   "flex items-center gap-1.5 bg-cyan-900/20 border border-cyan-500/20 rounded-full px-4 py-1.5 hover:border-cyan-500/40 transition-colors",
                   isInGame && "opacity-50 cursor-not-allowed pointer-events-none"
@@ -101,8 +101,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
             )}
           </div>
 
-          <Link 
-            to={isInGame ? '#' : "/deck-builder"} 
+          <Link
+            to={isInGame ? '#' : "/deck-builder"}
             className={cn(
               "flex items-center gap-2 text-zinc-400 hover:text-red-500 transition-colors text-sm font-bold uppercase tracking-wider",
               isInGame && "opacity-40 cursor-not-allowed pointer-events-none"
@@ -111,15 +111,15 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
             {isInGame ? <Lock className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
             我的卡组
           </Link>
-          <button 
+          <button
             onClick={onOpenRulebook}
             className="flex items-center gap-2 text-zinc-400 hover:text-red-500 transition-colors text-sm font-bold uppercase tracking-wider"
           >
             <BookOpen className="w-4 h-4" />
             简易规则书
           </button>
-          <Link 
-            to={isInGame ? '#' : "/profile"} 
+          <Link
+            to={isInGame ? '#' : "/profile"}
             className={cn(
               "flex items-center gap-2 text-zinc-400 hover:text-red-500 transition-colors text-sm font-bold uppercase tracking-wider",
               isInGame && "opacity-40 cursor-not-allowed pointer-events-none"
@@ -134,15 +134,17 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
 
         {/* Mobile Menu Toggle */}
         <div className="flex lg:hidden flex-1 justify-end items-center gap-4">
-          <div className="flex items-center gap-2 mr-2">
-            {coins !== null && (
-               <div className="flex items-center gap-1 bg-amber-900/20 border border-amber-500/20 rounded-full px-3 py-1">
-                 <Coins className="w-3.5 h-3.5 text-amber-400" />
-                 <span className="text-amber-300 font-bold text-xs">{coins.toLocaleString()}</span>
-               </div>
-            )}
-          </div>
-          <button 
+          {!isInGame && (
+            <div className="flex items-center gap-2 mr-2">
+              {coins !== null && (
+                <div className="flex items-center gap-1 bg-amber-900/20 border border-amber-500/20 rounded-full px-3 py-1">
+                  <Coins className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-amber-300 font-bold text-xs">{coins.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          )}
+          <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="p-2 text-zinc-400 hover:text-white transition-colors"
           >
@@ -162,8 +164,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
             className="fixed inset-0 z-[49] bg-zinc-950 pt-20 px-6 lg:hidden"
           >
             <div className="flex flex-col gap-6">
-              <Link 
-                to={isInGame ? '#' : "/deck-builder"} 
+              <Link
+                to={isInGame ? '#' : "/deck-builder"}
                 onClick={() => setIsMenuOpen(false)}
                 className={cn(
                   "flex items-center gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
@@ -173,7 +175,7 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
                 {isInGame ? <Lock className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5 flex-shrink-0" />}
                 <span>我的卡组</span>
               </Link>
-              <button 
+              <button
                 onClick={() => {
                   onOpenRulebook();
                   setIsMenuOpen(false);
@@ -183,8 +185,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
                 <BookOpen className="w-5 h-5 flex-shrink-0" />
                 <span>简易规则书</span>
               </button>
-              <Link 
-                to={isInGame ? '#' : "/profile"} 
+              <Link
+                to={isInGame ? '#' : "/profile"}
                 onClick={() => setIsMenuOpen(false)}
                 className={cn(
                   "flex items-center gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
@@ -196,8 +198,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
                 </div>
                 <span>个人信息</span>
               </Link>
-              <Link 
-                to={isInGame ? '#' : "/store"} 
+              <Link
+                to={isInGame ? '#' : "/store"}
                 onClick={() => setIsMenuOpen(false)}
                 className={cn(
                   "flex items-center justify-between gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
@@ -210,8 +212,8 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
                 </div>
                 <span className="text-amber-300 text-sm">{coins?.toLocaleString()}</span>
               </Link>
-              <Link 
-                to={isInGame ? '#' : "/collection?tab=CARDS"} 
+              <Link
+                to={isInGame ? '#' : "/collection?tab=CARDS"}
                 onClick={() => setIsMenuOpen(false)}
                 className={cn(
                   "flex items-center justify-between gap-4 text-zinc-200 p-4 bg-zinc-900 rounded-2xl border border-white/5 font-bold uppercase tracking-wider",
@@ -255,7 +257,7 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
                 <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
                   <AlertTriangle className="w-8 h-8 text-red-500" />
                 </div>
-                
+
                 <div>
                   <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-2">确定要投降吗？</h3>
                   <p className="text-zinc-400 text-sm leading-relaxed">

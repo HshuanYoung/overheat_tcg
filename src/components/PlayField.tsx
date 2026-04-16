@@ -161,7 +161,7 @@ const PlayerHalf: React.FC<{
 
   return (
     <div className={cn(
-      "flex-1 grid grid-cols-[60px_1fr_60px] md:grid-cols-[100px_1fr_100px] gap-1 md:gap-2 p-1 md:p-2 relative h-full min-h-0",
+      "flex-1 flex flex-col md:grid md:grid-cols-[100px_1fr_100px] gap-1 md:gap-2 p-1 md:p-2 relative h-full min-h-0",
       isOpponent ? "bg-red-500/5" : "bg-blue-500/5"
     )}>
       <CardListModal
@@ -173,83 +173,130 @@ const PlayerHalf: React.FC<{
         cardBackUrl={cardBackUrl}
       />
 
-      {/* LEFT COLUMN */}
-      <div className="flex flex-col gap-4 h-full min-h-0 justify-center">
+      {/* LEFT COLUMN: Deck/Grave (Opponent) or Mobile Folded Area */}
+      <div className={cn(
+        "flex md:flex-col gap-2 md:gap-4 h-auto md:h-full min-h-0 justify-center px-2 md:px-0",
+        isOpponent ? "" : "md:hidden hidden" // Player items handled in folded area below for mobile
+      )}>
         {isOpponent ? (
-          // Opponent Left: Deck, Grave, Exile
-          <div className="flex flex-col gap-2">
-            <CardSlot
-              card={null} isDeck label="DECK" count={player.deck?.length || 0}
-              className="border-white/20" cardBackUrl={cardBackUrl}
-            />
-            <CardSlot
-              card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
-              label="GRAVE" count={player.grave?.length || 0}
-              className="border-red-900/30" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
-              isFaceUp={true}
-              isOpponent={isOpponent}
-              displayMode="erosion_item"
-            />
-            <CardSlot
-              card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
-              label="EXILE" count={player.exile?.length || 0}
-              className="border-purple-900/30" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
-              isFaceUp={true}
-              isOpponent={isOpponent}
-              displayMode="erosion_item"
-            />
+          // Opponent Left: Deck, Grave, Exile (Desktop-ish but responsive)
+          <div className="flex flex-row md:flex-col gap-2 w-full md:w-auto">
+            <div className="w-12 md:w-auto shrink-0">
+              <CardSlot
+                card={null} isDeck label="DECK" count={player.deck?.length || 0}
+                className="border-white/20" cardBackUrl={cardBackUrl}
+              />
+            </div>
+            <div className="w-12 md:w-auto shrink-0">
+              <CardSlot
+                card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
+                label="GRAVE" count={player.grave?.length || 0}
+                className="border-red-900/30" cardBackUrl={cardBackUrl}
+                onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
+                isFaceUp={true}
+                isOpponent={isOpponent}
+                displayMode="erosion_item"
+              />
+            </div>
+            <div className="w-12 md:w-auto shrink-0 hidden md:block">
+              <CardSlot
+                card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
+                label="EXILE" count={player.exile?.length || 0}
+                className="border-purple-900/30" cardBackUrl={cardBackUrl}
+                onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
+                isFaceUp={true}
+                isOpponent={isOpponent}
+                displayMode="erosion_item"
+              />
+            </div>
           </div>
         ) : (
-          // Player Left: Item Zone
-          <div className="grid grid-cols-2 grid-rows-5 gap-1 h-full">
-            {Array.from({ length: 10 }).map((_, i) => {
-              const item = player.itemZone?.[i];
-              return (
-                <CardSlot
-                  key={i}
-                  card={item || null}
-                  label={`ITEM ${i + 1}`}
-                  onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
-                  cardBackUrl={cardBackUrl}
-                  isExhausted={item ? item.isExhausted : false}
-                  isSelectedForPayment={false}
-                  showCount={false}
-                  displayMode="erosion_item"
-                />
-              );
-            })}
-          </div>
+          null // Handled by desktop grid logic below
         )}
       </div>
+
+      {/* MOBILE FOLDED AREA (EROSION + ITEMS) - Tablet/Mobile Only */}
+      {!isOpponent && (
+        <div className="flex md:hidden items-center justify-between px-4 py-2 bg-black/40 border-b border-white/5 gap-4">
+          <button 
+            onClick={() => setViewingZone({ 
+              title: '侵蚀区 (Erosion Zone)', 
+              cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[]
+            })}
+            className="flex-1 flex items-center justify-between p-3 bg-red-950/20 rounded-xl border border-red-500/20"
+          >
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-red-500" />
+              <span className="text-[10px] font-black uppercase text-red-100">侵蚀 Area</span>
+            </div>
+            <span className="text-sm font-black text-red-500">{(player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)}</span>
+          </button>
+
+          <button 
+            onClick={() => setViewingZone({ 
+              title: '道具区 (Item Zone)', 
+              cards: player.itemZone?.filter(Boolean) as Card[]
+            })}
+            className="flex-1 flex items-center justify-between p-3 bg-blue-950/20 rounded-xl border border-blue-500/20"
+          >
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-blue-500" />
+              <span className="text-[10px] font-black uppercase text-blue-100">道具 Area</span>
+            </div>
+            <span className="text-sm font-black text-blue-500">{player.itemZone?.filter(Boolean).length || 0}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Desktop Item Grid (Left) */}
+      {!isOpponent && (
+        <div className="hidden md:grid grid-cols-2 grid-rows-5 gap-1 h-full">
+          {Array.from({ length: 10 }).map((_, i) => {
+            const item = player.itemZone?.[i];
+            return (
+              <CardSlot
+                key={i}
+                card={item || null}
+                label={`ITEM ${i + 1}`}
+                onClick={(e) => item && onCardClick?.(item, 'item', i, e)}
+                cardBackUrl={cardBackUrl}
+                isExhausted={item ? item.isExhausted : false}
+                isSelectedForPayment={false}
+                showCount={false}
+                displayMode="erosion_item"
+              />
+            );
+          })}
+        </div>
+      )}
+
 
       {/* CENTER COLUMN: HAND, UNIT, EROSION */}
       <div className={cn(
         "flex flex-col h-full min-h-0 justify-center",
-        isOpponent ? "gap-12" : "gap-6"
+        isOpponent ? "gap-2 md:gap-12" : "gap-2 md:gap-6"
       )}>
         {isOpponent ? (
           <>
             {/* Opponent Hand Area */}
-            <div className="flex items-center gap-4">
-              <div className="w-20 shrink-0">
+            <div className="flex items-center gap-2 md:gap-4 px-2 md:px-0">
+              <div className="w-12 md:w-20 shrink-0">
                 <CardSlot
                   card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
                   label="PLAY" count={player.playZone?.length || 0}
-                  className="border-yellow-500/30"
+                  className="border-yellow-500/30 font-black"
                   onPreview={onPreviewCard}
                   isOpponent={isOpponent}
                   cardBackUrl={cardBackUrl}
                 />
               </div>
-              <div className="flex-1 h-24 flex items-center justify-center gap-1 overflow-x-auto px-4 bg-black/20 rounded-xl border border-white/5 custom-scrollbar">
+              <div className="flex-1 h-16 md:h-24 flex items-center justify-center gap-0.5 md:gap-1 overflow-x-auto px-2 bg-black/20 rounded-xl border border-white/5 custom-scrollbar">
                 {player.hand?.map((card, i) => (
                   <div
                     key={i}
                     className={cn(
-                      "w-12 aspect-[3/4] -ml-8 first:ml-0 shadow-lg drop-shadow-md transition-all",
-                      !!player.isHandPublic ? "cursor-pointer hover:scale-110 hover:-translate-y-2 z-10" : "",
+                      "w-8 md:w-12 aspect-[3/4] -ml-4 md:-ml-8 first:ml-0 shadow-lg drop-shadow-md transition-all",
+                      !!player.isHandPublic ? "cursor-pointer hover:scale-110 z-10" : "",
                       isOpponent && "rotate-180"
                     )}
                     onClick={() => !!player.isHandPublic && onPreviewCard?.(card)}
@@ -262,15 +309,33 @@ const PlayerHalf: React.FC<{
                   </div>
                 ))}
                 {(player.hand?.length || 0) === 0 && (
-                  <div className="text-white/50 text-sm font-bold tracking-widest uppercase">
-                    手牌数量: 0
+                  <div className="text-white/50 text-[10px] md:text-sm font-black uppercase tracking-widest leading-none">
+                    NO HAND
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Opponent Erosion Zone */}
-            <div className="grid grid-cols-10 gap-1 h-16 scale-90 origin-bottom mb-8">
+            {/* Opponent Folded Info (Mobile) */}
+            <div className="flex md:hidden items-center justify-between px-4 py-1 gap-2">
+               <div className="flex-1 flex justify-between items-center px-3 py-1.5 bg-zinc-900/50 rounded-lg border border-white/5">
+                  <span className="text-[8px] font-black text-zinc-500 uppercase">Opponent Areas</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1" onClick={() => setViewingZone({ title: '敌方侵蚀区', cards: [...(player.erosionBack || []), ...(player.erosionFront || [])].filter(Boolean) as Card[] })}>
+                      <Layers className="w-3 h-3 text-red-500" />
+                      <span className="text-xs font-black">{(player.erosionBack?.length || 0) + (player.erosionFront?.length || 0)}</span>
+                    </div>
+                    <div className="flex items-center gap-1" onClick={() => setViewingZone({ title: '敌方道具区', cards: player.itemZone?.filter(Boolean) as Card[] })}>
+                      <Zap className="w-3 h-3 text-blue-500" />
+                      <span className="text-xs font-black">{player.itemZone?.filter(Boolean).length || 0}</span>
+                    </div>
+                  </div>
+               </div>
+            </div>
+
+
+            {/* Opponent Erosion Zone (Desktop) */}
+            <div className="hidden md:grid grid-cols-10 gap-1 h-16 scale-90 origin-bottom mb-8">
               {(() => {
                 const backCards = player.erosionBack?.filter(c => c !== null) || [];
                 const frontCards = player.erosionFront?.filter(c => c !== null) || [];
@@ -315,7 +380,7 @@ const PlayerHalf: React.FC<{
             </div>
 
             {/* Opponent Unit Zone */}
-            <div className="grid grid-cols-6 gap-2 min-h-[200px] items-center relative z-10 mt-6">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 min-h-[140px] md:min-h-[200px] items-center relative z-10 mt-2 md:mt-6 px-2 md:px-0">
               {Array.from({ length: 6 }).map((_, i) => {
                 const unit = player.unitZone?.[i];
                 return (
@@ -341,7 +406,7 @@ const PlayerHalf: React.FC<{
         ) : (
           <>
             {/* Player Unit Zone */}
-            <div className="grid grid-cols-6 gap-2 min-h-[200px] items-center relative z-10 mb-8">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 min-h-[140px] md:min-h-[200px] items-center relative z-10 mb-2 md:mb-8 px-2 md:px-0">
               {Array.from({ length: 6 }).map((_, i) => {
                 const unit = player.unitZone?.[i];
                 return (
@@ -364,8 +429,8 @@ const PlayerHalf: React.FC<{
               })}
             </div>
 
-            {/* Player Erosion Zone */}
-            <div className="grid grid-cols-10 gap-1 h-16 scale-90 origin-top mt-1 mb-10">
+            {/* Player Erosion Zone (Desktop) */}
+            <div className="hidden md:grid grid-cols-10 gap-1 h-16 scale-90 origin-top mt-1 mb-10">
               {(() => {
                 const backCards = player.erosionBack?.filter(c => c !== null) || [];
                 const frontCards = player.erosionFront?.filter(c => c !== null) || [];
@@ -409,8 +474,8 @@ const PlayerHalf: React.FC<{
             </div>
 
             {/* Player Hand Area */}
-            <div className="flex items-center gap-1 md:gap-2">
-              <div className="flex-1 relative min-h-[100px] md:min-h-[150px] flex items-center justify-center bg-black/20 rounded-xl border border-white/5 overflow-hidden">
+            <div className="flex items-center gap-1 md:gap-2 px-2 md:px-0">
+              <div className="flex-1 relative min-h-[80px] md:min-h-[150px] flex items-center justify-center bg-black/20 rounded-xl border border-white/5 overflow-hidden">
                 {player.hand?.map((card, i) => {
                   const total = player.hand.length;
                   const middle = (total - 1) / 2;
@@ -459,11 +524,14 @@ const PlayerHalf: React.FC<{
         )}
       </div>
 
-      {/* RIGHT COLUMN */}
-      <div className="flex flex-col gap-4 h-full min-h-0 justify-center">
+      {/* RIGHT COLUMN: Player deck/grave (Desktop) or Toggleable Mobile Sidebits */}
+      <div className={cn(
+        "flex md:flex-col gap-2 md:gap-4 h-auto md:h-full min-h-0 justify-center px-2 md:px-0",
+        isOpponent ? "md:grid hidden" : "" // Opponent items handled in folded area above for mobile
+      )}>
         {isOpponent ? (
-          // Opponent Right: Item Zone - Centered layout
-          <div className="grid grid-cols-2 grid-rows-5 gap-1 h-full">
+          // Opponent Right: Item Zone (Desktop)
+          <div className="hidden md:grid grid-cols-2 grid-rows-5 gap-1 h-full">
             {[4, 5, 2, 3, 6, 7, 0, 1, 8, 9].map((idx) => {
               const item = player.itemZone?.[idx];
               return (
@@ -483,31 +551,37 @@ const PlayerHalf: React.FC<{
             })}
           </div>
         ) : (
-          // Player Right: Exile, Grave, Deck
-          <div className="flex flex-col gap-2">
-            <CardSlot
-              card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
-              label="EXILE" count={player.exile?.length || 0}
-              className="border-purple-900/30"
-              onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
-              isFaceUp={true}
-              displayMode="erosion_item"
-              cardBackUrl={cardBackUrl}
-            />
-            <CardSlot
-              card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
-              label="GRAVE" count={player.grave?.length || 0}
-              className="border-red-900/30"
-              onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
-              isFaceUp={true}
-              displayMode="erosion_item"
-              cardBackUrl={cardBackUrl}
-            />
-            <CardSlot
-              card={null} isDeck label="DECK" count={player.deck?.length || 0}
-              className="border-white/20"
-              cardBackUrl={cardBackUrl}
-            />
+          // Player Right: Exile, Grave, Deck (Desktop & Mobile horizontal bar)
+          <div className="flex flex-row md:flex-col items-center gap-2 w-full md:w-auto">
+             <div className="w-12 md:w-auto shrink-0">
+              <CardSlot
+                card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
+                label="EXILE" count={player.exile?.length || 0}
+                className="border-purple-900/30 font-black"
+                onClick={() => setViewingZone({ title: 'Exile', cards: player.exile || [] })}
+                isFaceUp={true}
+                displayMode="erosion_item"
+                cardBackUrl={cardBackUrl}
+              />
+            </div>
+            <div className="w-12 md:w-auto shrink-0">
+              <CardSlot
+                card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
+                label="GRAVE" count={player.grave?.length || 0}
+                className="border-red-900/30 font-black"
+                onClick={() => setViewingZone({ title: 'Grave', cards: player.grave || [] })}
+                isFaceUp={true}
+                displayMode="erosion_item"
+                cardBackUrl={cardBackUrl}
+              />
+            </div>
+            <div className="w-12 md:w-auto shrink-0">
+               <CardSlot
+                card={null} isDeck label="DECK" count={player.deck?.length || 0}
+                className="border-white/20"
+                cardBackUrl={cardBackUrl}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -517,7 +591,7 @@ const PlayerHalf: React.FC<{
 
 export const PlayField: React.FC<PlayFieldProps> = ({ player, opponent, game, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers, selectedDefender, allianceInitiator, timer, cardBackUrl }) => {
   return (
-    <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-2 border-[#1a1a1a] rounded-xl shadow-2xl font-mono text-white select-none flex flex-col">
+    <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-y md:border-2 border-[#1a1a1a] md:rounded-xl shadow-2xl font-sans text-white select-none flex flex-col">
       {/* Background Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
 

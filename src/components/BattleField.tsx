@@ -730,7 +730,7 @@ export const BattleField: React.FC = () => {
 
   return (
     <div
-      className="h-screen pt-16 bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative"
+      className="h-screen pt-16 bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative safe-area-inset"
       onClick={() => setCardMenu(null)}
     >
       {/* Erosion Phase Overlay */}
@@ -982,20 +982,42 @@ export const BattleField: React.FC = () => {
 
 
       {/* Main Arena */}
-      <div className="flex-1 relative flex flex-col overflow-hidden bg-[#050505] p-2">
+      <div className="flex-1 relative flex flex-col overflow-hidden bg-[#050505]">
         {/* Top Bar: Phase & Turn */}
-        <div className="h-auto md:h-16 flex flex-col md:flex-row items-center justify-between px-4 md:px-6 py-2 md:py-0 bg-black/40 border-b border-white/5 backdrop-blur-md relative z-[1100] gap-2">
-          <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto justify-between md:justify-start">
-            <div className="flex flex-col">
-              <span className="text-[8px] md:text-[10px] text-white/40 uppercase font-black tracking-[0.2em]">Turn Count</span>
-              <span className="text-lg md:text-2xl font-black italic text-[#f27d26]">ROUND {game.turnCount}</span>
+        <div className="h-auto md:h-16 flex flex-col md:flex-row items-center justify-between px-2 md:px-6 py-1 md:py-0 bg-black/40 border-b border-white/5 backdrop-blur-md relative z-[1100] gap-1 md:gap-2">
+          <div className="flex items-center gap-2 md:gap-8 w-full md:w-auto justify-between md:justify-start">
+            {/* Round Display */}
+            <div className="flex flex-col items-center md:items-start min-w-[40px]">
+              <span className="text-[7px] md:text-[10px] text-white/40 uppercase font-black tracking-[0.1em] md:tracking-[0.2em] hidden md:block">Turn</span>
+              <span className="text-xl md:text-2xl font-black italic text-[#f27d26] leading-none">
+                {game.turnCount}
+              </span>
             </div>
 
-            <div className="h-8 w-px bg-white/10 hidden md:block" />
-            <div className="flex flex-col relative group">
+            <div className="h-8 w-px bg-white/10" />
+
+            {/* Turn Indicator Icon */}
+            <div className="flex items-center gap-2 md:hidden">
+              <div className={cn(
+                "w-10 h-10 rounded-full overflow-hidden border-2 transition-all",
+                game.playerIds[game.currentTurnPlayer] === myUid
+                  ? "border-[#f27d26] shadow-[0_0_15px_rgba(242,125,38,0.5)] scale-110"
+                  : "border-zinc-800 opacity-60"
+              )}>
+                {game.playerIds[game.currentTurnPlayer] === myUid
+                  ? <img src={authUser?.photoURL || 'assets/icons/myself.JPG'} className="w-full h-full object-cover" />
+                  : <img src="assets/icons/opponent.JPG" className="w-full h-full object-cover" />
+                }
+              </div>
+            </div>
+
+            <div className="h-8 w-px bg-white/10 md:block hidden" />
+
+            {/* Phase & Timer Column */}
+            <div className="flex flex-1 md:flex-none flex-col relative group">
               <div
                 className={cn(
-                  "flex flex-col cursor-pointer hover:bg-white/5 px-4 py-1 rounded transition-all border border-transparent",
+                  "flex flex-col cursor-pointer hover:bg-white/5 px-2 md:px-4 py-0.5 md:py-1 rounded transition-all border border-transparent",
                   showPhaseMenu && "bg-white/10 border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)]"
                 )}
                 onClick={() => {
@@ -1007,34 +1029,40 @@ export const BattleField: React.FC = () => {
                   }
                 }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between md:justify-start gap-2 md:gap-3">
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-white/40 uppercase font-black tracking-widest flex items-center gap-2">
-                      Current Phase
+                    <span className="text-[8px] md:text-[10px] text-white/40 uppercase font-black tracking-widest flex items-center gap-1 md:gap-2">
+                      <span className="hidden md:inline">Phase</span>
                       {['MULLIGAN', 'EROSION', 'COUNTERING', 'DEFENSE_DECLARATION', 'BATTLE_FREE'].includes(game.phase) && (
-                        <span className="inline-block w-2 h-2 rounded-full animate-pulse bg-orange-500" />
+                        <span className="inline-block w-1.5 h-1.5 md:w-2 md:h-2 rounded-full animate-pulse bg-orange-500" />
                       )}
                     </span>
-                    <span className="text-xl font-black italic text-white uppercase tracking-wider flex items-center gap-3">
-                      {game.phase === 'BATTLE_DECLARATION' && <Sword className="w-6 h-6 text-red-500" />}
-                      {game.phase === 'BATTLE_FREE' && <Sword className="w-6 h-6 text-orange-500" />}
-                      {game.phase === 'END' && <LogOut className="w-6 h-6 text-zinc-400" />}
-                      {(game.phase === 'BATTLE_DECLARATION' || game.phase === 'BATTLE_FREE' || game.currentTurnPlayer === (game.playerIds[0] === myUid ? 0 : 1)) && game.battleState?.attackers.length > 0 && <Flame className="w-6 h-6 text-red-500 animate-pulse" />}
+                    <span className="text-sm md:text-xl font-black italic text-white uppercase tracking-wider flex items-center gap-2 md:gap-3 truncate max-w-[120px] md:max-w-none">
+                      {game.phase === 'BATTLE_DECLARATION' && <Sword className="w-4 h-4 md:w-6 md:h-6 text-red-500" />}
                       {game.phase === 'COUNTERING'
-                        ? `${game.previousPhase?.replace(/_/g, ' ') || 'MAIN'}|COUNTERING`
-                        : game.phase.replace(/_/g, ' ')}
+                        ? `${game.previousPhase?.replace(/_/g, ' ') || 'MAIN'}|CNT`
+                        : game.phase.replace(/_/g, ' ').substring(0, 12)}
+                    </span>
+                  </div>
+
+                  {/* Visual Timer Stacked Inside on Mobile */}
+                  <div className="md:hidden flex flex-col items-end">
+                    <span className="text-[7px] text-white/40 font-black uppercase">Time</span>
+                    <span className={cn(
+                      "text-sm font-black tabular-nums",
+                      timer < 30 ? "text-red-500 animate-pulse" : "text-[#f27d26]"
+                    )}>
+                      {timer}s
                     </span>
                   </div>
                 </div>
               </div>
-
-
             </div>
-
           </div>
 
+          {/* Desktop Turn Indicator */}
           <div className={cn(
-            "flex items-center gap-2 md:gap-3 px-3 md:px-6 py-1.5 md:py-2 rounded-xl text-[10px] md:text-sm font-black uppercase italic tracking-[0.1em] md:tracking-[0.2em] shadow-2xl border border-white/10",
+            "hidden md:flex items-center gap-2 md:gap-3 px-3 md:px-6 py-1.5 md:py-2 rounded-xl text-[10px] md:text-sm font-black uppercase italic tracking-[0.1em] md:tracking-[0.2em] shadow-2xl border border-white/10",
             game.playerIds[game.currentTurnPlayer] === myUid
               ? "bg-[#f27d26] text-black animate-pulse"
               : "bg-zinc-800 text-white/50"

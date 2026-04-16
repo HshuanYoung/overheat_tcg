@@ -176,6 +176,7 @@ const PlayerHalf: React.FC<{
   setViewingZone?: (zone: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null) => void;
 }> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone }) => {
   if (!player) return null;
+  const romanNumerals = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ'];
 
 
   return (

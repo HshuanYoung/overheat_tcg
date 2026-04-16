@@ -720,7 +720,7 @@ export const DeckBuilder: React.FC = () => {
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-6 md:p-10 max-w-4xl w-full flex flex-col md:flex-row gap-8 md:gap-12 relative overflow-hidden shadow-2xl max-h-[90vh]"
+              className="bg-zinc-900 border border-white/10 rounded-[2rem] md:rounded-[3rem] p-0 md:p-10 max-w-5xl w-full flex flex-col md:flex-row gap-0 md:gap-12 relative overflow-y-auto md:overflow-hidden shadow-2xl max-h-[92vh] md:max-h-[90vh] custom-scrollbar"
               onClick={e => e.stopPropagation()}
             >
               <button
@@ -735,8 +735,8 @@ export const DeckBuilder: React.FC = () => {
                 <span className="text-[10px] font-black italic uppercase tracking-widest hidden md:block">返回 BACK</span>
               </button>
               {/* Large Card Image */}
-              <div className="w-full md:w-1/2 flex items-center justify-center">
-                <div className="relative group w-full max-w-[280px] md:max-w-[320px]">
+              <div className="w-full md:w-1/2 flex items-center justify-center p-6 md:p-0 bg-zinc-800/20 md:bg-transparent">
+                <div className="relative group w-full max-w-[240px] md:max-w-[320px]">
                   <div className={cn(
                     "absolute -inset-4 rounded-[2rem] blur-2xl opacity-20",
                     zoomedCard.rarity === 'UR' || zoomedCard.rarity === 'SER' ? 'bg-amber-500' : 'bg-red-600'
@@ -744,11 +744,11 @@ export const DeckBuilder: React.FC = () => {
                   <img
                     src={getCardImageUrl(zoomedCard.id, zoomedCard.rarity, false)}
                     alt={zoomedCard.fullName}
-                    className="relative w-full aspect-[3/4] object-cover rounded-[1.5rem] shadow-2xl border-4 border-white/10"
+                    className="relative w-full aspect-[3/4] object-cover rounded-[1.5rem] shadow-2xl border-4 border-white/10 max-h-[35vh] md:max-h-none"
                   />
-                  <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12 z-20 flex flex-col items-center">
-                    <span className="text-[10px] opacity-60">OWNED</span>
-                    <span>x{collection[zoomedCard.uniqueId] || 0}</span>
+                  <div className="absolute top-4 -right-2 bg-red-600 px-3 py-1.5 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12 z-20 flex flex-col items-center">
+                    <span className="text-[9px] opacity-60">OWNED</span>
+                    <span className="text-sm">x{collection[zoomedCard.uniqueId] || 0}</span>
                   </div>
                   <div className="absolute -bottom-4 -left-4 bg-zinc-800 px-4 py-2 rounded-xl border border-white/10 font-black italic shadow-2xl -rotate-6 z-20 flex flex-col items-center">
                     <span className="text-[10px] opacity-60 text-red-500">IN DECK</span>
@@ -757,20 +757,20 @@ export const DeckBuilder: React.FC = () => {
                 </div>
               </div>
 
-              {/* Console & Details */}
-              <div className="flex-1 flex flex-col p-2 md:p-6 overflow-hidden">
-                <div className="mb-6">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">{zoomedCard.id}</span>
-                    <div className="h-px w-12 bg-red-500/30" />
+                {/* Console & Details */}
+                <div className="flex-1 flex flex-col p-6 md:p-6 overflow-hidden md:overflow-visible">
+                  <div className="mb-6">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">{zoomedCard.id}</span>
+                      <div className="h-px w-12 bg-red-500/30" />
+                    </div>
+                    <h2 className="text-3xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-none mb-1">
+                      {zoomedCard.fullName}
+                    </h2>
+                    <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">{zoomedCard.specialName || '---'}</p>
                   </div>
-                  <h2 className="text-3xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-none mb-1">
-                    {zoomedCard.fullName}
-                  </h2>
-                  <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">{zoomedCard.specialName || '---'}</p>
-                </div>
 
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                  <div className="flex-1 md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar space-y-6">
                   {/* Registry Data Section */}
                   <div className="space-y-4">
                     <h3 className="text-[11px] font-black text-white/60 uppercase tracking-[0.4em] flex items-center gap-2">

@@ -663,11 +663,11 @@ export const BattleField: React.FC = () => {
         <h2 className="text-2xl md:text-4xl font-black italic text-[#f27d26] mb-2 md:mb-4 uppercase tracking-tighter">MULLIGAN PHASE</h2>
         <p className="text-zinc-400 mb-8 md:mb-12 uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-sm text-center">Click cards to preview. Select cards to redraw.</p>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:flex lg:flex-nowrap justify-center gap-4 md:gap-6 mb-12 max-w-full overflow-x-auto px-4">
+        <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-12 max-w-full overflow-x-auto px-4">
           {me.hand.map((card, i) => {
             const isSelected = selectedMulligan.includes(card.gamecardId);
             return (
-              <div key={`${card.gamecardId}-${i}`} className="flex flex-col items-center gap-2 md:gap-4 w-full lg:w-40 shrink-0">
+              <div key={`${card.gamecardId}-${i}`} className="flex flex-col items-center gap-2 md:gap-4 shrink-0">
                 <motion.div
                   whileHover={{ y: -10 }}
                   onClick={(e) => {
@@ -675,8 +675,8 @@ export const BattleField: React.FC = () => {
                     setCardMenu({ card, zone: 'hand', index: i, x: e.clientX, y: e.clientY });
                   }}
                   className={cn(
-                    "w-full cursor-pointer transition-all rounded-xl overflow-hidden border-2",
-                    isSelected ? "border-[#f27d26] shadow-[0_0_30px_rgba(242,125,38,0.3)]" : "border-white/5"
+                    "w-28 md:w-40 cursor-pointer transition-all rounded-xl overflow-hidden border-2",
+                    isSelected ? "border-[#f27d26] scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]" : "border-transparent opacity-60"
                   )}
                 >
                   <CardComponent card={card} disableZoom={true} cardBackUrl={cardBackUrl} />
@@ -2560,10 +2560,6 @@ export const BattleField: React.FC = () => {
                     className="w-full h-full object-contain"
                     referrerPolicy="no-referrer"
                   />
-                  {/* Floating Rarity Badge */}
-                  <div className="absolute top-4 right-4 px-3 py-1 bg-black/80 backdrop-blur-md rounded-xl border border-white/20 text-xs font-black italic text-[#f27d26]">
-                    {previewCard.rarity}
-                  </div>
                 </div>
               </div>
 

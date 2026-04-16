@@ -2,7 +2,7 @@ import { getAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X, Sparkles, ArrowLeft, Shuffle, ListFilter } from 'lucide-react';
+import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X, Sparkles, ArrowLeft, Shuffle, ListFilter, Zap, Shield } from 'lucide-react';
 import { CARD_LIBRARY } from '../data/cards';
 import { FACTIONS } from '../data/factions';
 import { Card as CardType, Deck } from '../types/game';
@@ -484,17 +484,17 @@ export const DeckBuilder: React.FC = () => {
           <div className="flex items-center gap-2 md:gap-4 overflow-x-auto pb-2 md:pb-0">
             <button
               onClick={() => setShowLibrary(true)}
-              className="lg:flex hidden items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400"
+              className="lg:flex hidden items-center gap-2 px-6 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400"
             >
               <Search className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">搜索卡牌 Library</span>
+              <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">搜索卡牌</span>
             </button>
             <button
               onClick={() => setShowLibrary(true)}
-              className="lg:hidden flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400"
+              className="lg:hidden flex items-center gap-2 px-6 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400"
             >
               <Search className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">搜索卡牌 Library</span>
+              <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">搜索卡牌</span>
             </button>
             <div className="flex gap-2">
               <button
@@ -563,20 +563,13 @@ export const DeckBuilder: React.FC = () => {
         "absolute lg:relative right-0 z-40 w-80 h-full border-l border-zinc-800 flex flex-col bg-zinc-900 transition-transform duration-300 shadow-2xl lg:shadow-none",
         showLibrary ? "translate-x-0" : "translate-x-full lg:hidden"
       )}>
-        <button
-          onClick={() => setShowLibrary(false)}
-          className="absolute top-4 left-4 p-2 text-zinc-400 flex items-center gap-2 hover:text-white transition-colors z-50 bg-black/40 rounded-full"
-        >
-          <ArrowLeft className="w-6 h-6" />
-          <span className="text-xs font-black italic uppercase tracking-widest">返回 BACK</span>
-        </button>
         <div className="p-4 border-b border-zinc-800 flex flex-col gap-4">
           <button
             onClick={() => setShowLibrary(false)}
-            className="flex items-center gap-3 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl border border-white/10 transition-all w-full text-zinc-300 md:hidden"
+            className="flex items-center gap-3 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl border border-white/10 transition-all w-full text-zinc-300"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span className="font-black italic tracking-tighter uppercase text-sm">隐藏库 HIDE LIBRARY</span>
+            <span className="font-black italic tracking-tighter uppercase text-sm">返回 BACK</span>
           </button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -735,10 +728,10 @@ export const DeckBuilder: React.FC = () => {
                   e.stopPropagation();
                   setZoomedCard(null);
                 }}
-                className="absolute top-6 right-6 z-[110] px-4 py-2 bg-red-600/90 hover:bg-red-500 border border-white/20 rounded-xl text-white shadow-2xl transition-all group flex items-center gap-2"
+                className="absolute top-6 left-6 z-[110] px-4 py-2 bg-zinc-800/90 hover:bg-zinc-700 border border-white/20 rounded-xl text-white shadow-2xl transition-all group flex items-center gap-2"
                 title="返回"
               >
-                <X className="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-90 transition-transform" />
+                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-1 transition-transform" />
                 <span className="text-[10px] font-black italic uppercase tracking-widest hidden md:block">返回 BACK</span>
               </button>
               {/* Large Card Image */}
@@ -753,69 +746,133 @@ export const DeckBuilder: React.FC = () => {
                     alt={zoomedCard.fullName}
                     className="relative w-full aspect-[3/4] object-cover rounded-[1.5rem] shadow-2xl border-4 border-white/10"
                   />
-                  <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12 z-20">
-                    x{collection[zoomedCard.uniqueId] || 0}
+                  <div className="absolute top-4 -right-4 bg-red-600 px-4 py-2 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12 z-20 flex flex-col items-center">
+                    <span className="text-[10px] opacity-60">OWNED</span>
+                    <span>x{collection[zoomedCard.uniqueId] || 0}</span>
+                  </div>
+                  <div className="absolute -bottom-4 -left-4 bg-zinc-800 px-4 py-2 rounded-xl border border-white/10 font-black italic shadow-2xl -rotate-6 z-20 flex flex-col items-center">
+                    <span className="text-[10px] opacity-60 text-red-500">IN DECK</span>
+                    <span>{deck.filter(c => c.id === zoomedCard.id).length} / 4</span>
                   </div>
                 </div>
               </div>
 
-              {/* Console */}
-              <div className="w-full md:w-1/2 flex flex-col justify-center">
-                <div className="mb-4">
-                  <span className="px-4 py-1.5 rounded-full text-xs font-black italic border bg-zinc-800 border-zinc-700 text-zinc-300">
-                    {zoomedCard.rarity} RARITY
-                  </span>
+              {/* Console & Details */}
+              <div className="flex-1 flex flex-col p-2 md:p-6 overflow-hidden">
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">{zoomedCard.id}</span>
+                    <div className="h-px w-12 bg-red-500/30" />
+                  </div>
+                  <h2 className="text-3xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-none mb-1">
+                    {zoomedCard.fullName}
+                  </h2>
+                  <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">{zoomedCard.specialName || '---'}</p>
                 </div>
-                <h2 className="text-3xl md:text-5xl font-black italic mb-2 tracking-tighter uppercase text-white">{zoomedCard.fullName}</h2>
-                <p className="text-zinc-500 font-bold mb-6 md:mb-10 uppercase tracking-widest text-sm">{zoomedCard.specialName || '---'}</p>
 
-                <div className="grid grid-cols-1 gap-4 md:gap-6">
-                  {/* Decompose */}
-                  <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
-                    <div>
-                      <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">DECOMPOSE 分解</p>
-                      <div className="flex items-center gap-2">
-                        <Trash2 className="w-5 h-5 text-red-500" />
-                        <span className="text-xl md:text-2xl font-black italic text-cyan-400">+{CRYSTAL_VALUES[zoomedCard.rarity]?.decompose || 0}</span>
-                        <X className="w-4 h-4 text-cyan-400" />
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                  {/* Registry Data Section */}
+                  <div className="space-y-4">
+                    <h3 className="text-[11px] font-black text-white/60 uppercase tracking-[0.4em] flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)]" />
+                      Registry Data
+                    </h3>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Type Box */}
+                      <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 flex flex-col justify-center">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">Type</span>
+                        <span className="text-lg font-black italic text-red-500 uppercase">{zoomedCard.type}</span>
+                      </div>
+
+                      <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 flex flex-col justify-center">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Shield className="w-3 h-3 text-blue-500" />
+                          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">AC Value</span>
+                        </div>
+                        <span className="text-xl font-black text-white">{zoomedCard.acValue}</span>
+                      </div>
+
+                      {/* God Mark Box */}
+                      <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 flex flex-col justify-center gap-1">
+                        <div className="flex items-center gap-2">
+                          <Zap className={cn("w-3 h-3", zoomedCard.godMark ? "text-red-500" : "text-zinc-600")} />
+                          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">God Mark</span>
+                        </div>
+                        <span className={cn("text-sm font-black italic uppercase", zoomedCard.godMark ? "text-red-500" : "text-zinc-600")}>
+                          {zoomedCard.godMark ? 'Active' : 'Inactive'}
+                        </span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDecompose(zoomedCard.uniqueId)}
-                      disabled={actionLoading || (collection[zoomedCard.uniqueId] || 0) <= 0}
-                      className={cn(
-                        "px-6 md:px-8 py-2 md:py-3 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase",
-                        (collection[zoomedCard.uniqueId] || 0) > 0
-                          ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
-                          : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
-                      )}
-                    >
-                      {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '分解'}
-                    </button>
                   </div>
 
-                  {/* Craft */}
-                  <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
-                    <div>
-                      <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">CRAFT 制作</p>
-                      <div className="flex items-center gap-2">
-                        <Plus className="w-5 h-5 text-green-500" />
-                        <span className="text-xl md:text-2xl font-black italic text-red-500">-{CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0}</span>
-                        <X className="w-4 h-4 text-cyan-400" />
+                  {/* Stats Grid (Only for Units) */}
+                  {zoomedCard.type === 'UNIT' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Power</span>
+                        <span className="text-2xl font-black text-blue-400">{zoomedCard.power}</span>
+                      </div>
+                      <div className="bg-zinc-800/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase mb-1">Damage</span>
+                        <span className="text-2xl font-black text-red-500">{zoomedCard.damage}</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleCraft(zoomedCard.uniqueId)}
-                      disabled={actionLoading || cardCrystals < (CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0)}
-                      className={cn(
-                        "px-6 md:px-8 py-2 md:py-3 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase",
-                        cardCrystals >= (CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0)
-                          ? "bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/20"
-                          : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
-                      )}
-                    >
-                      {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '制作'}
-                    </button>
+                  )}
+
+                  {/* Synthesis Console Area */}
+                  <div className="space-y-4 pt-4">
+                    <h3 className="text-[11px] font-black text-cyan-400 uppercase tracking-[0.4em] flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+                      Synthesis Console
+                    </h3>
+                    {/* Decompose */}
+                    <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
+                      <div>
+                        <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">DECOMPOSE 分解</p>
+                        <div className="flex items-center gap-2">
+                          <Trash2 className="w-5 h-5 text-red-500" />
+                          <span className="text-xl md:text-2xl font-black italic text-cyan-400">+{CRYSTAL_VALUES[zoomedCard.rarity]?.decompose || 0}</span>
+                          <X className="w-4 h-4 text-cyan-400" />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDecompose(zoomedCard.uniqueId)}
+                        disabled={actionLoading || (collection[zoomedCard.uniqueId] || 0) <= 0}
+                        className={cn(
+                          "px-6 md:px-8 py-2 md:py-3 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase",
+                          (collection[zoomedCard.uniqueId] || 0) > 0
+                            ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
+                            : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                        )}
+                      >
+                        {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '分解'}
+                      </button>
+                    </div>
+
+                    {/* Craft */}
+                    <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
+                      <div>
+                        <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">CRAFT 制作</p>
+                        <div className="flex items-center gap-2">
+                          <Plus className="w-5 h-5 text-green-500" />
+                          <span className="text-xl md:text-2xl font-black italic text-red-500">-{CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0}</span>
+                          <X className="w-4 h-4 text-cyan-400" />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleCraft(zoomedCard.uniqueId)}
+                        disabled={actionLoading || cardCrystals < (CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0)}
+                        className={cn(
+                          "px-6 md:px-8 py-2 md:py-3 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase",
+                          cardCrystals >= (CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0)
+                            ? "bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/20"
+                            : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                        )}
+                      >
+                        {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '制作'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 

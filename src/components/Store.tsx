@@ -310,7 +310,7 @@ export const Store: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-8 overflow-hidden"
+              className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center p-4 md:p-8 overflow-y-auto"
             >
               {/* Portal Background Glow */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -337,15 +337,15 @@ export const Store: React.FC = () => {
                   </div>
                   <button
                     onClick={revealAll}
-                    className="w-full md:w-auto px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase"
+                    className="w-full md:w-auto px-6 py-3 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/20 rounded-2xl font-black italic text-xs md:text-sm transition-all uppercase"
                   >
-                    全部揭开 Reveal All
+                    全部揭开 REVEAL ALL
                   </button>
                 </div>
 
-                {/* Cards Grid - Centered items with larger size */}
-                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto">
-                  <div className="flex flex-wrap items-center justify-center gap-4 md:gap-10 p-4 max-w-6xl mx-auto">
+                {/* Cards Grid - Forcing 3+2 on mobile via width restriction */}
+                <div className="flex-1 flex flex-col items-center justify-center my-4">
+                  <div className="flex flex-wrap items-center justify-center gap-3 md:gap-10 p-2 md:p-4 max-w-[320px] md:max-w-6xl mx-auto">
                     {drawnCards.map((drawn, i) => {
                       const card = getCardInfo(drawn.id);
                       return (
@@ -364,7 +364,7 @@ export const Store: React.FC = () => {
                             stiffness: 100,
                             delay: i * 0.05
                           }}
-                          className="relative w-40 md:w-64 aspect-[3/4] perspective-1000 group cursor-pointer shrink-0"
+                          className="relative w-[90px] md:w-64 aspect-[3/4] perspective-1000 group cursor-pointer shrink-0"
                           onClick={() => revealCard(i)}
                         >
                           {/* Hover Halo */}
@@ -379,7 +379,7 @@ export const Store: React.FC = () => {
                           >
                             {/* Card Back (Face Down) */}
                             <div className={cn(
-                              "absolute inset-0 backface-hidden rounded-2xl border-2 border-white/10 bg-zinc-900 group-hover:border-red-500/50 flex flex-col items-center justify-center p-4 transition-colors",
+                              "absolute inset-0 backface-hidden rounded-xl md:rounded-2xl border-2 border-white/10 bg-zinc-900 group-hover:border-red-500/50 flex flex-col items-center justify-center p-2 md:p-4 transition-colors",
                               "shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
                             )}>
                               <img src="/assets/card_bg/default_card_bg.jpg" className="absolute inset-0 w-full h-full object-cover opacity-20 rounded-2xl grayscale" />
@@ -391,7 +391,7 @@ export const Store: React.FC = () => {
 
                             {/* Card Front (Revealed) */}
                             <div className={cn(
-                              "absolute inset-0 backface-hidden rotateY-180 rounded-2xl border-2 bg-zinc-900 overflow-hidden",
+                              "absolute inset-0 backface-hidden rotateY-180 rounded-xl md:rounded-2xl border-2 bg-zinc-900 overflow-hidden",
                               RARITY_COLORS[drawn.rarity] || "border-zinc-800",
                               drawn.revealed && "shadow-[0_0_40px_rgba(255,255,255,0.1)] ring-2 ring-white/10",
                               "shadow-[0_15px_40px_rgba(0,0,0,0.7)]"

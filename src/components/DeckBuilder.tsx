@@ -480,6 +480,7 @@ export const DeckBuilder: React.FC = () => {
               {deck.length} / 50
             </span>
           </div>
+        </div>
           <div className="flex items-center gap-2 md:gap-4 overflow-x-auto pb-2 md:pb-0">
             <button 
               onClick={() => setShowLibraryMobile(true)}

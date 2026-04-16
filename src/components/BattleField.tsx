@@ -738,9 +738,6 @@ export const BattleField: React.FC = () => {
                         {previewCard.fullName}
                       </h2>
                     </div>
-                    <button onClick={() => setPreviewCard(null)} className="p-2 hover:bg-white/5 rounded-full transition-colors">
-                      <X className="w-8 h-8 text-white/20 hover:text-white" />
-                    </button>
                   </div>
 
                   <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-8">
@@ -822,6 +819,18 @@ export const BattleField: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Fixed Close Button for Mobile Accessibility */}
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewCard(null);
+                }}
+                className="fixed top-6 right-6 md:top-10 md:right-10 z-[1100] p-4 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl text-white shadow-2xl hover:bg-white/10 transition-all group"
+              >
+                <X className="w-8 h-8 md:w-10 md:h-10 group-hover:scale-110 transition-transform" />
+                <span className="sr-only">Close Details</span>
+              </button>
             </motion.div>
           )}
         </AnimatePresence>

@@ -1054,6 +1054,19 @@ export const BattleField: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* GAMELOG Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowFullLogs(true)}
+              className="px-3 md:px-5 py-1.5 md:py-2 bg-zinc-800/80 border border-white/10 rounded-full flex items-center gap-2 group hover:bg-[#f27d26]/20 transition-all ml-auto md:ml-0"
+            >
+              <Send className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 text-[#f27d26]" />
+              <span className="text-[8px] md:text-[11px] font-black text-white/90 uppercase tracking-[0.2em] italic group-hover:text-white">
+                GAMELOG
+              </span>
+            </motion.button>
           </div>
 
           {/* Desktop Turn Indicator */}
@@ -1162,38 +1175,6 @@ export const BattleField: React.FC = () => {
                   cardBackUrl={cardBackUrl}
                 />
               )}
-
-              {/* Floating Center Logs (Centered and Two-Line) */}
-              <div className={cn(
-                "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[500] flex flex-col items-center gap-4 pointer-events-auto transition-all duration-500",
-                (previewCard || pendingPlayCard || game.pendingQuery || game.currentProcessingItem || game.phase === 'EROSION' || game.phase === 'RESULT') && "opacity-0 pointer-events-none scale-95"
-              )}>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-col items-center gap-3"
-                >
-                  {/* Line 1: Information Line */}
-                  <div className="bg-black/80 backdrop-blur-2xl border border-white/20 px-8 py-4 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-t-white/30 max-w-[90vw] md:max-w-xl text-center">
-                    <span className="text-xs md:text-sm font-black text-white uppercase tracking-tight leading-relaxed italic">
-                      {game.logs.length > 0 ? game.logs[game.logs.length - 1] : "Duel initializing..."}
-                    </span>
-                  </div>
-
-                  {/* Line 2: History Button */}
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowFullLogs(true)}
-                    className="bg-zinc-900/90 backdrop-blur-xl border border-[#f27d26]/40 px-6 py-2 rounded-full shadow-2xl flex items-center gap-3 group"
-                  >
-                    <Send className="w-3 h-3 text-[#f27d26] group-hover:rotate-12 transition-transform" />
-                    <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.3em]">
-                      VIEW FULL HISTORY
-                    </span>
-                  </motion.button>
-                </motion.div>
-              </div>
             </div>
           </div>
         </div>

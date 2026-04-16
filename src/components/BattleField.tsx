@@ -41,6 +41,7 @@ export const BattleField: React.FC = () => {
   const [erosionChoice, setErosionChoice] = useState<'A' | 'B' | 'C' | null>(null);
   const [selectedQueryIds, setSelectedQueryIds] = useState<string[]>([]);
   const [favoriteBackId, setFavoriteBackId] = useState<string>('default');
+  const [showFullLogs, setShowFullLogs] = useState(false);
 
   const [timer, setTimer] = useState<number>(30);
   const [cardMenu, setCardMenu] = useState<{
@@ -965,7 +966,10 @@ export const BattleField: React.FC = () => {
       {/* Main Arena */}
       <div className="flex-1 relative flex flex-col overflow-hidden bg-[#050505]">
         {/* Top Bar: Phase & Turn */}
-        <div className="h-auto md:h-16 flex flex-col md:flex-row items-center justify-between px-2 md:px-6 py-1 md:py-0 bg-black/40 border-b border-white/5 backdrop-blur-md relative z-[1100] gap-1 md:gap-2">
+        <div className={cn(
+          "h-auto md:h-16 flex flex-col md:flex-row items-center justify-between px-2 md:px-6 py-1 md:py-0 bg-black/40 border-b border-white/5 backdrop-blur-md relative z-[1100] gap-1 md:gap-2 transition-all duration-300",
+          previewCard && "opacity-0 pointer-events-none"
+        )}>
           <div className="flex items-center gap-2 md:gap-8 w-full md:w-auto justify-between md:justify-start">
             {/* Round Display */}
             <div className="flex flex-col items-center md:items-start min-w-[40px]">
@@ -1118,14 +1122,10 @@ export const BattleField: React.FC = () => {
 
             <span className="text-[10px] font-black uppercase italic tracking-widest text-white/40 mb-4 flex items-center gap-2">
               <div className="w-1 h-1 bg-[#f27d26] rounded-full" />
-              Battle Logs
+              Battle Statistics
             </span>
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-              {game.logs.slice().map((log, i) => (
-                <div key={i} className="text-[11px] font-mono text-white/60 leading-relaxed border-l border-white/10 pl-3 hover:text-white/90 transition-colors">
-                  {log}
-                </div>
-              ))}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar text-xs text-white/30 italic">
+              Use the center log panel to view game history.
             </div>
           </div>
 
@@ -1151,6 +1151,23 @@ export const BattleField: React.FC = () => {
                   cardBackUrl={cardBackUrl}
                 />
               )}
+
+              {/* Floating Center Logs */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[500] flex flex-col items-center gap-2 pointer-events-auto">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowFullLogs(true)}
+                  className="bg-black/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full shadow-2xl flex items-center gap-3 group overflow-hidden max-w-[80vw] md:max-w-md"
+                >
+                  <Send className="w-3 h-3 text-[#f27d26] group-hover:translate-x-1 transition-transform" />
+                  <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest truncate italic">
+                    {game.logs.length > 0 ? game.logs[game.logs.length - 1] : "Waiting for duel start..."}
+                  </span>
+                  <div className="h-4 w-px bg-white/10" />
+                  <span className="text-[8px] font-black text-[#f27d26]">HISTORY</span>
+                </motion.button>
+              </div>
             </div>
           </div>
         </div>
@@ -2606,57 +2623,31 @@ export const BattleField: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Effects Section */}
-                  <div className="space-y-4 pt-4">
-                    <h3 className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.3em] flex items-center gap-3">
-                      Abilities
-                      <div className="h-px flex-1 bg-gradient-to-r from-[#f27d26]/20 to-transparent" />
-                    </h3>
-                    <div className="grid gap-3">
-                      {previewCard.effects && previewCard.effects.length > 0 ? (
-                        previewCard.effects.map((effect, i) => (
-                          <div key={i} className="bg-white/5 rounded-2xl p-4 md:p-5 border border-white/10 space-y-2 group hover:bg-white/[0.07] transition-colors">
-                            <div className="flex items-center justify-between">
-                              <span className={cn(
-                                "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 rounded-full border shadow-lg",
-                                effect.type === 'ACTIVATE' ? "bg-green-500/20 border-green-500/50 text-green-400" :
-                                effect.type === 'AUTO' ? "bg-blue-500/20 border-blue-500/50 text-blue-400" :
-                                "bg-zinc-800 border-white/10 text-zinc-400"
-                              )}>
-                                {effect.type}
-                              </span>
-                            </div>
-                            <p className="text-white/80 text-xs md:text-sm leading-relaxed font-medium">
-                              {effect.description}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="py-8 md:py-12 text-center opacity-20 italic text-sm tracking-widest">No active effects</div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Influencing Effects Section */}
-                  {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 && (
-                    <div className="space-y-4 pt-4 border-t border-white/5">
-                      <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] flex items-center gap-3">
-                        Influenced By / 受到影响
+                  {/* Influencing Effects Section (Renamed and Promoted) */}
+                  {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 ? (
+                    <div className="space-y-4 pt-4">
+                      <h3 className="text-[11px] font-black text-blue-400 uppercase tracking-[0.3em] flex items-center gap-3">
+                        Active Influences on {previewCard.fullName}
                         <div className="h-px flex-1 bg-gradient-to-r from-blue-400/20 to-transparent" />
                       </h3>
-                      <div className="grid gap-2">
+                      <div className="grid gap-3">
                         {previewCard.influencingEffects.map((item, i) => (
-                          <div key={i} className="bg-blue-500/5 rounded-xl p-3 border border-blue-500/10">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[8px] font-black text-blue-400/60 uppercase">Source</span>
-                              <span className="text-[10px] font-black text-blue-300 italic">{item.sourceCardName}</span>
+                          <div key={i} className="bg-blue-500/5 rounded-2xl p-4 md:p-5 border border-blue-500/10 space-y-2 group hover:bg-blue-500/10 transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] md:text-[10px] font-black px-3 py-1 bg-blue-500/20 border border-blue-500/40 text-blue-300 rounded-full italic tracking-widest uppercase">
+                                Effect Source: {item.sourceCardName}
+                              </span>
                             </div>
-                            <p className="text-white/70 text-[11px] leading-relaxed">
+                            <p className="text-white/90 text-xs md:text-sm leading-relaxed font-medium">
                               {item.description}
                             </p>
                           </div>
                         ))}
                       </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 pt-4 opacity-30 italic text-center py-10">
+                      <p className="text-xs tracking-widest text-[#f27d26]">No external influences currently active</p>
                     </div>
                   )}
 
@@ -2685,6 +2676,52 @@ export const BattleField: React.FC = () => {
             </button>
           </motion.div>
         )}
+        <AnimatePresence>
+          {showFullLogs && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
+              onClick={() => setShowFullLogs(false)}
+            >
+              <div 
+                className="max-w-2xl w-full bg-zinc-900 border border-white/10 rounded-[2.5rem] flex flex-col p-8 md:p-12 gap-8 shadow-[0_0_100px_rgba(242,125,38,0.1)] relative"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.4em]">Chronicle</span>
+                    <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter">BATTLE LOGS</h2>
+                  </div>
+                  <button 
+                    onClick={() => setShowFullLogs(false)}
+                    className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all"
+                  >
+                    <X className="w-6 h-6 text-white" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-4 max-h-[60vh]">
+                  {game.logs.slice().reverse().map((log, i) => (
+                    <div key={i} className="group flex gap-4">
+                      <div className="w-1 h-auto bg-gradient-to-b from-[#f27d26] to-transparent opacity-20 group-hover:opacity-100 transition-opacity rounded-full" />
+                      <div className="flex-1 py-1">
+                        <p className="text-white/60 text-xs md:text-sm font-medium leading-relaxed group-hover:text-white transition-colors">
+                          {log}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="flex justify-center pt-4 opacity-20">
+                  <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-widest">End of Record</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </AnimatePresence>
     </div>
   );

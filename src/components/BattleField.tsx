@@ -676,7 +676,7 @@ export const BattleField: React.FC = () => {
                   }}
                   className={cn(
                     "w-full cursor-pointer transition-all rounded-xl overflow-hidden border-2",
-                    isSelected ? "border-[#f27d26] scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]" : "border-transparent opacity-60"
+                    isSelected ? "border-[#f27d26] shadow-[0_0_30px_rgba(242,125,38,0.3)]" : "border-white/5"
                   )}
                 >
                   <CardComponent card={card} disableZoom={true} cardBackUrl={cardBackUrl} />

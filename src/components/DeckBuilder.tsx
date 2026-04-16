@@ -558,9 +558,10 @@ export const DeckBuilder: React.FC = () => {
       )}>
         <button 
           onClick={() => setShowLibraryMobile(false)}
-          className="lg:hidden absolute top-4 left-4 p-2 text-zinc-400"
+          className="lg:hidden absolute top-4 left-4 p-2 text-zinc-400 flex items-center gap-2 hover:text-white transition-colors"
         >
-          <X className="w-6 h-6" />
+          <ArrowLeft className="w-6 h-6" />
+          <span className="text-xs font-black italic uppercase tracking-widest">返回 BACK</span>
         </button>
         <div className="p-4 border-b border-zinc-800">
           <div className="relative">
@@ -708,6 +709,15 @@ export const DeckBuilder: React.FC = () => {
             onClick={() => setZoomedCard(null)}
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 cursor-default"
           >
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setZoomedCard(null);
+              }}
+              className="fixed top-4 right-4 md:top-10 md:right-10 z-[110] p-3 md:p-4 bg-zinc-800/80 border border-white/10 rounded-2xl text-white shadow-2xl hover:bg-zinc-700 transition-all group"
+            >
+              <X className="w-6 h-6 md:w-8 md:h-8 group-hover:scale-110 transition-transform" />
+            </button>
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}

@@ -1,5 +1,6 @@
 import { Card, GameState, PlayerState, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { EventEngine } from '../services/EventEngine';
 
 const card: Card = {
   id: '20400020',
@@ -166,12 +167,43 @@ const card: Card = {
           type: 'DISCARD_CARD',
           targetFilter: { gamecardId: discardId }
         }, card);
+      },
+      execute: async (card, gameState, playerState) => {
+        const currentZone = card.cardlocation as 'EROSION_FRONT' | 'EROSION_BACK';
+        const mainEffect = card.effects?.[0];
 
-        // Force play self
-        await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-          type: 'FORCE_PLAY',
-          targetFilter: { gamecardId: card.gamecardId }
-        }, card);
+        AtomicEffectExecutor.moveCard(
+          gameState,
+          playerState.uid,
+          currentZone,
+          playerState.uid,
+          'PLAY',
+          card.gamecardId,
+          true,
+          { effectSourcePlayerUid: playerState.uid, effectSourceCardId: card.gamecardId }
+        );
+
+        EventEngine.dispatchEvent(gameState, {
+          type: 'CARD_PLAYED',
+          sourceCard: card,
+          playerUid: playerState.uid,
+          sourceCardId: card.gamecardId
+        });
+
+        if (mainEffect?.execute) {
+          await (mainEffect.execute as any)(card, gameState, playerState);
+        }
+
+        AtomicEffectExecutor.moveCard(
+          gameState,
+          playerState.uid,
+          'PLAY',
+          playerState.uid,
+          'GRAVE',
+          card.gamecardId,
+          true,
+          { effectSourcePlayerUid: playerState.uid, effectSourceCardId: card.gamecardId }
+        );
       }
     }
   ],

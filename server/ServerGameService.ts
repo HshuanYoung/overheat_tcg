@@ -175,6 +175,9 @@ export const ServerGameService = {
     if (card.basePower !== undefined) card.power = card.basePower;
     if (card.baseDamage !== undefined) card.damage = card.baseDamage;
     if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
+    card.isrush = card.baseIsrush ?? false;
+    card.canAttack = card.baseCanAttack ?? true;
+    card.godMark = card.baseGodMark ?? card.godMark;
     if (card.baseCanActivateEffect !== undefined) {
       card.canActivateEffect = card.baseCanActivateEffect;
     } else {
@@ -339,6 +342,10 @@ export const ServerGameService = {
     }
 
     if (!card) return false;
+
+    if ((targetZone === 'HAND' || targetZone === 'DECK') && sourceZone !== 'HAND' && sourceZone !== 'DECK') {
+      ServerGameService.refreshCardAsNewInstance(card);
+    }
 
     // Movement Replacement logic (e.g. 10401041)
     if (options?.isEffect && (targetZone === 'HAND' || targetZone === 'DECK' || targetZone === 'EROSION_FRONT' || targetZone === 'EROSION_BACK')) {

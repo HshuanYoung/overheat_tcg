@@ -730,6 +730,37 @@ export class AtomicEffectExecutor {
 
     if (!card) return;
 
+    if ((toZone === 'HAND' || toZone === 'DECK') && fromZone !== 'HAND' && fromZone !== 'DECK') {
+      const newGamecardId = Math.random().toString(36).substring(2, 10);
+      card.gamecardId = newGamecardId;
+      card.runtimeFingerprint = `FP_${newGamecardId}_${Date.now()}`;
+      card.equipTargetId = undefined;
+      card.isExhausted = false;
+      card.displayState = 'FRONT_UPRIGHT';
+      card.canResetCount = 0;
+      card.hasAttackedThisTurn = false;
+      card.usedShenyiThisTurn = false;
+      card.playedTurn = undefined;
+      card.silencedEffectIds = [];
+      card.temporaryPowerBuff = 0;
+      card.temporaryDamageBuff = 0;
+      card.temporaryRush = false;
+      card.temporaryCanAttackAny = false;
+      card.temporaryBuffSources = {};
+      card.influencingEffects = [];
+      if (card.basePower !== undefined) card.power = card.basePower;
+      if (card.baseDamage !== undefined) card.damage = card.baseDamage;
+      if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
+      card.isrush = card.baseIsrush ?? false;
+      card.canAttack = card.baseCanAttack ?? true;
+      card.godMark = card.baseGodMark ?? card.godMark;
+      if (card.baseCanActivateEffect !== undefined) {
+        card.canActivateEffect = card.baseCanActivateEffect;
+      } else {
+        card.canActivateEffect = true;
+      }
+    }
+
     // Movement Replacement logic (e.g. 10401041)
     if (isEffect && (toZone === 'HAND' || toZone === 'DECK' || toZone === 'EROSION_FRONT' || toZone === 'EROSION_BACK')) {
       if (card.effects) {

@@ -26,7 +26,7 @@ const trigger_10401041: CardEffect = {
       playerState.erosionBack.filter(c => c !== null).length;
     if (erosionCount < 1 || erosionCount > 4) return false;
 
-    if (!playerState.unitZone.some(u => u === null)) {
+    if (!playerState.unitZone.some(u => u === null) && playerState.unitZone.length >= 6) {
       return false;
     }
 
@@ -34,11 +34,18 @@ const trigger_10401041: CardEffect = {
     return blueUnitsCount >= 1;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
-    await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-      type: 'MOVE_FROM_EROSION',
-      targetFilter: { gamecardId: instance.gamecardId },
-      destinationZone: 'UNIT'
-    }, instance);
+    AtomicEffectExecutor.moveCard(
+      gameState,
+      playerState.uid,
+      'EROSION_FRONT',
+      playerState.uid,
+      'UNIT',
+      instance.gamecardId,
+      true,
+      { effectSourcePlayerUid: playerState.uid, effectSourceCardId: instance.gamecardId }
+    );
+    instance.isExhausted = false;
+    instance.playedTurn = gameState.turnCount;
   }
 };
 

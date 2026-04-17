@@ -16,6 +16,9 @@ Object.keys(modules).forEach((path) => {
 export function hydrateCard(card: Card | null) {
   if (!card || !card.id) return;
   const masterCard = CARD_LIBRARY[card.id];
+  if (!card.baseColorReq) {
+    card.baseColorReq = { ...(masterCard?.colorReq || card.colorReq || {}) };
+  }
   if (masterCard && masterCard.effects) {
     // Re-assign effects to restore functions lost during JSON serialization
     card.effects = masterCard.effects.map((originalEffect, idx) => {

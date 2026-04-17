@@ -117,6 +117,10 @@ export class EventEngine {
       ];
       allCards.forEach(card => {
         if (card) {
+          if (!card.baseColorReq) {
+            card.baseColorReq = { ...(card.colorReq || {}) };
+          }
+          card.colorReq = { ...(card.baseColorReq || {}) };
           if (card.basePower !== undefined) card.power = card.basePower + (card.temporaryPowerBuff || 0);
           if (card.baseDamage !== undefined) card.damage = card.baseDamage + (card.temporaryDamageBuff || 0);
           if (card.baseIsrush !== undefined) card.isrush = card.baseIsrush || !!card.temporaryRush;
@@ -183,15 +187,17 @@ export class EventEngine {
 
     Object.values(gameState.players).forEach(p => {
       p.itemZone.forEach(item => {
-        if (item && item.isEquip && item.equipTargetId) {
+        if (item && item.equipTargetId) {
           const target = allUnitMap.get(item.equipTargetId);
           if (target) {
             // Add entry to Equipment
             if (!item.influencingEffects) item.influencingEffects = [];
-            item.influencingEffects.push({
-              sourceCardName: target.fullName,
-              description: '已装备此单位'
-            });
+            if (!item.influencingEffects.some(e => e.sourceCardName === target.fullName && e.description === '已装备此单位')) {
+              item.influencingEffects.push({
+                sourceCardName: target.fullName,
+                description: '已装备此单位'
+              });
+            }
 
             // Ensure Unit also shows it (most scripts do this, but defensive check)
             if (!target.influencingEffects) target.influencingEffects = [];

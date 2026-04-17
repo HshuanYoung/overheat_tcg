@@ -185,6 +185,7 @@ export interface Card {
   type: CardType;
   color: CardColor;
   colorReq: { [color in CardColor]?: number };
+  baseColorReq?: { [color in CardColor]?: number };
   acValue: number;
   baseAcValue?: number;
   power?: number;

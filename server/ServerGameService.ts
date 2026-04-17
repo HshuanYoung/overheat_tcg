@@ -10,6 +10,9 @@ export const ServerGameService = {
   hydrateCard(card: Card | null) {
     if (!card || (!card.id && !card.uniqueId)) return;
     const masterCard = SERVER_CARD_LIBRARY[card.uniqueId] || SERVER_CARD_LIBRARY[card.id];
+    if (!card.baseColorReq) {
+      card.baseColorReq = { ...(masterCard?.colorReq || card.colorReq || {}) };
+    }
     if (masterCard && masterCard.effects) {
       // Re-assign effects to restore functions lost during JSON serialization
       card.effects = masterCard.effects.map((originalEffect, idx) => {
@@ -297,7 +300,7 @@ export const ServerGameService = {
       } else {
         sourceArray.splice(index, 1);
       }
-      EventEngine.handleCardLeftZone(gameState, sourcePlayerId, card, sourceZone, options?.isEffect);
+      EventEngine.handleCardLeftZone(gameState, sourcePlayerId, card, sourceZone, options?.isEffect, targetZone);
     }
 
     if (!card) return false;
@@ -2781,6 +2784,7 @@ export const ServerGameService = {
     const tempId = Math.random().toString(36).substring(7);
     const initializedDeck = deck.map(card => ({
       ...card,
+      baseColorReq: card.baseColorReq ?? { ...(card.colorReq || {}) },
       basePower: card.basePower ?? card.power,
       baseDamage: card.baseDamage ?? card.damage,
       baseIsrush: card.baseIsrush ?? card.isrush,
@@ -2851,6 +2855,7 @@ export const ServerGameService = {
 
     const initializedDeck = deck.map(card => ({
       ...card,
+      baseColorReq: card.baseColorReq ?? { ...(card.colorReq || {}) },
       basePower: card.basePower ?? card.power,
       baseDamage: card.baseDamage ?? card.damage,
       baseIsrush: card.baseIsrush ?? card.isrush,
@@ -3225,6 +3230,7 @@ export const ServerGameService = {
   async createPracticeGameState(deck: Card[], playerUid: string, playerName: string, turnTimerLimit?: number): Promise<GameState> {
     const initializedDeck = deck.map(card => ({
       ...card,
+      baseColorReq: card.baseColorReq ?? { ...(card.colorReq || {}) },
       basePower: card.basePower ?? card.power,
       baseDamage: card.baseDamage ?? card.damage,
       baseIsrush: card.baseIsrush ?? card.isrush,

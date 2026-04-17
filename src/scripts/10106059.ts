@@ -9,11 +9,24 @@ const continuous_10106059_color: CardEffect = {
   applyContinuous: (gameState: GameState, card: Card) => {
     const player = gameState.players[card.ownerUid];
     if (!player) return;
-    
-    player.hand.forEach(h => {
-      if (h && h.type === 'ITEM' && h.isEquip) {
-        h.colorReq = {};
-      }
+
+    const zones = [
+      player.hand,
+      player.deck,
+      player.grave,
+      player.exile,
+      player.itemZone,
+      player.erosionFront,
+      player.erosionBack,
+      player.playZone
+    ];
+
+    zones.forEach(zone => {
+      zone.forEach(equipCard => {
+        if (equipCard && equipCard.type === 'ITEM' && equipCard.isEquip) {
+          equipCard.colorReq = {};
+        }
+      });
     });
   }
 };
@@ -27,6 +40,7 @@ const trigger_10106059_recover: CardEffect = {
   limitCount: 1,
   limitNameType: true,
   isMandatory: false,
+  isGlobal: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     // Ensure the card moved to grave
     if (!event || event.data?.targetZone !== 'GRAVE') return false;

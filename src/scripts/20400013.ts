@@ -27,15 +27,35 @@ const effect_20400013_activation: CardEffect = {
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // Handle Counter Mode: If resolving from stack or immediate response
     if (gameState.phase === 'COUNTERING') {
-      // We look for the most recent valid item on the stack to negate
-      for (let i = gameState.counterStack.length - 1; i >= 0; i--) {
-        const item = gameState.counterStack[i];
-        if ((item.type === 'PLAY' || item.type === 'EFFECT') && !item.isNegated) {
-          item.isNegated = true;
-          gameState.logs.push(`[${instance.fullName}] 使 [${item.card?.fullName || '效果'}] 发动无效。`);
-          return;
-        }
+      const candidates = gameState.counterStack
+        .filter(item => (item.type === 'PLAY' || item.type === 'EFFECT') && !item.isNegated && item.ownerUid !== playerState.uid);
+
+      if (candidates.length === 0) {
+        gameState.logs.push(`[${instance.fullName}] 没有发现可拦截的动作。`);
+        return;
       }
+
+      // If only one candidate, we can still show a selection for clarity "specify a target"
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_CARD',
+        playerUid: playerState.uid,
+        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, candidates.map(item => ({
+          card: item.card || { fullName: '未知效果', type: 'EFFECT' } as Card,
+          source: item.type === 'PLAY' ? (item.card?.cardlocation || 'PLAY') : 'STACK',
+          id: item.card?.gamecardId || `stack_${gameState.counterStack.indexOf(item)}`
+        }))),
+        title: '选择拦截目标',
+        description: '请选择一个要无效的发动或效果。',
+        minSelections: 1,
+        maxSelections: 1,
+        callbackKey: 'EFFECT_RESOLVE',
+        context: {
+          effectId: 'kaguya_flowering_silence',
+          sourceCardId: instance.gamecardId,
+          step: 'SELECT_STACK_ITEM'
+        }
+      };
       return;
     }
 
@@ -106,6 +126,14 @@ const effect_20400013_activation: CardEffect = {
         if (!target.silencedEffectIds) target.silencedEffectIds = [];
         target.silencedEffectIds.push(selections[0]);
         gameState.logs.push(`[${instance.fullName}] 封印了 [${target.fullName}] 的指定“启”效果。`);
+      }
+    } else if (context.step === 'SELECT_STACK_ITEM' && selections.length > 0) {
+      const selectedId = selections[0];
+      // Find the item in stack
+      const item = gameState.counterStack.find(i => i.card?.gamecardId === selectedId || `stack_${gameState.counterStack.indexOf(i)}` === selectedId);
+      if (item) {
+        item.isNegated = true;
+        gameState.logs.push(`[${instance.fullName}] 成功拦截并使 [${item.card?.fullName || '效果'}] 无效。`);
       }
     }
   }

@@ -377,6 +377,10 @@ export const ServerGameService = {
   },
 
   canPlayCard(gameState: GameState, player: PlayerState, card: Card): { canPlay: boolean; reason?: string } {
+    if (player.negatedNames && player.negatedNames.includes(card.fullName)) {
+      return { canPlay: false, reason: `该卡牌 [${card.fullName}] 在本回合已被禁止打出或发动` };
+    }
+
     if (card.type === 'UNIT') {
       if (!player.unitZone.some(c => c === null)) {
         return { canPlay: false, reason: '单位区已满' };
@@ -868,11 +872,8 @@ export const ServerGameService = {
         gameState.logs.push(`[连锁结算] Link ${gameState.counterStack.length + 1} 已被无效，跳过效果执行。`);
         // We still need to cleanup the card if it was played to the field/play zone
         if (stackItem.type === 'PLAY' && card) {
-          if (card.type === 'UNIT' || card.type === 'ITEM' || card.isEquip) {
-            // Units/Items that were negated stay in Play zone until moved to Grave
-            ServerGameService.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'GRAVE', card.gamecardId);
-          } else {
-            // Story cards move to Grave
+          const isInPlayZone = owner.playZone.some(c => c && c.gamecardId === card.gamecardId);
+          if (isInPlayZone) {
             ServerGameService.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'GRAVE', card.gamecardId);
           }
         }

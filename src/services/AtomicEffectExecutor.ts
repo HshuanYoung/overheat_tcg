@@ -438,7 +438,9 @@ export class AtomicEffectExecutor {
       filter = { ...filter, zone: [fromZonePref] };
     }
 
-    const targets = this.findTargets(gameState, filter, sourceCard, querySelections);
+    // Bug Fix: Scope deck/hand/erosion movements to the acting player by default to prevent targeting opponent's cards in generic filters
+    let preferredOwner = playerUid;
+    const targets = this.findTargets(gameState, filter, sourceCard, querySelections, preferredOwner);
 
     // For deck movements, top card is the last card in the array. 
     // findTargets returns them in array order [bottom...top].
@@ -618,10 +620,13 @@ export class AtomicEffectExecutor {
     return true;
   }
 
-  static findTargets(gameState: GameState, filter?: CardFilter, sourceCard?: Card, querySelections?: string[]): Card[] {
+  static findTargets(gameState: GameState, filter?: CardFilter, sourceCard?: Card, querySelections?: string[], preferredPlayerUid?: string): Card[] {
     const results: Card[] = [];
 
-    Object.values(gameState.players).forEach(player => {
+    const playersToSearch = preferredPlayerUid ? [gameState.players[preferredPlayerUid]] : Object.values(gameState.players);
+
+    playersToSearch.forEach(player => {
+      if (!player) return;
       const zones: { data: (Card | null)[], type: TriggerLocation }[] = [
         { data: player.hand, type: 'HAND' },
         { data: player.unitZone, type: 'UNIT' },
@@ -671,6 +676,7 @@ export class AtomicEffectExecutor {
     findInZone(sourcePlayer.deck, 'DECK');
     findInZone(sourcePlayer.erosionFront, 'EROSION_FRONT');
     findInZone(sourcePlayer.erosionBack, 'EROSION_BACK');
+    findInZone(sourcePlayer.playZone, 'PLAY');
 
     const idx = fromArray.findIndex(c => c?.gamecardId === cardId);
     if (idx !== -1) {

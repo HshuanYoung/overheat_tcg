@@ -54,16 +54,21 @@ const effect_20400021_counter: CardEffect = {
       gameState.logs.push(`[${instance.fullName}] 发动并送入了墓地。`);
 
       const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
+      let found = false;
       for (let i = gameState.counterStack.length - 1; i >= 0; i--) {
         const item = gameState.counterStack[i];
-        if (item.type === 'PLAY' && item.ownerUid === opponentId && item.card?.type === 'STORY' && !item.isNegated) {
+        const isStory = item.card?.type === 'STORY';
+        const isOpponent = item.ownerUid === opponentId;
+        
+        if ((item.type === 'PLAY' || item.type === 'EFFECT') && isOpponent && isStory && !item.isNegated) {
           item.isNegated = true;
-          if (item.card) {
-            // Negated STORY card will be moved to Grave by the engine during resolution.
-            gameState.logs.push(`[${instance.fullName}] 使对手的 [${item.card.fullName}] 发动无效。`);
-          }
+          found = true;
+          gameState.logs.push(`[${instance.fullName}] 成功拦截并使对手的 [${item.card?.fullName || '故事卡'}] 发动无效。`);
           break;
         }
+      }
+      if (!found) {
+        gameState.logs.push(`[${instance.fullName}] 未能在连锁中找到有效的故事卡发动。`);
       }
     }
   }

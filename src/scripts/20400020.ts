@@ -68,14 +68,18 @@ const card: Card = {
       type: 'TRIGGER',
       description: '（标记效果触发）当标记单位离场时，将对手战场一张非神蚀卡放置在卡组顶。',
       triggerLocation: ['GRAVE', 'PLAY'],
-      triggerEvent: 'CARD_LEFT_ZONE',
+      triggerEvent: 'CARD_LEFT_FIELD',
+      isGlobal: true,
       isMandatory: true,
       condition: (gameState, playerState, card, event) => {
         const data = (card as any).data;
         if (!data || !event) return false;
 
         // Must be the marked target leaving in the same turn
-        const isMatch = event.sourceCardId === data.markedTargetId && gameState.turnCount === data.playedTurn;
+        const isMatch =
+          event.sourceCardId === data.markedTargetId &&
+          event.data?.zone === 'UNIT' &&
+          gameState.turnCount === data.playedTurn;
         
         if (isMatch) {
             console.log(`[20400020] Trigger matched for target ${data.markedTargetId} leaving zone.`);

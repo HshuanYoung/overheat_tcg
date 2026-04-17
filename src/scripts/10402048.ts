@@ -83,7 +83,10 @@ const card: Card = {
 
         // 1. Handle selected card (to Hand)
         if (selections.length > 0) {
-          AtomicEffectExecutor.moveCard(gameState, ownerUid, 'DECK', ownerUid, 'HAND', selectedCardId, true);
+          AtomicEffectExecutor.moveCard(gameState, ownerUid, 'DECK', ownerUid, 'HAND', selectedCardId, true, {
+            effectSourcePlayerUid: ownerUid,
+            effectSourceCardId: card.gamecardId
+          });
           const selectedCard = AtomicEffectExecutor.findCardById(gameState, selectedCardId);
           gameState.logs.push(`[小巷里的情报贩子] 对手选择了 ${selectedCard?.fullName} 加入 ${owner.displayName} 的手牌。`);
         }
@@ -91,7 +94,10 @@ const card: Card = {
         // 2. Handle other card (to Erosion Front)
         const otherCardId = allCardIds.find(id => id !== selectedCardId);
         if (otherCardId) {
-          AtomicEffectExecutor.moveCard(gameState, ownerUid, 'DECK', ownerUid, 'EROSION_FRONT', otherCardId, true);
+          AtomicEffectExecutor.moveCard(gameState, ownerUid, 'DECK', ownerUid, 'EROSION_FRONT', otherCardId, true, {
+            effectSourcePlayerUid: ownerUid,
+            effectSourceCardId: card.gamecardId
+          });
           const otherCard = AtomicEffectExecutor.findCardById(gameState, otherCardId);
           gameState.logs.push(`[小巷里的情报贩子] 另一张卡 ${otherCard?.fullName} 被置入 ${owner.displayName} 的侵蚀区。`);
         }

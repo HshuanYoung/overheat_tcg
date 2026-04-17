@@ -74,7 +74,10 @@ const effect_10400009_counter: CardEffect = {
           item.isNegated = true;
           if (item.card) {
             // Negated card should be returned to hand from PLAY zone
-            await AtomicEffectExecutor.moveCard(gameState, item.ownerUid, 'PLAY', item.ownerUid, 'HAND', item.card.gamecardId, true);
+            await AtomicEffectExecutor.moveCard(gameState, item.ownerUid, 'PLAY', item.ownerUid, 'HAND', item.card.gamecardId, true, {
+              effectSourcePlayerUid: playerState.uid,
+              effectSourceCardId: instance.gamecardId
+            });
             gameState.logs.push(`[幻想吞噬龙] 将 ${item.card.fullName} 返回手牌。`);
             
             // 4. Lockdown

@@ -53,7 +53,7 @@ export class EventEngine {
                 (event.targetCardId && event.targetCardId === card.gamecardId);
 
               // Guard: For specific card-entry/action events, default to self-trigger unless explicitly global
-              const isMovementEvent = ['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_PLAYED', 'CARD_ATTACK_DECLARED', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'].includes(event.type);
+              const isMovementEvent = ['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_PLAYED', 'CARD_ATTACK_DECLARED', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'].includes(event.type);
 
               if (isMovementEvent && !effect.isGlobal && !isEventSelf) {
                 // If it's a movement/entry event for another card and this effect is not global, skip it
@@ -80,6 +80,27 @@ export class EventEngine {
 
     // 2. Queue all valid triggers into the triggeredEffectsQueue for sequential resolution
     for (const { card, effect, effectIndex, playerUid } of triggeredEffects) {
+      const hasQueuedDuplicate = !!(
+        effect.limitCount === 1 &&
+        gameState.triggeredEffectsQueue?.some(item =>
+          item.playerUid === playerUid &&
+          item.card?.gamecardId === card.gamecardId &&
+          (item.effect?.id || '') === (effect.id || '') &&
+          item.effectIndex === effectIndex
+        )
+      );
+      const hasPendingDuplicate = !!(
+        effect.limitCount === 1 &&
+        gameState.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+        gameState.pendingQuery?.playerUid === playerUid &&
+        gameState.pendingQuery?.context?.sourceCardId === card.gamecardId &&
+        gameState.pendingQuery?.context?.effectIndex === effectIndex
+      );
+
+      if (hasQueuedDuplicate || hasPendingDuplicate) {
+        continue;
+      }
+
       if (!gameState.triggeredEffectsQueue) gameState.triggeredEffectsQueue = [];
       gameState.triggeredEffectsQueue.push({ card, effect, effectIndex, playerUid, event });
       const identity = getCardIdentity(gameState, playerUid, card);
@@ -279,5 +300,97 @@ export class EventEngine {
       playerUid,
       data: { zone: fromZone, isEffect: !!isEffect, targetZone }
     });
+  }
+
+  static dispatchMovementSubEvents(
+    gameState: GameState,
+    {
+      card,
+      cardOwnerUid,
+      fromZone,
+      toZone,
+      isEffect,
+      effectSourcePlayerUid,
+      effectSourceCardId
+    }: {
+      card: Card;
+      cardOwnerUid: string;
+      fromZone: TriggerLocation;
+      toZone: TriggerLocation;
+      isEffect?: boolean;
+      effectSourcePlayerUid?: string;
+      effectSourceCardId?: string;
+    }
+  ) {
+    const data = {
+      isEffect: !!isEffect,
+      zone: fromZone,
+      sourceZone: fromZone,
+      targetZone: toZone,
+      effectSourcePlayerUid,
+      effectSourceCardId
+    };
+
+    if (toZone === 'EROSION_FRONT') {
+      this.dispatchEvent(gameState, {
+        type: 'CARD_TO_EROSION_FRONT',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    }
+
+    if (fromZone === 'DECK' && toZone === 'EROSION_FRONT') {
+      this.dispatchEvent(gameState, {
+        type: 'CARD_DECK_TO_EROSION_UP',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    } else if ((fromZone === 'EROSION_FRONT' || fromZone === 'EROSION_BACK') && ['UNIT', 'ITEM'].includes(toZone)) {
+      this.dispatchEvent(gameState, {
+        type: 'CARD_EROSION_TO_FIELD',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    } else if (fromZone === 'EROSION_FRONT' && toZone === 'HAND') {
+      this.dispatchEvent(gameState, {
+        type: 'CARD_EROSION_TO_HAND',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    } else if (fromZone === 'HAND' && toZone === 'GRAVE') {
+      this.dispatchEvent(gameState, {
+        type: 'CARD_DISCARDED',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    } else if (['UNIT', 'ITEM'].includes(fromZone) && toZone === 'HAND') {
+      this.dispatchEvent(gameState, {
+        type: 'CARD_FIELD_TO_HAND',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    }
+
+    if (['UNIT', 'ITEM'].includes(fromZone)) {
+      this.dispatchEvent(gameState, {
+        type: 'CARD_LEFT_FIELD',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    }
   }
 }

@@ -299,7 +299,14 @@ export const ServerGameService = {
     targetPlayerId: string,
     targetZone: TriggerLocation,
     cardId: string,
-    options?: { targetIndex?: number; faceDown?: boolean; insertAtBottom?: boolean; isEffect?: boolean }
+    options?: {
+      targetIndex?: number;
+      faceDown?: boolean;
+      insertAtBottom?: boolean;
+      isEffect?: boolean;
+      effectSourcePlayerUid?: string;
+      effectSourceCardId?: string;
+    }
   ): boolean {
     const sourcePlayer = gameState.players[sourcePlayerId];
     const targetPlayer = gameState.players[targetPlayerId];
@@ -392,17 +399,15 @@ export const ServerGameService = {
     }
 
     EventEngine.handleCardEnteredZone(gameState, targetPlayerId, card, targetZone, options?.isEffect);
-
-    // Dispatch specialized erosion-to-field event for cards like 30403004 and 10403051
-    if ((sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') && targetZone === 'UNIT') {
-      EventEngine.dispatchEvent(gameState, {
-        type: 'CARD_EROSION_TO_FIELD',
-        sourceCard: card,
-        sourceCardId: card.gamecardId,
-        playerUid: targetPlayerId,
-        data: { sourceZone }
-      });
-    }
+    EventEngine.dispatchMovementSubEvents(gameState, {
+      card,
+      cardOwnerUid: sourcePlayerId,
+      fromZone: sourceZone,
+      toZone: targetZone,
+      isEffect: options?.isEffect,
+      effectSourcePlayerUid: options?.effectSourcePlayerUid,
+      effectSourceCardId: options?.effectSourceCardId
+    });
 
     return true;
   },
@@ -2009,7 +2014,10 @@ export const ServerGameService = {
     }
 
     // Default destruction using standard moveCard
-    ServerGameService.moveCard(gameState, playerId, fromZone, playerId, 'GRAVE', gamecardId, { isEffect });
+    ServerGameService.moveCard(gameState, playerId, fromZone, playerId, 'GRAVE', gamecardId, {
+      isEffect,
+      effectSourcePlayerUid: sourcePlayerId
+    });
 
     if (isEffect) {
       EventEngine.dispatchEvent(gameState, {

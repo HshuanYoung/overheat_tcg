@@ -9,7 +9,12 @@ const effect_10402020_trigger: CardEffect = {
   limitCount: 1,
   limitNameType: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
-    return playerState.isTurn && event?.type === 'CARD_TO_EROSION_FRONT' && event.playerUid === playerState.uid;
+    return (
+      playerState.isTurn &&
+      event?.type === 'CARD_TO_EROSION_FRONT' &&
+      event.data?.isEffect === true &&
+      event.data?.effectSourcePlayerUid === playerState.uid
+    );
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // Select non-godmark unit or item

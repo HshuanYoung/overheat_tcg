@@ -4,7 +4,7 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const effect: CardEffect = {
   id: 'shuixian_trigger',
   type: 'TRIGGER',
-  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerEvent: 'CARD_FIELD_TO_HAND',
   triggerLocation: ['ITEM'],
   isGlobal: true,
   isMandatory: false,
@@ -12,21 +12,15 @@ const effect: CardEffect = {
   limitGlobal: false,
   description: '一回合一次，当你的单位因效果返回手牌时，若你的手牌在1张及以上，可以丢弃一张手牌，将侵蚀区正面的一张卡加入手牌。',
   condition: (gameState: GameState, playerState: PlayerState, card: Card, event?: any) => {
-    // 1. General readiness check
-    if (!event) {
-      return card.cardlocation === 'ITEM' || card.cardlocation === 'UNIT';
-    }
-
-    // 2. Specific Event validation
-    if (!event.data?.isEffect) {
+    if (!event || event.type !== 'CARD_FIELD_TO_HAND' || event.playerUid !== playerState.uid) {
       return false;
     }
 
-    if (event.type !== 'CARD_ENTERED_ZONE' || event.data?.zone !== 'HAND' || event.playerUid !== playerState.uid) {
+    if (!event.data?.isEffect || event.data?.zone !== 'UNIT') {
       return false;
     }
 
-    const movedCard = event.sourceCard;
+    const movedCard = event.sourceCard || AtomicEffectExecutor.findCardById(gameState, event.sourceCardId);
     if (!movedCard || movedCard.type !== 'UNIT') {
       return false;
     }

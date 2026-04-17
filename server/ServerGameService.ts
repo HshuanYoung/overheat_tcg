@@ -2839,6 +2839,8 @@ export const ServerGameService = {
       }
     }
 
+    player.factionLock = undefined;
+
     // This block is reachable either initially (if no triggers) or via resumption from checkTriggeredEffects
     if (player.hand.length > 6) {
       gameState.phase = 'DISCARD';

@@ -8,14 +8,28 @@ const trigger_30401005: CardEffect = {
   description: '在你的回合，当你战场上的单位返回手牌时，可以发动：将这张卡转为横置状态，选择手牌中一张非神位且属于「百濑之水城」势力单位卡放置在战场上。',
   triggerEvent: 'CARD_FIELD_TO_HAND',
   isMandatory: false,
-  condition: (gameState, playerState, instance, event) => {
-    return playerState.isTurn && event?.playerUid === playerState.uid && !instance.isExhausted;
+  limitCount: 1,
+  condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: any) => {
+    if (!playerState.isTurn || event?.type !== 'CARD_FIELD_TO_HAND' || event.playerUid !== playerState.uid || instance.isExhausted) {
+      return false;
+    }
+
+    if (event.data?.zone !== 'UNIT') {
+      return false;
+    }
+
+    const movedCard = event.sourceCard || AtomicEffectExecutor.findCardById(gameState, event.sourceCardId);
+    return movedCard?.type === 'UNIT';
   },
   execute: async (instance, gameState, playerState) => {
-    // 1. Confirm activation by asking to choose from hand
     const validTargets = playerState.hand.filter(c => c && c.faction === '百濑之水城' && !c.godMark && c.type === 'UNIT');
 
     if (validTargets.length > 0) {
+      await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+        type: 'ROTATE_HORIZONTAL',
+        targetFilter: { gamecardId: instance.gamecardId }
+      }, instance);
+
       gameState.pendingQuery = {
         id: Math.random().toString(36).substring(7),
         type: 'SELECT_CARD',
@@ -39,13 +53,6 @@ const trigger_30401005: CardEffect = {
       const targetId = selections[0];
       const target = playerState.hand.find(c => c.gamecardId === targetId);
       if (target) {
-        // Cost: Exhaust
-        await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-          type: 'ROTATE_HORIZONTAL',
-          targetFilter: { gamecardId: instance.gamecardId }
-        }, instance);
-
-        // Effect: Place on Unit Zone
         await AtomicEffectExecutor.execute(gameState, playerState.uid, {
           type: 'MOVE_FROM_HAND',
           targetFilter: { gamecardId: targetId },

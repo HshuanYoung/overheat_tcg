@@ -235,7 +235,9 @@ const PlayerHalf: React.FC<{
               label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onClick={() => setViewingZone?.({ title: '道具区 (Item Zone)', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
-              isFaceUp={true} displayMode="erosion_item"
+              isFaceUp={true}
+              isExhausted={!!(player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined)?.isExhausted}
+              displayMode="erosion_item"
             />
             <CardSlot
               card={player.erosionFront?.filter(Boolean).slice(-1)[0] || player.erosionBack?.filter(Boolean).slice(-1)[0] || null}
@@ -486,7 +488,10 @@ const PlayerHalf: React.FC<{
               label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onClick={() => setViewingZone?.({ title: '敌方道具区', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
-              isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
+              isFaceUp={true}
+              isExhausted={!!(player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined)?.isExhausted}
+              isOpponent={isOpponent}
+              displayMode="erosion_item"
             />
           </>
         ) : (

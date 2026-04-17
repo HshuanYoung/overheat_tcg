@@ -1,21 +1,45 @@
-import { Card, GameState, PlayerState, CardEffect } from '../types/game';
+import { Card, GameState, PlayerState, CardEffect, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
-const continuous_10401041: CardEffect = {
-  id: 'daowuzhe_continuous',
-  type: 'CONTINUOUS',
-  description: '【永】当侵蚀区存在1-4张卡牌且战场上有1个或更多蓝色单位时，我方卡牌的效果使此卡移动到手牌、卡组或侵蚀区时，改为将其放置在战场上。',
-  condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
-    // 1-4 erosion zones
+const trigger_10401041: CardEffect = {
+  id: 'daowuzhe_trigger',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_TO_EROSION_FRONT',
+  triggerLocation: ['EROSION_FRONT'],
+  isMandatory: true,
+  description: '【永】当侵蚀区存在1-4张卡牌且战场上有1个或更多蓝色单位时，因卡的效果将此卡从卡组或手牌放入侵蚀区正面时，将此卡放置在战场上。',
+  condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
+    const isSelf = event?.type === 'CARD_TO_EROSION_FRONT' &&
+      (event.sourceCardId === instance.gamecardId || event.sourceCard === instance);
+    const sourceZone = event?.data?.sourceZone;
+    const isByEffect = event?.data?.isEffect === true;
+
+    if (!isSelf || !isByEffect || (sourceZone !== 'DECK' && sourceZone !== 'HAND')) {
+      return false;
+    }
+
+    if (instance.cardlocation !== 'EROSION_FRONT') {
+      return false;
+    }
+
     const erosionCount = playerState.erosionFront.filter(c => c !== null).length +
       playerState.erosionBack.filter(c => c !== null).length;
     if (erosionCount < 1 || erosionCount > 4) return false;
 
-    // one or more blue units on the field
+    if (!playerState.unitZone.some(u => u === null)) {
+      return false;
+    }
+
     const blueUnitsCount = playerState.unitZone.filter(u => u && AtomicEffectExecutor.matchesColor(u, 'BLUE')).length;
     return blueUnitsCount >= 1;
   },
-  movementReplacementDestination: 'UNIT'
+  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+      type: 'MOVE_FROM_EROSION',
+      targetFilter: { gamecardId: instance.gamecardId },
+      destinationZone: 'UNIT'
+    }, instance);
+  }
 };
 
 const card: Card = {
@@ -40,7 +64,7 @@ const card: Card = {
   feijingMark: false,
   canResetCount: 0,
   effects: [
-    continuous_10401041
+    trigger_10401041
   ],
   rarity: 'PR',
   availableRarities: ['PR'],

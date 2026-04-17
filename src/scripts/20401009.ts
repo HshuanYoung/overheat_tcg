@@ -1,4 +1,4 @@
-import { Card, GameState, PlayerState } from '../types/game';
+import { Card } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
 const card: Card = {
@@ -23,18 +23,22 @@ const card: Card = {
       condition: (gameState, playerState) => {
         return !!playerState.hasUnitReturnedThisTurn;
       },
-      execute: async (card, gameState, playerState) => {
-        await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-          type: 'MOVE_FROM_FIELD',
-          targetFilter: {
-            type: 'UNIT',
-            maxAc: 2,
-            onField: true
-          },
-          destinationZone: 'HAND'
-        }, card);
+      execute: async (card, gameState) => {
+        const targets = Object.values(gameState.players).flatMap(player =>
+          player.unitZone
+            .filter((unit): unit is Card => !!unit && (unit.acValue || 0) <= 2)
+            .map(unit => ({ ownerUid: player.uid, unit }))
+        );
 
-        gameState.logs.push(`[百濑的剑舞] 效果发动，将所有 AC 2 及以下的单位返回手牌。`);
+        for (const { ownerUid, unit } of targets) {
+          await AtomicEffectExecutor.execute(gameState, ownerUid, {
+            type: 'MOVE_FROM_FIELD',
+            targetFilter: { gamecardId: unit.gamecardId },
+            destinationZone: 'HAND'
+          }, card);
+        }
+
+        gameState.logs.push(`[百濑的剑舞] 效果发动，将 ${targets.length} 个 AC2 及以下的单位返回持有者手牌。`);
       }
     }
   ],

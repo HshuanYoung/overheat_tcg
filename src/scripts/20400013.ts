@@ -6,15 +6,13 @@ const effect_20400013_activation: CardEffect = {
   type: 'ACTIVATE',
   description: '【启】主要阶段：选择场上一个单位的一个“启”效果，在本回合中不被处理。不论目标是否处理该效果，此卡均可参与对抗并支付费用。或者：在对抗阶段：使一次发动无效并送入墓地。',
   triggerLocation: ['HAND', 'UNIT', 'PLAY'],
-  condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
-    // 1. Main Phase Mode: Target a unit's ACTIVATE effect on field
+  condition: (gameState: GameState, playerState: PlayerState) => {
     if (gameState.phase === 'MAIN' && playerState.isTurn) {
       return Object.values(gameState.players).some(p =>
         p.unitZone.some(c => c && c.effects && c.effects.some(e => e.type === 'ACTIVATE'))
       );
     }
 
-    // 2. Counter Mode: Direct response to a card or effect on stack
     if (gameState.phase === 'COUNTERING') {
       return gameState.counterStack.some(item =>
         (item.type === 'PLAY' || item.type === 'EFFECT') &&
@@ -25,7 +23,48 @@ const effect_20400013_activation: CardEffect = {
     return false;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
-    // Handle Counter Mode: If resolving from stack or immediate response
+    if (gameState.phase === 'MAIN' && playerState.isTurn) {
+      const fieldCandidates: Card[] = [];
+      Object.values(gameState.players).forEach(p => {
+        p.unitZone.forEach(c => {
+          if (c && c.effects && c.effects.some(e => e.type === 'ACTIVATE')) {
+            fieldCandidates.push(c);
+          }
+        });
+      });
+
+      if (fieldCandidates.length === 0) {
+        gameState.logs.push(`[${instance.fullName}] 没有发现可处理的目标。`);
+        return;
+      }
+
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_CARD',
+        playerUid: playerState.uid,
+        options: AtomicEffectExecutor.enrichQueryOptions(
+          gameState,
+          playerState.uid,
+          fieldCandidates.map(c => ({
+            card: c,
+            source: 'UNIT' as TriggerLocation,
+            id: c.gamecardId
+          }))
+        ),
+        title: '选择封印目标',
+        description: '请选择一个单位，然后封印其一个“启”效果。',
+        minSelections: 1,
+        maxSelections: 1,
+        callbackKey: 'EFFECT_RESOLVE',
+        context: {
+          effectId: 'kaguya_flowering_silence',
+          sourceCardId: instance.gamecardId,
+          step: 'SELECT_UNIT'
+        }
+      };
+      return;
+    }
+
     if (gameState.phase === 'COUNTERING') {
       const stackCandidates = gameState.counterStack
         .filter(item => (item.type === 'PLAY' || item.type === 'EFFECT') && !item.isNegated && item.ownerUid !== playerState.uid);
@@ -44,7 +83,6 @@ const effect_20400013_activation: CardEffect = {
         return;
       }
 
-      // Combine both into one SELECT_CARD query
       const options = [
         ...stackCandidates.map(item => ({
           card: item.card || { fullName: '未知效果', type: 'EFFECT' } as Card,
@@ -64,7 +102,7 @@ const effect_20400013_activation: CardEffect = {
         playerUid: playerState.uid,
         options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, options),
         title: '选择拦截或封印目标',
-        description: '请选择一个要无效的发动（来自堆栈）或要封印的“启”效果单位（来自战场）。',
+        description: '请选择一个要无效的发动，或要封印的“启”效果单位。',
         minSelections: 1,
         maxSelections: 1,
         callbackKey: 'EFFECT_RESOLVE',
@@ -74,14 +112,12 @@ const effect_20400013_activation: CardEffect = {
           step: 'SELECT_ANY_TARGET'
         }
       };
-      return;
     }
   },
   onQueryResolve: async (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[], context: any) => {
     if (context.step === 'SELECT_ANY_TARGET' && selections.length > 0) {
       const selectedId = selections[0];
 
-      // 1. Check if it's a stack item
       const stackItemIndex = gameState.counterStack.findIndex(i =>
         i.card?.gamecardId === selectedId || `stack_${gameState.counterStack.indexOf(i)}` === selectedId
       );
@@ -93,8 +129,7 @@ const effect_20400013_activation: CardEffect = {
         return;
       }
 
-      // 2. Otherwise assume it's a field unit
-      context.step = 'SELECT_UNIT'; // Handled by standard field logic below
+      context.step = 'SELECT_UNIT';
     }
 
     if (context.step === 'SELECT_UNIT' && selections.length > 0) {
@@ -108,7 +143,7 @@ const effect_20400013_activation: CardEffect = {
           if (!target.silencedEffectIds.includes(activateEffects[0].id)) {
             target.silencedEffectIds.push(activateEffects[0].id);
           }
-          gameState.logs.push(`[${instance.fullName}] 封印了 [${target.fullName}] 的 “${activateEffects[0].description.slice(0, 20)}...” 效果。`);
+          gameState.logs.push(`[${instance.fullName}] 封印了 [${target.fullName}] 的“启”效果。`);
         } else if (activateEffects.length > 1) {
           gameState.pendingQuery = {
             id: Math.random().toString(36).substring(7),
@@ -139,7 +174,6 @@ const effect_20400013_activation: CardEffect = {
       }
     } else if (context.step === 'SELECT_STACK_ITEM' && selections.length > 0) {
       const selectedId = selections[0];
-      // Find the item in stack
       const item = gameState.counterStack.find(i => i.card?.gamecardId === selectedId || `stack_${gameState.counterStack.indexOf(i)}` === selectedId);
       if (item) {
         item.isNegated = true;

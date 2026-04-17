@@ -1,5 +1,30 @@
-import { Card, GameState, PlayerState, GameEvent } from '../types/game';
+import { Card, CardEffect, GameState, PlayerState, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+
+const getSongyueEffect = (card: Card): CardEffect | undefined => {
+  return card.effects?.find(effect =>
+    effect.type === 'ACTIVATE' || effect.type === 'ACTIVATED' || effect.type === 'ALWAYS'
+  );
+};
+
+const executeSongyueEffect = async (card: Card, gameState: GameState, playerState: PlayerState) => {
+  const effect = getSongyueEffect(card);
+
+  if (!effect) {
+    gameState.logs.push(`[风花] [${card.fullName}] 没有可执行的主动效果。`);
+    return;
+  }
+
+  if (effect.atomicEffects) {
+    for (const atomic of effect.atomicEffects) {
+      await AtomicEffectExecutor.execute(gameState, playerState.uid, atomic, card);
+    }
+  }
+
+  if (effect.execute) {
+    await (effect.execute as any)(card, gameState, playerState);
+  }
+};
 
 const card: Card = {
   id: '10401001',
@@ -40,24 +65,19 @@ const card: Card = {
       },
       execute: async (card, gameState, playerState) => {
         const checkCardViable = (c: Card) => {
-          // 1. Basic Type and Name Check
           if (!(c.fullName.includes('歌月') && c.type === 'STORY')) return false;
 
-          // 2. Cost Check (AC Value)
           const cost = c.acValue || 0;
           if (cost > 0) {
-            // Check if player has enough space in erosion zone (limit 9)
             const currentErosion = playerState.erosionFront.filter(e => e !== null).length +
               playerState.erosionBack.filter(e => e !== null).length;
             if (currentErosion + cost >= 10) return false;
           } else if (cost < 0) {
-            // Negative cost requires enough face-up erosion cards
             const frontCount = playerState.erosionFront.filter(e => e !== null && e.displayState === 'FRONT_UPRIGHT').length;
             if (frontCount < Math.abs(cost)) return false;
           }
 
-          // 3. Condition Check
-          const activateEffect = c.effects?.find(e => e.type === 'ACTIVATE');
+          const activateEffect = getSongyueEffect(c);
           if (activateEffect && activateEffect.condition) {
             try {
               if (!activateEffect.condition(gameState, playerState, c)) return false;
@@ -104,17 +124,27 @@ const card: Card = {
           const foundCard = AtomicEffectExecutor.findCardById(gameState, cardId);
 
           if (foundCard) {
+            const sourceZone = foundCard.cardlocation;
+            const moveType =
+              sourceZone === 'GRAVE'
+                ? 'MOVE_FROM_GRAVE'
+                : sourceZone === 'DECK'
+                  ? 'MOVE_FROM_DECK'
+                  : undefined;
+
+            if (!moveType) {
+              gameState.logs.push(`[风花] [${foundCard.fullName}] 不在卡组或墓地，无法放逐。`);
+              return;
+            }
+
             await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-              type: 'MOVE_FROM_DECK', // Assuming it could be in deck or grave, AtomicEffectExecutor.execute should handle it if type is refined, 
-              // but we can use specific ones or a generic MOVE if implemented.
-              // For now, I'll use explicit checks since MOVE_FROM_GRAVE/DECK are separate.
+              type: moveType as any,
               targetFilter: { gamecardId: cardId },
               destinationZone: 'EXILE'
             }, card);
 
             gameState.logs.push(`[风花] 已放逐 ${foundCard.fullName}。`);
 
-            // Check if payment is required
             if (foundCard.acValue && foundCard.acValue !== 0) {
               gameState.pendingQuery = {
                 id: Math.random().toString(36).substring(7),
@@ -139,21 +169,14 @@ const card: Card = {
               return;
             }
 
-            // If no payment, execute immediately
-            if (foundCard.effects) {
-              for (const e of foundCard.effects) {
-                if (e.execute) await (e.execute as any)(foundCard!, gameState, sourcePlayer);
-              }
-            }
+            await executeSongyueEffect(foundCard, gameState, sourcePlayer);
           }
         } else if (step === 2) {
           const cardId = context.banishedCardId;
           const foundCard = sourcePlayer.exile.find(c => c.gamecardId === cardId);
-          if (foundCard && foundCard.effects) {
+          if (foundCard) {
             gameState.logs.push(`[风花] 费用支付成功，正在执行 ${foundCard.fullName} 的效果...`);
-            for (const e of foundCard.effects) {
-              if (e.execute) await (e.execute as any)(foundCard, gameState, sourcePlayer);
-            }
+            await executeSongyueEffect(foundCard, gameState, sourcePlayer);
           }
         }
       }
@@ -195,7 +218,6 @@ const card: Card = {
         gameState.logs.push(`${playerState.displayName} 将 2 张侵蚀卡翻至背面。`);
       },
       execute: async (card, gameState, playerState) => {
-        // Return all units to hand
         for (const player of Object.values(gameState.players)) {
           for (const unit of player.unitZone) {
             if (unit) {
@@ -207,7 +229,7 @@ const card: Card = {
             }
           }
         }
-        gameState.logs.push(`所有单位已返回持有者手牌。`);
+        gameState.logs.push('所有单位已返回持有者手牌。');
       }
     }
   ],

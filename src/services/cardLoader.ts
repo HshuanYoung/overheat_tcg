@@ -28,7 +28,10 @@ export function hydrateCard(card: Card | null) {
         condition: originalEffect.condition,
         execute: originalEffect.execute,
         cost: originalEffect.cost,
-        resolve: originalEffect.resolve
+        onQueryResolve: originalEffect.onQueryResolve,
+        resolve: originalEffect.resolve,
+        applyContinuous: originalEffect.applyContinuous,
+        removeContinuous: originalEffect.removeContinuous
       };
     });
   }

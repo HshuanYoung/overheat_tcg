@@ -7,7 +7,8 @@ const continuous_10106059_color: CardEffect = {
   description: '【永续】我方装备卡忽略颜色要求。',
   triggerLocation: ['UNIT'],
   applyContinuous: (gameState: GameState, card: Card) => {
-    const player = gameState.players[card.ownerUid];
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, card.gamecardId);
+    const player = ownerUid ? gameState.players[ownerUid] : undefined;
     if (!player) return;
 
     const zones = [
@@ -42,18 +43,12 @@ const trigger_10106059_recover: CardEffect = {
   isMandatory: false,
   isGlobal: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
-    // Ensure the card moved to grave
     if (!event || event.data?.targetZone !== 'GRAVE') return false;
-    
-    // Check if it's the player's card
-    const sourceCardId = event.sourceCardId;
-    const playerGrave = playerState.grave;
-    const cardInGrave = playerGrave.find(c => c && c.gamecardId === sourceCardId);
-    
-    if (!cardInGrave) return false;
-    
-    // Check if it's an equipment
-    return !!(cardInGrave.type === 'ITEM' && cardInGrave.isEquip);
+
+    if (event.playerUid !== playerState.uid) return false;
+
+    const movedCard = event.sourceCard;
+    return !!(movedCard && movedCard.type === 'ITEM' && movedCard.isEquip);
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState, event?: GameEvent) => {
     const sourceCardId = event?.sourceCardId;

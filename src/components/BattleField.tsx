@@ -76,6 +76,30 @@ export const BattleField: React.FC = () => {
   const [lastError, setLastError] = useState<string | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
   useEffect(() => { pendingPlayCardRef.current = pendingPlayCard; }, [pendingPlayCard]);
+  useEffect(() => {
+    if (!previewCard || !game) return;
+
+    const allCards = [
+      ...Object.values(game.players).flatMap(player => [
+        ...player.hand,
+        ...player.deck,
+        ...player.grave,
+        ...player.exile,
+        ...player.unitZone,
+        ...player.itemZone,
+        ...player.erosionFront,
+        ...player.erosionBack,
+        ...player.playZone
+      ]),
+      ...game.counterStack.map(item => item.card).filter(Boolean),
+      ...(game.pendingQuery?.options?.map(option => option.card).filter(Boolean) || [])
+    ].filter(Boolean) as Card[];
+
+    const latestCard = allCards.find(card => card.gamecardId === previewCard.gamecardId);
+    if (latestCard && latestCard !== previewCard) {
+      setPreviewCard(latestCard);
+    }
+  }, [game, previewCard]);
 
   // Error Toast timeout
   useEffect(() => {

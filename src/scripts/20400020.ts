@@ -69,20 +69,28 @@ const card: Card = {
       description: '（标记效果触发）当标记单位离场时，将对手战场一张非神蚀卡放置在卡组顶。',
       triggerLocation: ['GRAVE', 'PLAY'],
       triggerEvent: 'CARD_LEFT_ZONE',
-      isMandatory: false,
+      isMandatory: true,
       condition: (gameState, playerState, card, event) => {
         const data = (card as any).data;
         if (!data || !event) return false;
 
         // Must be the marked target leaving in the same turn
-        return event.sourceCardId === data.markedTargetId && gameState.turnCount === data.playedTurn;
+        const isMatch = event.sourceCardId === data.markedTargetId && gameState.turnCount === data.playedTurn;
+        
+        if (isMatch) {
+            console.log(`[20400020] Trigger matched for target ${data.markedTargetId} leaving zone.`);
+        }
+        return isMatch;
       },
       execute: async (card, gameState, playerState, event) => {
         const opponentId = Object.keys(gameState.players).find(id => id !== playerState.uid)!;
         const opponent = gameState.players[opponentId];
         const targets = [...opponent.unitZone, ...opponent.itemZone].filter(c => c && !c.godMark) as Card[];
 
-        if (targets.length === 0) return;
+        if (targets.length === 0) {
+            gameState.logs.push(`[任务：击溃恶党] 对方战场没有非神蚀卡，效果处理结束。`);
+            return;
+        }
 
         gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
@@ -96,7 +104,7 @@ const card: Card = {
           callbackKey: 'EFFECT_RESOLVE',
           context: {
             sourceCardId: card.gamecardId,
-            effectIndex: 1,
+            effectIndex: 2, // Index of this effect is now 2
             step: 2
           }
         };
@@ -110,7 +118,7 @@ const card: Card = {
           targetFilter: { gamecardId: targetId },
           destinationZone: 'DECK'
         }, card);
-        gameState.logs.push(`[任务：击溃恶党] 效果：将对方的一张卡牌放置在卡组顶。`);
+        gameState.logs.push(`[任务：击溃恶党] 效果：将对方的一张卡牌 [${targetId}] 放置在卡组顶。`);
       }
     },
     {
@@ -136,7 +144,7 @@ const card: Card = {
           callbackKey: 'ACTIVATE_COST_RESOLVE',
           context: {
             sourceCardId: card.gamecardId,
-            effectIndex: 2
+            effectIndex: 3 // Index of this effect is now 3
           }
         };
         return true;

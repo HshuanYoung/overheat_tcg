@@ -205,6 +205,41 @@ export class EventEngine {
         }
       });
     });
+
+    // 4. Status Effect & Mission Mark Display
+    Object.values(gameState.players).forEach(p => {
+      p.unitZone.forEach(u => {
+        if (!u) return;
+        if (!u.influencingEffects) u.influencingEffects = [];
+
+        // Display Silenced Effects
+        if (u.silencedEffectIds && u.silencedEffectIds.length > 0) {
+          if (!u.influencingEffects.some(e => e.description === '效果已被封印')) {
+            u.influencingEffects.push({
+              sourceCardName: '系统状态',
+              description: '效果已被封印'
+            });
+          }
+        }
+
+        // Display Mission Marks (from Grave or Field)
+        Object.values(gameState.players).forEach(owner => {
+          const possibleSources = [...owner.grave, ...owner.unitZone, ...owner.itemZone, ...owner.playZone];
+          possibleSources.forEach(source => {
+            if (source && (source as any).data && (source as any).data.markedTargetId === u.gamecardId) {
+              if (gameState.turnCount === (source as any).data.playedTurn) {
+                if (!u.influencingEffects.some(e => e.sourceCardName === source.fullName)) {
+                  u.influencingEffects.push({
+                    sourceCardName: source.fullName,
+                    description: '已标记'
+                  });
+                }
+              }
+            }
+          });
+        });
+      });
+    });
   }
 
   static handleCardEnteredZone(gameState: GameState, playerUid: string, card: Card, zone: string, isEffect?: boolean) {

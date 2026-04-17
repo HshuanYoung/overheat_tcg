@@ -19,6 +19,7 @@ const card: Card = {
     {
       id: 'failed_transaction_activate',
       type: 'ACTIVATE',
+      triggerLocation: ['HAND', 'PLAY'],
       description: '【对付】：若你的侵蚀区背面卡牌在2张及以上，对抗对手打出道具卡或道具的效果发动，将其无效。若是对打出的道具卡发动，则将其送入其持有者的墓地。',
       condition: (gameState, playerState) => {
         // 1. Back erosion requirement
@@ -27,21 +28,21 @@ const card: Card = {
 
         // 2. Must be in countering phase opposing an opponent's item declaration
         if (gameState.phase !== 'COUNTERING') return false;
-        
+
         const topItem = gameState.counterStack[gameState.counterStack.length - 1];
         if (!topItem) return false;
 
         // Must be opponent's item
         const isOpponent = topItem.ownerUid !== playerState.uid;
         const isItem = topItem.card?.type === 'ITEM';
-        
+
         return isOpponent && isItem;
       },
       execute: async (card, gameState, playerState) => {
         // When execute is called, 'failed_transaction' has been popped from the stack.
         // The item we are countering is now at the top of the counterStack.
         const targetItem = gameState.counterStack[gameState.counterStack.length - 1];
-        
+
         if (targetItem && targetItem.ownerUid !== playerState.uid && targetItem.card?.type === 'ITEM') {
           targetItem.isNegated = true;
           gameState.logs.push(`[交易失败] 已无效 ${targetItem.card.fullName} 的发动。`);

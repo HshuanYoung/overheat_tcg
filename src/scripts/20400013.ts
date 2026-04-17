@@ -13,84 +13,90 @@ const effect_20400013_activation: CardEffect = {
         p.unitZone.some(c => c && c.effects && c.effects.some(e => e.type === 'ACTIVATE'))
       );
     }
-    
+
     // 2. Counter Mode: Direct response to a card or effect on stack
     if (gameState.phase === 'COUNTERING') {
-      return gameState.counterStack.some(item => 
-        (item.type === 'PLAY' || item.type === 'EFFECT') && 
+      return gameState.counterStack.some(item =>
+        (item.type === 'PLAY' || item.type === 'EFFECT') &&
         !item.isNegated
       );
     }
-    
+
     return false;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     // Handle Counter Mode: If resolving from stack or immediate response
     if (gameState.phase === 'COUNTERING') {
-      const candidates = gameState.counterStack
+      const stackCandidates = gameState.counterStack
         .filter(item => (item.type === 'PLAY' || item.type === 'EFFECT') && !item.isNegated && item.ownerUid !== playerState.uid);
 
-      if (candidates.length === 0) {
-        gameState.logs.push(`[${instance.fullName}] 没有发现可拦截的动作。`);
+      const fieldCandidates: Card[] = [];
+      Object.values(gameState.players).forEach(p => {
+        p.unitZone.forEach(c => {
+          if (c && c.effects && c.effects.some(e => e.type === 'ACTIVATE')) {
+            fieldCandidates.push(c);
+          }
+        });
+      });
+
+      if (stackCandidates.length === 0 && fieldCandidates.length === 0) {
+        gameState.logs.push(`[${instance.fullName}] 没有发现可处理的目标。`);
         return;
       }
 
-      // If only one candidate, we can still show a selection for clarity "specify a target"
+      // Combine both into one SELECT_CARD query
+      const options = [
+        ...stackCandidates.map(item => ({
+          card: item.card || { fullName: '未知效果', type: 'EFFECT' } as Card,
+          source: (item.type === 'PLAY' ? (item.card?.cardlocation || 'PLAY') : 'STACK') as any,
+          id: item.card?.gamecardId || `stack_${gameState.counterStack.indexOf(item)}`
+        })),
+        ...fieldCandidates.map(c => ({
+          card: c,
+          source: 'UNIT' as any,
+          id: c.gamecardId
+        }))
+      ];
+
       gameState.pendingQuery = {
         id: Math.random().toString(36).substring(7),
         type: 'SELECT_CARD',
         playerUid: playerState.uid,
-        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, candidates.map(item => ({
-          card: item.card || { fullName: '未知效果', type: 'EFFECT' } as Card,
-          source: item.type === 'PLAY' ? (item.card?.cardlocation || 'PLAY') : 'STACK',
-          id: item.card?.gamecardId || `stack_${gameState.counterStack.indexOf(item)}`
-        }))),
-        title: '选择拦截目标',
-        description: '请选择一个要无效的发动或效果。',
+        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, options),
+        title: '选择拦截或封印目标',
+        description: '请选择一个要无效的发动（来自堆栈）或要封印的“启”效果单位（来自战场）。',
         minSelections: 1,
         maxSelections: 1,
         callbackKey: 'EFFECT_RESOLVE',
         context: {
           effectId: 'kaguya_flowering_silence',
           sourceCardId: instance.gamecardId,
-          step: 'SELECT_STACK_ITEM'
+          step: 'SELECT_ANY_TARGET'
         }
       };
       return;
     }
-
-    // Handle Main Phase Mode: Target field
-    const targets: Card[] = [];
-    Object.values(gameState.players).forEach(p => {
-      p.unitZone.forEach(c => {
-        if (c && c.effects && c.effects.some(e => e.type === 'ACTIVATE')) {
-          targets.push(c);
-        }
-      });
-    });
-
-    if (targets.length > 0) {
-      gameState.pendingQuery = {
-        id: Math.random().toString(36).substring(7),
-        type: 'SELECT_CARD',
-        playerUid: playerState.uid,
-        options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, targets.map(c => ({ card: c, source: 'UNIT' }))),
-        title: '选择目标单位',
-        description: '请选择一个拥有“启”效果的单位。',
-        minSelections: 1,
-        maxSelections: 1,
-        callbackKey: 'EFFECT_RESOLVE',
-        context: {
-          effectId: 'kaguya_flowering_silence',
-          sourceCardId: instance.gamecardId,
-          step: 'SELECT_UNIT'
-        }
-      };
-    } else {
-      gameState.logs.push(`[${instance.fullName}] 未发现拥有可封印“启”效果的单位。`);
-    }
   },
   onQueryResolve: async (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[], context: any) => {
+    if (context.step === 'SELECT_ANY_TARGET' && selections.length > 0) {
+      const selectedId = selections[0];
+
+      // 1. Check if it's a stack item
+      const stackItemIndex = gameState.counterStack.findIndex(i =>
+        i.card?.gamecardId === selectedId || `stack_${gameState.counterStack.indexOf(i)}` === selectedId
+      );
+
+      if (stackItemIndex !== -1) {
+        const item = gameState.counterStack[stackItemIndex];
+        item.isNegated = true;
+        gameState.logs.push(`[${instance.fullName}] 成功拦截并使 [${item.card?.fullName || '效果'}] 无效。`);
+        return;
+      }
+
+      // 2. Otherwise assume it's a field unit
+      context.step = 'SELECT_UNIT'; // Handled by standard field logic below
+    }
+
     if (context.step === 'SELECT_UNIT' && selections.length > 0) {
       const targetId = selections[0];
       const target = AtomicEffectExecutor.findCardById(gameState, targetId);
@@ -99,7 +105,9 @@ const effect_20400013_activation: CardEffect = {
 
         if (activateEffects.length === 1) {
           if (!target.silencedEffectIds) target.silencedEffectIds = [];
-          target.silencedEffectIds.push(activateEffects[0].id);
+          if (!target.silencedEffectIds.includes(activateEffects[0].id)) {
+            target.silencedEffectIds.push(activateEffects[0].id);
+          }
           gameState.logs.push(`[${instance.fullName}] 封印了 [${target.fullName}] 的 “${activateEffects[0].description.slice(0, 20)}...” 效果。`);
         } else if (activateEffects.length > 1) {
           gameState.pendingQuery = {
@@ -124,7 +132,9 @@ const effect_20400013_activation: CardEffect = {
       const target = AtomicEffectExecutor.findCardById(gameState, targetId);
       if (target) {
         if (!target.silencedEffectIds) target.silencedEffectIds = [];
-        target.silencedEffectIds.push(selections[0]);
+        if (!target.silencedEffectIds.includes(selections[0])) {
+          target.silencedEffectIds.push(selections[0]);
+        }
         gameState.logs.push(`[${instance.fullName}] 封印了 [${target.fullName}] 的指定“启”效果。`);
       }
     } else if (context.step === 'SELECT_STACK_ITEM' && selections.length > 0) {

@@ -13,7 +13,7 @@ const trigger_30403004: CardEffect = {
     return event?.playerUid === playerState.uid && !instance.isExhausted;
   },
   execute: async (instance, gameState, playerState, event) => {
-    const usageKeyPrefix = `30403004_${instance.gamecardId}_option_`;
+    const usageKeyPrefix = `turn_${gameState.turnCount}_30403004_${instance.gamecardId}_option_`;
     const options: any[] = [];
 
     // Option A: Buff
@@ -22,7 +22,7 @@ const trigger_30403004: CardEffect = {
         card: {
           gamecardId: 'OPTION_A',
           id: 'OPTION_A',
-          fullName: '选项A：力量+500/全攻/速攻',
+          fullName: '选项A：力量+500，伤害+1，获得速攻',
           type: 'STORY',
           color: 'BLUE',
           rarity: 'C'
@@ -47,7 +47,8 @@ const trigger_30403004: CardEffect = {
     }
 
     // Option C: Recycle from Grave
-    if (!gameState.effectUsage?.[usageKeyPrefix + 'c']) {
+    const hasGraveTarget = playerState.grave.some(c => c && c.faction === '冒险家公会');
+    if (!gameState.effectUsage?.[usageKeyPrefix + 'c'] && hasGraveTarget) {
       options.push({
         card: {
           gamecardId: 'OPTION_C',
@@ -82,7 +83,7 @@ const trigger_30403004: CardEffect = {
     }
   },
   onQueryResolve: async (instance, gameState, playerState, selections, context) => {
-    const usageKeyPrefix = `30403004_${instance.gamecardId}_option_`;
+    const usageKeyPrefix = `turn_${gameState.turnCount}_30403004_${instance.gamecardId}_option_`;
     const choice = selections[0];
 
     if (choice === 'OPTION_A') {

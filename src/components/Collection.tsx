@@ -522,10 +522,10 @@ export const Collection: React.FC = () => {
 
                     {/* Synthesis Console Area */}
                     <div className="space-y-4 pt-4">
-                      <h3 className="text-[11px] font-black text-cyan-400 uppercase tracking-[0.4em] flex items-center gap-2">
+                      {/* <h3 className="text-[11px] font-black text-cyan-400 uppercase tracking-[0.4em] flex items-center gap-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
                         Synthesis Console
-                      </h3>
+                      </h3> */}
 
                       {/* Decompose */}
                       <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">

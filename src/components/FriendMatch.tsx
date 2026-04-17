@@ -47,11 +47,15 @@ export const FriendMatch: React.FC = () => {
         const res = await fetch(`${BACKEND_URL}/api/games`);
         const data = await res.json();
         const game = (data.games || []).find((g: any) => g.id === createdGameId);
-        if (game && game.playerIds && game.playerIds.length >= 2) {
-          clearInterval(interval);
-          navigate(`/battle/${createdGameId}`, { state: { deckId: selectedDeckId } });
+        if (game) {
+          console.log(`[FriendMatch] Polling room ${createdGameId}, players:`, game.playerIds?.length);
+          if (game.playerIds && game.playerIds.length >= 2) {
+            console.log(`[FriendMatch] Room ready! Navigating to battle...`);
+            clearInterval(interval);
+            navigate(`/battle/${createdGameId}`, { state: { deckId: selectedDeckId } });
+          }
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) { console.error('[FriendMatch] Poll error:', e); }
     }, 2000);
     return () => clearInterval(interval);
   }, [waitingForOpponent, createdGameId]);

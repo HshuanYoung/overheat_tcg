@@ -486,7 +486,7 @@ app.post('/api/games/friend/join', async (req, res): Promise<void> => {
             res.status(400).json({ error: '你已在该房间中' });
             return;
         }
-        gameState.playerIds.push(user.userId);
+        gameState.playerIds.push(userIdStr);
         gameState.status = 'READY';
 
         await syncAndSaveState(gameId, gameState);
@@ -499,6 +499,9 @@ app.post('/api/games/friend/join', async (req, res): Promise<void> => {
 
 // Matchmaking Queue
 const matchmakingQueue: { userId: string; socketId?: string; timestamp: number; deck?: Card[]; turnTimerLimit?: number }[] = [];
+// Matchmaking results map: userId -> gameId
+const matchmakingResults = new Map<string, string>();
+
 
 app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
     const authHeader = req.headers.authorization;
@@ -508,26 +511,39 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
 
     try {
         const { deckId, turnTimerLimit } = req.body;
+        
+        // 1. Check if user is already matched in a pending result
+        const existingGameId = matchmakingResults.get(user.userId.toString());
+        if (existingGameId) {
+            res.json({ gameId: existingGameId, matched: true });
+            return;
+        }
+
         if (!deckId) { res.status(400).json({ error: '请选择卡组' }); return; }
 
         const validation = await validateUserDeck(user.userId, deckId);
         if (!validation.valid) { res.status(400).json({ error: validation.error }); return; }
 
-        // Remove self if already in queue
-        const existingIdx = matchmakingQueue.findIndex(q => q.userId === user.userId);
+        // Remove self from queue if already there (to avoid duplicates or refresh timestamp)
+        const userIdStr = user.userId.toString();
+        const existingIdx = matchmakingQueue.findIndex(q => q.userId === userIdStr);
         if (existingIdx !== -1) matchmakingQueue.splice(existingIdx, 1);
 
-        // Check if someone else is waiting
+        // 2. Try to match with someone else
         const opponent = matchmakingQueue.shift();
-        if (opponent && opponent.userId !== user.userId) {
+        if (opponent && opponent.userId !== userIdStr) {
             // Create a match
             const gameId = 'match_' + Math.random().toString(36).substring(2, 9);
-            const gameState = await ServerGameService.createMatchGameState(opponent.userId, opponent.deck!, user.userId, validation.cards!, turnTimerLimit || opponent.turnTimerLimit);
+            const gameState = await ServerGameService.createMatchGameState(opponent.userId, opponent.deck!, userIdStr, validation.cards!, turnTimerLimit || opponent.turnTimerLimit);
             gameState.gameId = gameId;
 
             await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
 
-            // Notify the opponent via socket
+            // Store results for both players to allow discovery via polling
+            matchmakingResults.set(userIdStr, gameId);
+            matchmakingResults.set(opponent.userId, gameId);
+
+            // Notify via socket as well (as an optimization)
             if (opponent.socketId) {
                 io.to(opponent.socketId).emit('matchFound', { gameId });
             }
@@ -535,7 +551,7 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
             res.json({ gameId, matched: true });
         } else {
             // Add to queue
-            matchmakingQueue.push({ userId: user.userId, deck: validation.cards, timestamp: Date.now(), turnTimerLimit });
+            matchmakingQueue.push({ userId: userIdStr, deck: validation.cards, timestamp: Date.now(), turnTimerLimit });
             res.json({ matched: false, position: matchmakingQueue.length });
         }
     } catch (err) {
@@ -1141,79 +1157,95 @@ io.on('connection', (socket) => {
 
         socket.join(gameId);
         // console.log(`[Socket] User ${userIdStr} attempting to join game ${gameId}`);
+        
+        // Remove from match results once joined
+        matchmakingResults.delete(userIdStr);
+
 
         try {
-            const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
-            if (rows.length === 0) {
-                // console.log(`[Socket] joinGame failed: Game ${gameId} not found in DB`);
-                socket.emit('error', '未找到游戏战场');
-                return;
-            }
+            await withGameLock(gameId, async () => {
+                const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
+                if (rows.length === 0) {
+                    console.error(`[Socket] joinGame failed: Game ${gameId} not found`);
+                    socket.emit('error', '未找到游戏战场');
+                    return;
+                }
 
-            const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
-            ServerGameService.hydrateGameState(gameState);
-            if (!gameState.players) gameState.players = {};
+                const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
+                ServerGameService.hydrateGameState(gameState);
+                if (!gameState.players) gameState.players = {};
 
-            // Initialize human player if they haven't been initialized yet
-            if (!gameState.players[userIdStr] && deckId) {
-                // console.log(`[Socket] Initializing player ${userIdStr} in game ${gameId}`);
-                const deckRows = await pool.query('SELECT * FROM decks WHERE id = ?', [deckId]);
-                if (deckRows.length > 0) {
-                    const deckCardsRaw = typeof deckRows[0].cards === 'string' ? JSON.parse(deckRows[0].cards) : deckRows[0].cards;
+                const initializedPlayers = Object.keys(gameState.players);
+                // console.log(`[Socket] joinGame for ${userIdStr} in ${gameId}. Current players: ${initializedPlayers.join(',')}`);
 
-                    if (Object.keys(SERVER_CARD_LIBRARY).length === 0) {
-                        // console.log('[Socket] WARNING: Card library was empty, initializing now...');
-                        await initServerCardLibrary();
+                // Initialize human player if they haven't been initialized yet
+                if (!gameState.players[userIdStr]) {
+                    if (deckId) {
+                        // console.log(`[Socket] Initializing player ${userIdStr} in game ${gameId}`);
+                        const deckRows = await pool.query('SELECT * FROM decks WHERE id = ?', [deckId]);
+                        if (deckRows.length > 0) {
+                            const deckCardsRaw = typeof deckRows[0].cards === 'string' ? JSON.parse(deckRows[0].cards) : deckRows[0].cards;
+
+                            if (Object.keys(SERVER_CARD_LIBRARY).length === 0) {
+                                await initServerCardLibrary();
+                            }
+
+                            const deckCards: Card[] = deckCardsRaw.map((id: string) => SERVER_CARD_LIBRARY[id]).filter(Boolean);
+
+                            // Validate Deck
+                            const validation = ServerGameService.validateDeck(deckCards);
+                            if (!validation.valid) {
+                                console.error(`[Socket] Deck validation failed for user ${userIdStr}`);
+                                socket.emit('error', `卡组非法: ${validation.error}`);
+                                return;
+                            }
+
+                            const isFirst = gameState.playerIds.map(id => id.toString()).indexOf(userIdStr) === 0;
+
+                            const player = createInitialPlayer(deckCards, user.displayName || user.username || '玩家', isFirst, gameState.turnTimerLimit);
+                            player.uid = userIdStr;
+                            gameState.players[userIdStr] = player;
+
+                            if (gameState.mode === 'practice' && !gameState.players['BOT_PLAYER']) {
+                                const botPlayer = createInitialPlayer(deckCards, '机器人', !isFirst, gameState.turnTimerLimit);
+                                botPlayer.uid = 'BOT_PLAYER';
+                                botPlayer.mulliganDone = true;
+                                gameState.players['BOT_PLAYER'] = botPlayer;
+                            }
+
+                            await syncAndSaveState(gameId, gameState);
+                        } else {
+                            console.error(`[Socket] Deck ${deckId} not found for user ${userIdStr}`);
+                            socket.emit('error', '未找到选定的卡组');
+                            return;
+                        }
+                    } else {
+                        // Player not initialized and no deckId provided
+                        // console.log(`[Socket] Player ${userIdStr} joinGame without deckId for uninitialized record`);
                     }
-
-                    const deckCards: Card[] = deckCardsRaw.map((id: string) => SERVER_CARD_LIBRARY[id]).filter(Boolean);
-
-                    // Validate Deck
-                    const validation = ServerGameService.validateDeck(deckCards);
-                    if (!validation.valid) {
-                        // console.log(`[Socket] joinGame failed: Deck validation failed for user ${userIdStr}`);
-                        socket.emit('error', `卡组非法: ${validation.error}`);
-                        return;
-                    }
-
-                    const isFirst = gameState.playerIds.indexOf(userIdStr) === 0;
-
-                    const player = createInitialPlayer(deckCards, user.displayName || user.username || '玩家', isFirst, gameState.turnTimerLimit);
-                    player.uid = userIdStr;
-                    gameState.players[userIdStr] = player;
-
-                    if (gameState.mode === 'practice' && !gameState.players['BOT_PLAYER']) {
-                        const botPlayer = createInitialPlayer(deckCards, '机器人', !isFirst, gameState.turnTimerLimit);
-                        botPlayer.uid = 'BOT_PLAYER';
-                        botPlayer.mulliganDone = true;
-                        gameState.players['BOT_PLAYER'] = botPlayer;
-                    }
-
-
-
-                    await syncAndSaveState(gameId, gameState);
                 } else {
-                    // console.error(`[Socket] joinGame error: Deck ${deckId} not found`);
+                    // console.log(`[Socket] Player ${userIdStr} already initialized in ${gameId}`);
                 }
-            }
 
-            // Start the phase timer if it hasn't started yet and players are ready
-            const initializedCount = Object.keys(gameState.players).length;
-            const isInitial = gameState.phase === 'INIT' || gameState.phase === 'MULLIGAN';
-            if (isInitial && initializedCount >= 2 && (gameState.phase === 'INIT' || !gameState.phaseTimerStart || gameState.phaseTimerStart === 0)) {
-                if (gameState.phase === 'INIT') {
-                    gameState.phase = 'MULLIGAN';
-                    gameState.status = 'ACTIVE';
-                    gameState.logs.push('所有玩家已准备就绪。开始调度阶段。');
+                // Start the phase timer if it hasn't started yet and players are ready
+                const initializedCount = Object.keys(gameState.players).length;
+                const isInitial = gameState.phase === 'INIT' || gameState.phase === 'MULLIGAN';
+                if (isInitial && initializedCount >= 2 && (gameState.phase === 'INIT' || !gameState.phaseTimerStart || gameState.phaseTimerStart === 0)) {
+                    if (gameState.phase === 'INIT') {
+                        // console.log(`[Socket] Game ${gameId} entering MULLIGAN phase`);
+                        gameState.phase = 'MULLIGAN';
+                        gameState.status = 'ACTIVE';
+                        gameState.logs.push('所有玩家已准备就绪。开始调度阶段。');
+                    }
+                    gameState.phaseTimerStart = Date.now();
+                    await syncAndSaveState(gameId, gameState);
                 }
-                gameState.phaseTimerStart = Date.now();
-                await syncAndSaveState(gameId, gameState);
-            }
 
-            // console.log(`[Socket] joinGame success: for ${userIdStr} in ${gameId}`);
-
+                // Always emit current state to the joining socket so they don't get stuck on "Syncing Battlefield"
+                socket.emit('gameStateUpdate', gameState);
+            });
         } catch (err) {
-            // console.error('[Socket] joinGame exception:', err);
+            console.error('[Socket] joinGame exception:', err);
             socket.emit('error', '战场同步过程中发生错误');
         }
     });

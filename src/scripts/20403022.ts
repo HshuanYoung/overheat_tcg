@@ -31,8 +31,10 @@ const card: Card = {
           }
         }
 
-        const handExcludingSelf = playerState.hand.filter(c => c.gamecardId !== card.gamecardId);
-        return handExcludingSelf.length >= 2;
+        // Resolution-safe check: card could be in HAND (pre-play) or PLAY (resolution)
+        const handCount = playerState.hand.filter(c => c.gamecardId !== card.gamecardId).length;
+        const playCount = playerState.playZone.filter(c => c.gamecardId !== card.gamecardId).length;
+        return (handCount + playCount) >= 2;
       },
       execute: async (card, gameState, playerState) => {
         playerState.factionLock = '冒险家公会';

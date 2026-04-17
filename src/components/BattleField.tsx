@@ -181,11 +181,18 @@ export const BattleField: React.FC = () => {
       }
     };
 
+    const onSocketError = (err: string | any) => {
+      console.error('[BattleField] Socket Error:', err);
+      // We could use a toast or alert here, but console is safest for basic diagnostics
+    };
+
     socket.on('gameStateUpdate', onGameStateUpdate);
+    socket.on('error', onSocketError);
 
     return () => {
       console.log('[BattleField] Unregistering socket listeners for game:', gameId);
       socket.off('gameStateUpdate', onGameStateUpdate);
+      socket.off('error', onSocketError);
     };
   }, [gameId]);
 
@@ -327,8 +334,8 @@ export const BattleField: React.FC = () => {
 
   // const authUser = getAuthUser();
   // const myUid = authUser?.uid;
-  const me = useMemo(() => (game && myUid) ? game.players[myUid] : null, [game, myUid]);
-  const opponentUid = useMemo(() => (game && myUid) ? Object.keys(game.players).find(uid => uid !== myUid) : null, [game, myUid]);
+  const me = useMemo(() => (game && myUid) ? game.players[myUid.toString()] : null, [game, myUid]);
+  const opponentUid = useMemo(() => (game && myUid) ? Object.keys(game.players).find(uid => uid.toString() !== myUid.toString()) : null, [game, myUid]);
   const opponent = useMemo(() => (game && opponentUid) ? game.players[opponentUid] : null, [game, opponentUid]);
 
   if (!game || !myUid || !me) {

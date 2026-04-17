@@ -300,11 +300,15 @@ export class AtomicEffectExecutor {
       if (this.shouldSkipEffect(gameState, card)) return;
 
       if (effect.value !== undefined) {
+        if (!card.temporaryBuffSources) card.temporaryBuffSources = {};
+        const sourceName = sourceCard ? sourceCard.fullName : '效果';
+
         if (stat === 'power') {
           if (effect.turnDuration === 0 || effect.turnDuration === -1) {
             card.basePower = (card.basePower || 0) + effect.value;
           } else if (effect.turnDuration === 1) {
             card.temporaryPowerBuff = (card.temporaryPowerBuff || 0) + effect.value;
+            card.temporaryBuffSources['power'] = sourceName;
           }
           card.power = (card.power || 0) + effect.value;
           EventEngine.dispatchEvent(gameState, { type: 'CARD_POWER_CHANGED', targetCardId: card.gamecardId, data: { delta: effect.value } });
@@ -313,6 +317,7 @@ export class AtomicEffectExecutor {
             card.baseDamage = (card.baseDamage || 0) + effect.value;
           } else if (effect.turnDuration === 1) {
             card.temporaryDamageBuff = (card.temporaryDamageBuff || 0) + effect.value;
+            card.temporaryBuffSources['damage'] = sourceName;
           }
           card.damage = (card.damage || 0) + effect.value;
           EventEngine.dispatchEvent(gameState, { type: 'CARD_DAMAGE_CHANGED', targetCardId: card.gamecardId, data: { delta: effect.value } });
@@ -619,7 +624,7 @@ export class AtomicEffectExecutor {
     return results;
   }
 
-  static moveCard(gameState: GameState, playerUid: string, fromZone: TriggerLocation, toPlayerUid: string, toZone: TriggerLocation, cardId: string, isEffect?: boolean) {
+  static moveCard(gameState: GameState, playerUid: string, fromZone: TriggerLocation, toPlayerUid: string, toZone: TriggerLocation, cardId: string, isEffect?: boolean, options?: { faceDown?: boolean }) {
     const sourcePlayer = gameState.players[playerUid];
     const targetPlayer = gameState.players[toPlayerUid];
 
@@ -667,6 +672,14 @@ export class AtomicEffectExecutor {
       }
     }
 
+    if (options?.faceDown !== undefined) {
+      card.displayState = options.faceDown ? 'FRONT_FACEDOWN' : 'FRONT_UPRIGHT';
+    } else if (toZone === 'EROSION_FRONT') {
+      card.displayState = 'FRONT_UPRIGHT';
+    } else if (toZone === 'EROSION_BACK') {
+      card.displayState = 'FRONT_FACEDOWN';
+    }
+
     card.cardlocation = toZone;
     let toArray: (Card | null)[] = [];
     const findToZone = (zone: (Card | null)[], loc: TriggerLocation) => {
@@ -706,9 +719,9 @@ export class AtomicEffectExecutor {
     }
 
     if (from === 'DECK' && to === 'EROSION_FRONT') {
-      EventEngine.dispatchEvent(gameState, { type: 'CARD_DECK_TO_EROSION_UP', playerUid, sourceCardId: card.gamecardId });
-    } else if (from === 'EROSION_FRONT' && ['UNIT', 'ITEM'].includes(to)) {
-      EventEngine.dispatchEvent(gameState, { type: 'CARD_EROSION_TO_FIELD', playerUid, sourceCardId: card.gamecardId });
+      EventEngine.dispatchEvent(gameState, { type: 'CARD_DECK_TO_EROSION_UP', playerUid, sourceCard: card, sourceCardId: card.gamecardId });
+    } else if ((from === 'EROSION_FRONT' || from === 'EROSION_BACK') && ['UNIT', 'ITEM'].includes(to)) {
+      EventEngine.dispatchEvent(gameState, { type: 'CARD_EROSION_TO_FIELD', playerUid, sourceCard: card, sourceCardId: card.gamecardId, data: { sourceZone: from } });
     } else if (from === 'EROSION_FRONT' && to === 'HAND') {
       EventEngine.dispatchEvent(gameState, { type: 'CARD_EROSION_TO_HAND', playerUid, sourceCardId: card.gamecardId });
     } else if (from === 'HAND' && to === 'GRAVE') {
@@ -803,13 +816,21 @@ export class AtomicEffectExecutor {
 
     targets.forEach(card => {
       if (this.shouldSkipEffect(gameState, card)) return;
+      if (!card.temporaryBuffSources) card.temporaryBuffSources = {};
+      const sourceName = sourceCard ? sourceCard.fullName : '效果';
 
       if (keyword === 'RUSH') {
-        if (duration === 1) card.temporaryRush = true;
+        if (duration === 1) {
+          card.temporaryRush = true;
+          card.temporaryBuffSources['rush'] = sourceName;
+        }
         else card.baseIsrush = true;
         card.isrush = true;
       } else if (keyword === 'FULL_ATTACK') {
-        if (duration === 1) card.temporaryCanAttackAny = true;
+        if (duration === 1) {
+          card.temporaryCanAttackAny = true;
+          card.temporaryBuffSources['full_attack'] = sourceName;
+        }
       }
     });
 

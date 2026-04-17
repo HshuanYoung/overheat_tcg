@@ -230,8 +230,24 @@ const PlayerHalf: React.FC<{
               onClick={() => setViewingZone?.({ title: '道具区 (Item Zone)', cards: player.itemZone?.filter(Boolean) as Card[], type: 'item' })}
               isFaceUp={true} displayMode="erosion_item"
             />
-            {/* EROSION Slot Hidden per user request */}
-            <div className="h-0 md:h-0" />
+            <CardSlot
+              card={player.erosionFront?.filter(Boolean).slice(-1)[0] || player.erosionBack?.filter(Boolean).slice(-1)[0] || null}
+              label="EROSION"
+              count={(player.erosionFront?.filter(Boolean).length || 0) + (player.erosionBack?.filter(Boolean).length || 0)}
+              className="border-red-500/30 scale-[0.8] md:scale-100 md:hidden" cardBackUrl={cardBackUrl}
+              onClick={() => {
+                const backCards = player.erosionBack?.filter((c): c is Card => c !== null) || [];
+                const frontCards = player.erosionFront?.filter((c): c is Card => c !== null) || [];
+                setViewingZone?.({
+                  title: '侵蚀区 (Erosion Zone)',
+                  cards: [...backCards, ...frontCards],
+                  type: 'erosion',
+                  erosionBackIds: backCards.map(c => c.gamecardId)
+                });
+              }}
+              isFaceUp={player.erosionFront?.some(c => c !== null)}
+              displayMode="erosion_item"
+            />
             <CardSlot
               card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
               label="PLAY" count={player.playZone?.length || 0}
@@ -439,8 +455,25 @@ const PlayerHalf: React.FC<{
               className="border-yellow-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onPreview={onPreviewCard} isOpponent={isOpponent}
             />
-            {/* EROSION Slot Hidden per user request */}
-            <div className="h-0 md:h-0" />
+            <CardSlot
+              card={player.erosionFront?.filter(Boolean).slice(-1)[0] || player.erosionBack?.filter(Boolean).slice(-1)[0] || null}
+              label="EROSION"
+              count={(player.erosionFront?.filter(Boolean).length || 0) + (player.erosionBack?.filter(Boolean).length || 0)}
+              className="border-red-500/30 scale-[0.8] md:scale-100 md:hidden" cardBackUrl={cardBackUrl}
+              onClick={() => {
+                const backCards = player.erosionBack?.filter((c): c is Card => c !== null) || [];
+                const frontCards = player.erosionFront?.filter((c): c is Card => c !== null) || [];
+                setViewingZone?.({
+                  title: isOpponent ? '敌方侵蚀区 (Opponent Erosion)' : '侵蚀区 (Erosion Zone)',
+                  cards: [...backCards, ...frontCards],
+                  type: 'erosion',
+                  erosionBackIds: backCards.map(c => c.gamecardId)
+                });
+              }}
+              isFaceUp={player.erosionFront?.some(c => c !== null)}
+              isOpponent={isOpponent}
+              displayMode="erosion_item"
+            />
             <CardSlot
               card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}
               label="ITEM" count={player.itemZone?.filter(Boolean).length || 0}

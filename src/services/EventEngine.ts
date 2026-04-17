@@ -30,7 +30,12 @@ export class EventEngine {
               // New: Check if the card's current location is in the effect's triggerLocation array
               // If triggerLocation is not specified, default depends on the card type (usually UNIT/ITEM for units)
               const cardLoc = card.cardlocation as TriggerLocation;
-              const allowedLocations = effect.triggerLocation || BATTLEFIELD_ZONES;
+              let allowedLocations = effect.triggerLocation || BATTLEFIELD_ZONES;
+
+              // Story cards can be activated from Hand or Play zone by default
+              if (!effect.triggerLocation && card.type === 'STORY') {
+                allowedLocations = [...BATTLEFIELD_ZONES, 'HAND', 'PLAY'];
+              }
 
               if (!allowedLocations.includes(cardLoc)) {
                 return;
@@ -128,16 +133,20 @@ export class EventEngine {
           card.influencingEffects = [];
 
           if (card.temporaryPowerBuff) {
-            card.influencingEffects.push({ sourceCardName: '系统', description: `临时力量强化: +${card.temporaryPowerBuff}` });
+            const source = card.temporaryBuffSources?.['power'] || '效果';
+            card.influencingEffects.push({ sourceCardName: source, description: `临时力量加成: +${card.temporaryPowerBuff}` });
           }
           if (card.temporaryDamageBuff) {
-            card.influencingEffects.push({ sourceCardName: '系统', description: `临时伤害强化: +${card.temporaryDamageBuff}` });
+            const source = card.temporaryBuffSources?.['damage'] || '效果';
+            card.influencingEffects.push({ sourceCardName: source, description: `临时伤害加成: +${card.temporaryDamageBuff}` });
           }
           if (card.temporaryRush) {
-            card.influencingEffects.push({ sourceCardName: '系统', description: '获得【速攻】' });
+            const source = card.temporaryBuffSources?.['rush'] || '效果';
+            card.influencingEffects.push({ sourceCardName: source, description: '获得【速攻】' });
           }
           if (card.temporaryCanAttackAny) {
-            card.influencingEffects.push({ sourceCardName: '系统', description: '获得【全攻】' });
+            const source = card.temporaryBuffSources?.['full_attack'] || '效果';
+            card.influencingEffects.push({ sourceCardName: source, description: '获得【全攻】' });
           }
         }
       });

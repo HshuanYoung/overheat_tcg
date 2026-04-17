@@ -5,17 +5,23 @@ const effect_10403040_kill_trigger: CardEffect = {
   id: 'cocoa_kill_trigger',
   type: 'TRIGGER',
   triggerEvent: 'CARD_DESTROYED_BATTLE',
+  isGlobal: true,
   description: '【诱发】当此单位在战斗中破坏对手的单位时，选择对手的一个横置状态的非神迹单位并破坏。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
-    // Only trigger if this unit was the "killer"
-    if (!event || !event.data || !event.data.attackerIds) return false;
-    return event.data.attackerIds.includes(instance.gamecardId);
+    if (!event || !event.data || !gameState.battleState) return false;
+    // Trigger if this unit was either the attacker or the defender in the battle that caused destruction
+    const isParticipant = gameState.battleState.attackers.includes(instance.gamecardId) || 
+                         gameState.battleState.defender === instance.gamecardId;
+    // And verify the destruction target was an opponent's card
+    const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
+    const isOpponentCard = event.playerUid === opponentId;
+
+    return isParticipant && isOpponentCard;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const opponentId = gameState.playerIds.find(id => id !== playerState.uid)!;
     const opponent = gameState.players[opponentId];
 
-    // Filter: opponent's unit, exhausted (horizontal), non-divine (non-godmark)
     const targets = opponent.unitZone.filter(u => u && u.isExhausted && !u.godMark) as Card[];
 
     if (targets.length > 0) {
@@ -45,7 +51,7 @@ const effect_10403040_kill_trigger: CardEffect = {
         targetFilter: { gamecardId: targetId }
       }, instance);
 
-      gameState.logs.push(`[${instance.fullName}] 效果：破坏了单位。`);
+      gameState.logs.push(`[${instance.fullName}] 效果：额外的破坏了单位。`);
     }
   }
 };
@@ -82,13 +88,11 @@ const effect_10403040_activate: CardEffect = {
   },
   onQueryResolve: async (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[], context: any) => {
     if (context.step === 'COST' && selections.length > 0) {
-      // Execute Cost: Turn to back
       await AtomicEffectExecutor.execute(gameState, playerState.uid, {
         type: 'TURN_EROSION_FACE_DOWN',
         value: 1
       }, instance, undefined, selections);
 
-      // Search Cocola
       const searchZones: { zone: (Card | null)[], name: TriggerLocation }[] = [
         { zone: playerState.hand, name: 'HAND' },
         { zone: playerState.deck, name: 'DECK' },
@@ -126,8 +130,9 @@ const effect_10403040_activate: CardEffect = {
       }
     } else if (context.step === 'SUMMON' && selections.length > 0) {
       const cocolaId = selections[0];
-      const targetCard = AtomicEffectExecutor.findCardById(gameState, cocolaId)!;
-      const sourceZone = targetCard.cardlocation as TriggerLocation;
+      // Resolve source from option context if available, otherwise fallback to find
+      const sourceOption = gameState.pendingQuery?.options.find((o: any) => o.card.gamecardId === cocolaId);
+      const sourceZone = (sourceOption?.source || AtomicEffectExecutor.findCardById(gameState, cocolaId)?.cardlocation) as TriggerLocation;
 
       await AtomicEffectExecutor.execute(gameState, playerState.uid, {
         type: (sourceZone === 'DECK' ? 'MOVE_FROM_DECK' : (sourceZone === 'GRAVE' ? 'MOVE_FROM_GRAVE' : 'MOVE_FROM_HAND')) as any,
@@ -135,7 +140,7 @@ const effect_10403040_activate: CardEffect = {
         destinationZone: 'UNIT'
       }, instance);
 
-      gameState.logs.push(`[${instance.fullName}] 的效果使 [${targetCard.fullName}] 从 ${sourceZone} 出击到战场！`);
+      gameState.logs.push(`[${instance.fullName}] 的效果使“可可拉”从 ${sourceZone} 出击到战场！`);
 
       if (sourceZone === 'DECK') {
         await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);

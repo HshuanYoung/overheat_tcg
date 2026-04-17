@@ -234,6 +234,7 @@ export interface Card {
   allowPlayFromErosionFront?: boolean;
   nextEffectProtection?: boolean;
   silencedEffectIds?: string[];
+  temporaryBuffSources?: { [key: string]: string }; // Map of buff type to source card name
 }
 
 export interface PlayerState {

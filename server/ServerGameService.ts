@@ -357,6 +357,18 @@ export const ServerGameService = {
     }
 
     EventEngine.handleCardEnteredZone(gameState, targetPlayerId, card, targetZone, options?.isEffect);
+
+    // Dispatch specialized erosion-to-field event for cards like 30403004 and 10403051
+    if ((sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') && targetZone === 'UNIT') {
+      EventEngine.dispatchEvent(gameState, {
+        type: 'CARD_EROSION_TO_FIELD',
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        playerUid: targetPlayerId,
+        data: { sourceZone }
+      });
+    }
+
     return true;
   },
 
@@ -1123,7 +1135,7 @@ export const ServerGameService = {
     if (query.callbackKey === 'TRIGGER_CHOICE') {
       if (currentSelections[0] === 'YES') {
         gameState.logs.push(`[系统] ${gameState.players[playerUid].displayName} 选择发动 ${sourceCard?.fullName} 的诱发效果。`);
-        ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+        await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
           effectIndex: query.context.effectIndex,
           card: sourceCard!,
           event: query.context.event
@@ -1973,10 +1985,6 @@ export const ServerGameService = {
     // Default destruction using standard moveCard
     ServerGameService.moveCard(gameState, playerId, fromZone, playerId, 'GRAVE', gamecardId, { isEffect });
 
-    // Ensure movement events are dispatched
-    EventEngine.handleCardLeftZone(gameState, playerId, unit, zone, isEffect, 'GRAVE');
-
-
     if (isEffect) {
       EventEngine.dispatchEvent(gameState, {
         type: 'CARD_DESTROYED_EFFECT',
@@ -2086,6 +2094,8 @@ export const ServerGameService = {
             u.temporaryPowerBuff = 0;
             u.temporaryDamageBuff = 0;
             u.temporaryRush = false;
+            u.temporaryCanAttackAny = false;
+            u.temporaryBuffSources = {};
             u.isrush = u.baseIsrush;
             u.isAnnihilation = u.baseAnnihilation || false;
             u.power = u.basePower;
@@ -2273,7 +2283,7 @@ export const ServerGameService = {
 
     // 5. Execute Legacy Callback
     if (effect.execute) {
-      await (effect.execute as any)(card, gameState, gameState.players[playerUid]);
+      await (effect.execute as any)(card, gameState, gameState.players[playerUid], event);
     }
 
     // 6. Dispatch Event
@@ -2613,10 +2623,10 @@ export const ServerGameService = {
 
   async executeErosionPhase(gameState: GameState, player: PlayerState) {
     // console.log(`[ServerGameService] executeErosionPhase for ${player.displayName}`);
-    const faceUpCards = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT');
-    // console.log(`[ServerGameService] Found ${faceUpCards.length} face-up cards in erosion front`);
+    const handleableCards = player.erosionFront.filter(c => c !== null);
+    // console.log(`[ServerGameService] Found ${handleableCards.length} cards in erosion front`);
 
-    if (faceUpCards.length === 0) {
+    if (handleableCards.length === 0) {
       gameState.logs.push(`${player.displayName} 侵蚀区没有正面卡，跳过侵蚀阶段。`);
       gameState.phase = 'MAIN';
       gameState.logs.push(`${player.displayName} 进入主要阶段`);
@@ -2634,12 +2644,12 @@ export const ServerGameService = {
     const player = gameState.players[playerId];
     if (gameState.phase !== 'EROSION' || !player.isTurn) throw new Error('Not in erosion phase or not your turn');
 
-    const faceUpCards = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT') as Card[];
+    const handleableCards = player.erosionFront.filter(c => c !== null) as Card[];
 
     // Identify cards going to grave
     let goingToGrave: Card[] = [];
-    if (choice === 'A') goingToGrave = [...faceUpCards];
-    else if (choice === 'B' || choice === 'C') goingToGrave = faceUpCards.filter(c => c.gamecardId !== selectedCardId);
+    if (choice === 'A') goingToGrave = [...handleableCards];
+    else if (choice === 'B' || choice === 'C') goingToGrave = handleableCards.filter(c => c.gamecardId !== selectedCardId);
 
     // Check for EROSION_KEEP effects (10403015)
     const keepEffectCard = player.unitZone.find(c =>
@@ -2684,11 +2694,11 @@ export const ServerGameService = {
 
   executeErosionMovements(gameState: GameState, playerId: string, choice: 'A' | 'B' | 'C', selectedCardId?: string, keptCardId?: string) {
     const player = gameState.players[playerId];
-    const faceUpCards = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT') as Card[];
+    const handleableCards = player.erosionFront.filter(c => c !== null) as Card[];
 
     if (choice === 'A') {
-      // a. Move all face-up cards in the Erosion Zone to the Graveyard
-      for (const card of faceUpCards) {
+      // a. Move all cards in the Erosion Zone to the Graveyard
+      for (const card of handleableCards) {
         if (card.gamecardId === keptCardId) {
           gameState.logs.push(`[白夜效果] ${card.fullName} 被保留在侵蚀区。`);
           continue;
@@ -2697,9 +2707,9 @@ export const ServerGameService = {
       }
       gameState.logs.push(`${player.displayName} 将侵蚀区所有正面卡移至墓地。`);
     } else if (choice === 'B') {
-      // b. Choose one face-up card to keep; others to Graveyard
+      // b. Choose one card to keep; others to Graveyard
       if (!selectedCardId) throw new Error('Please select a card to keep');
-      for (const card of faceUpCards) {
+      for (const card of handleableCards) {
         if (card.gamecardId !== selectedCardId && card.gamecardId !== keptCardId) {
           ServerGameService.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'GRAVE', card.gamecardId);
         } else if (card.gamecardId === keptCardId && card.gamecardId !== selectedCardId) {
@@ -2710,7 +2720,7 @@ export const ServerGameService = {
     } else if (choice === 'C') {
       // c. Choose one to hand; others to Graveyard; then top card to Erosion Zone face-down
       if (!selectedCardId) throw new Error('Please select a card to add to hand');
-      for (const card of faceUpCards) {
+      for (const card of handleableCards) {
         if (card.gamecardId === selectedCardId) {
           ServerGameService.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'HAND', card.gamecardId);
         } else if (card.gamecardId === keptCardId) {

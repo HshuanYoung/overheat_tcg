@@ -192,10 +192,11 @@ export class EventEngine {
           if (target) {
             // Add entry to Equipment
             if (!item.influencingEffects) item.influencingEffects = [];
-            if (!item.influencingEffects.some(e => e.sourceCardName === target.fullName && e.description === '已装备此单位')) {
+            const equipDescription = `已装备给 ${target.fullName}`;
+            if (!item.influencingEffects.some(e => e.sourceCardName === target.fullName && e.description === equipDescription)) {
               item.influencingEffects.push({
                 sourceCardName: target.fullName,
-                description: '已装备此单位'
+                description: equipDescription
               });
             }
 

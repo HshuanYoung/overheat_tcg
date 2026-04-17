@@ -154,6 +154,34 @@ export const ServerGameService = {
     }
   },
 
+  refreshCardAsNewInstance(card: Card) {
+    const newGamecardId = Math.random().toString(36).substring(2, 10);
+    card.gamecardId = newGamecardId;
+    card.runtimeFingerprint = `FP_${newGamecardId}_${Date.now()}`;
+    card.equipTargetId = undefined;
+    card.isExhausted = false;
+    card.displayState = 'FRONT_UPRIGHT';
+    card.canResetCount = 0;
+    card.hasAttackedThisTurn = false;
+    card.usedShenyiThisTurn = false;
+    card.playedTurn = undefined;
+    card.silencedEffectIds = [];
+    card.temporaryPowerBuff = 0;
+    card.temporaryDamageBuff = 0;
+    card.temporaryRush = false;
+    card.temporaryCanAttackAny = false;
+    card.temporaryBuffSources = {};
+    card.influencingEffects = [];
+    if (card.basePower !== undefined) card.power = card.basePower;
+    if (card.baseDamage !== undefined) card.damage = card.baseDamage;
+    if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
+    if (card.baseCanActivateEffect !== undefined) {
+      card.canActivateEffect = card.baseCanActivateEffect;
+    } else {
+      card.canActivateEffect = true;
+    }
+  },
+
   checkEffectLimitsAndReqs(gameState: GameState, playerUid: string, card: Card, effect: CardEffect, triggerLocation?: TriggerLocation, event?: GameEvent): { valid: boolean; reason?: string } {
     const player = gameState.players[playerUid];
     if (!player) return { valid: false, reason: '未找到玩家信息' };
@@ -3380,3 +3408,4 @@ export const ServerGameService = {
 // Link shared service to server-side implementation
 (GameService as any).destroyUnit = ServerGameService.destroyUnit;
 (GameService as any).triggerGoddessTransformation = ServerGameService.triggerGoddessTransformation;
+(GameService as any).refreshCardAsNewInstance = ServerGameService.refreshCardAsNewInstance;

@@ -411,7 +411,7 @@ export const DeckBuilder: React.FC = () => {
               ) : (
                 <>
                   <p className="font-bold text-sm truncate pr-16">{d.name}</p>
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{d.cards.length} CARDS</p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{d.cards.length} 张卡牌</p>
                   <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
                     <button onClick={(e) => { e.stopPropagation(); setIsRenaming(d.id); setNewName(d.name); }} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400"><Edit3 className="w-3.5 h-3.5" /></button>
                     <button onClick={(e) => copyDeck(d, e)} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400"><Copy className="w-3.5 h-3.5" /></button>
@@ -500,18 +500,18 @@ export const DeckBuilder: React.FC = () => {
               <button
                 onClick={sortDeck}
                 className="flex items-center gap-2 px-6 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400 hover:text-white group"
-                title="排序卡组 Sort"
+                title="排序卡组"
               >
                 <ListFilter className="w-4 h-4 group-hover:scale-110" />
-                <span className="text-[10px] font-black uppercase tracking-widest">排序 Sort</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">排序</span>
               </button>
               <button
                 onClick={shuffleDeck}
                 className="flex items-center gap-2 px-6 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 rounded-full transition-all text-zinc-400 hover:text-white group"
-                title="乱序卡组 Shuffle"
+                title="洗切卡组"
               >
                 <Shuffle className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-                <span className="text-[10px] font-black uppercase tracking-widest">乱序 Shuffle</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">洗切</span>
               </button>
             </div>
             <button
@@ -569,7 +569,7 @@ export const DeckBuilder: React.FC = () => {
             className="flex items-center gap-3 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl border border-white/10 transition-all w-full text-zinc-300"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span className="font-black italic tracking-tighter uppercase text-sm">返回 BACK</span>
+            <span className="font-black italic tracking-tighter uppercase text-sm">返回</span>
           </button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -586,37 +586,37 @@ export const DeckBuilder: React.FC = () => {
               <label className="text-[10px] text-zinc-500 font-bold uppercase">AC</label>
               <input
                 className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
-                placeholder="All"
+                placeholder="全部"
                 value={filters.ac}
                 onChange={e => setFilters({ ...filters, ac: e.target.value })}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-zinc-500 font-bold uppercase">Damage</label>
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">伤害</label>
               <input
                 className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
-                placeholder="All"
+                placeholder="全部"
                 value={filters.damage}
                 onChange={e => setFilters({ ...filters, damage: e.target.value })}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-zinc-500 font-bold uppercase">Power</label>
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">力量</label>
               <input
                 className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
-                placeholder="All"
+                placeholder="全部"
                 value={filters.power}
                 onChange={e => setFilters({ ...filters, power: e.target.value })}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-zinc-500 font-bold uppercase">Color</label>
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">颜色</label>
               <select
                 className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white appearance-none"
                 value={filters.color}
                 onChange={e => setFilters({ ...filters, color: e.target.value })}
               >
-                <option value="ALL">All Colors</option>
+                <option value="ALL">全部颜色</option>
                 <option value="RED">Red</option>
                 <option value="BLUE">Blue</option>
                 <option value="GREEN">Green</option>
@@ -631,7 +631,7 @@ export const DeckBuilder: React.FC = () => {
                 value={filters.rarity}
                 onChange={e => setFilters({ ...filters, rarity: e.target.value })}
               >
-                <option value="ALL">All Rarities</option>
+                <option value="ALL">全部稀有度</option>
                 <option value="C">C</option>
                 <option value="U">U</option>
                 <option value="R">R</option>
@@ -642,25 +642,25 @@ export const DeckBuilder: React.FC = () => {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-zinc-500 font-bold uppercase">Owned</label>
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">持有状态</label>
               <select
                 className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white appearance-none"
                 value={filters.ownership}
                 onChange={e => setFilters({ ...filters, ownership: e.target.value })}
               >
-                <option value="ALL">All Cards</option>
-                <option value="OWNED">Owned</option>
-                <option value="NOT_OWNED">Not Owned</option>
+                <option value="ALL">全部卡牌</option>
+                <option value="OWNED">已拥有</option>
+                <option value="NOT_OWNED">未拥有</option>
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-zinc-500 font-bold uppercase">Faction</label>
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">势力</label>
               <select
                 className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white appearance-none"
                 value={filters.faction}
                 onChange={e => setFilters({ ...filters, faction: e.target.value })}
               >
-                <option value="ALL">All Factions</option>
+                <option value="ALL">全部势力</option>
                 {FACTIONS.map(f => (
                   <option key={f} value={f}>{f}</option>
                 ))}
@@ -689,7 +689,7 @@ export const DeckBuilder: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <h4 className="font-black italic text-sm truncate">{card.fullName}</h4>
                     <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">{card.type} - {card.rarity}</p>
-                    <p className="text-[10px] text-zinc-400 font-bold">QTY: {collection[card.uniqueId] || collection[card.id] || 0}</p>
+                    <p className="text-[10px] text-zinc-400 font-bold">数量：{collection[card.uniqueId] || collection[card.id] || 0}</p>
                   </div>
                 </div>
                 {isOwned && (
@@ -732,7 +732,7 @@ export const DeckBuilder: React.FC = () => {
                 title="返回"
               >
                 <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-1 transition-transform" />
-                <span className="text-[10px] font-black italic uppercase tracking-widest hidden md:block">返回 BACK</span>
+                <span className="text-[10px] font-black italic uppercase tracking-widest hidden md:block">返回</span>
               </button>
               {/* Large Card Image */}
               <div className="w-full md:w-1/2 flex items-center justify-center p-6 md:p-0 bg-zinc-800/20 md:bg-transparent">
@@ -750,7 +750,7 @@ export const DeckBuilder: React.FC = () => {
                     <span className="text-sm">x{collection[zoomedCard.uniqueId] || 0}</span>
                   </div>
                   <div className="absolute -bottom-4 -left-4 bg-zinc-800 px-4 py-2 rounded-xl border border-white/10 font-black italic shadow-2xl -rotate-6 z-20 flex flex-col items-center">
-                    <span className="text-[10px] opacity-60 text-red-500">IN DECK</span>
+                    <span className="text-[10px] opacity-60 text-red-500">卡组内</span>
                     <span>{deck.filter(c => c.id === zoomedCard.id).length} / 4</span>
                   </div>
                 </div>
@@ -779,7 +779,7 @@ export const DeckBuilder: React.FC = () => {
                     {/* Decompose */}
                     <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
                       <div>
-                        <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">DECOMPOSE 分解</p>
+                        <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">分解</p>
                         <div className="flex items-center gap-2">
                           <Trash2 className="w-5 h-5 text-red-500" />
                           <span className="text-xl md:text-2xl font-black italic text-cyan-400">+{CRYSTAL_VALUES[zoomedCard.rarity]?.decompose || 0}</span>
@@ -803,7 +803,7 @@ export const DeckBuilder: React.FC = () => {
                     {/* Craft */}
                     <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
                       <div>
-                        <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">CRAFT 制作</p>
+                        <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">制作</p>
                         <div className="flex items-center gap-2">
                           <Plus className="w-5 h-5 text-green-500" />
                           <span className="text-xl md:text-2xl font-black italic text-red-500">-{CRYSTAL_VALUES[zoomedCard.rarity]?.produce || 0}</span>
@@ -830,12 +830,12 @@ export const DeckBuilder: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <Plus className="w-5 h-5 text-cyan-400" />
                     <div>
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase">Current Crystals</p>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase">当前卡晶</p>
                       <p className="text-lg md:text-xl font-black italic text-cyan-400">{(cardCrystals || 0).toLocaleString()}</p>
                     </div>
                   </div>
                   <button onClick={() => setZoomedCard(null)} className="text-zinc-500 hover:text-white font-black italic text-sm uppercase transition-colors">
-                    CLOSE
+                    关闭
                   </button>
                 </div>
               </div>

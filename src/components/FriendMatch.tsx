@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Plus, LogIn, Loader2, Copy, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Plus, LogIn, Loader2, Copy, Check } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { getAuthUser } from '../socket';
 import { Deck } from '../types/game';
@@ -33,13 +33,14 @@ export const FriendMatch: React.FC = () => {
         const data = await res.json();
         setMyDecks(data.decks || []);
         if (data.decks?.length > 0) setSelectedDeckId(data.decks[0].id);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+      }
       setLoading(false);
     };
     loadDecks();
   }, []);
 
-  // Poll for opponent when waiting
   useEffect(() => {
     if (!waitingForOpponent || !createdGameId) return;
     const interval = setInterval(async () => {
@@ -47,28 +48,29 @@ export const FriendMatch: React.FC = () => {
         const res = await fetch(`${BACKEND_URL}/api/games`);
         const data = await res.json();
         const game = (data.games || []).find((g: any) => g.id === createdGameId);
-        if (game) {
-          console.log(`[FriendMatch] Polling room ${createdGameId}, players:`, game.playerIds?.length);
-          if (game.playerIds && game.playerIds.length >= 2) {
-            console.log(`[FriendMatch] Room ready! Navigating to battle...`);
-            clearInterval(interval);
-            navigate(`/battle/${createdGameId}`, { state: { deckId: selectedDeckId } });
-          }
+        if (game?.playerIds && game.playerIds.length >= 2) {
+          clearInterval(interval);
+          navigate(`/battle/${createdGameId}`, { state: { deckId: selectedDeckId } });
         }
-      } catch (e) { console.error('[FriendMatch] Poll error:', e); }
+      } catch (e) {
+        console.error('[FriendMatch] Poll error:', e);
+      }
     }, 2000);
     return () => clearInterval(interval);
-  }, [waitingForOpponent, createdGameId]);
+  }, [waitingForOpponent, createdGameId, navigate, selectedDeckId, BACKEND_URL]);
 
   const handleCreateRoom = async () => {
-    if (!selectedDeckId) { alert('请先选择一个卡组'); return; }
+    if (!selectedDeckId) {
+      alert('请先选择一个卡组');
+      return;
+    }
     setCreating(true);
     setError('');
     try {
       const res = await fetch(`${BACKEND_URL}/api/games/friend`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           deckId: selectedDeckId,
           turnTimerLimit: turnTime
         }),
@@ -85,8 +87,14 @@ export const FriendMatch: React.FC = () => {
   };
 
   const handleJoinRoom = async () => {
-    if (!selectedDeckId) { alert('请先选择一个卡组'); return; }
-    if (!roomCode || roomCode.length < 6) { setError('请输入有效的房间码'); return; }
+    if (!selectedDeckId) {
+      alert('请先选择一个卡组');
+      return;
+    }
+    if (!roomCode || roomCode.length < 6) {
+      setError('请输入有效的房间码');
+      return;
+    }
     setJoining(true);
     setError('');
     try {
@@ -96,7 +104,11 @@ export const FriendMatch: React.FC = () => {
         body: JSON.stringify({ roomCode, deckId: selectedDeckId }),
       });
       const data = await res.json();
-      if (data.error) { setError(data.error); setJoining(false); return; }
+      if (data.error) {
+        setError(data.error);
+        setJoining(false);
+        return;
+      }
       navigate(`/battle/${data.gameId}`, { state: { deckId: selectedDeckId } });
     } catch (e: any) {
       setError(e.message || '加入房间失败');
@@ -122,24 +134,25 @@ export const FriendMatch: React.FC = () => {
   return (
     <div className="pt-20 px-8 min-h-screen bg-black text-white pb-20">
       <div className="max-w-3xl mx-auto">
-        {/* Header */}
         <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-10 px-2 md:px-0">
-          <button onClick={() => waitingForOpponent ? setWaitingForOpponent(false) : mode === 'select' ? navigate('/') : setMode('select')} className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors shrink-0">
+          <button
+            onClick={() => waitingForOpponent ? setWaitingForOpponent(false) : mode === 'select' ? navigate('/') : setMode('select')}
+            className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 transition-colors shrink-0"
+          >
             <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
           </button>
           <div>
             <h1 className="text-xl md:text-3xl font-black italic tracking-tighter uppercase">好友约战</h1>
-            <p className="text-zinc-500 text-[10px] md:text-sm font-bold uppercase tracking-widest leading-none">私人对战房间 Private Room</p>
+            <p className="text-zinc-500 text-[10px] md:text-sm font-bold tracking-widest leading-none">私人对战房间</p>
           </div>
         </div>
 
-        {/* Waiting for opponent screen */}
         {waitingForOpponent && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8 md:py-16">
             <Loader2 className="w-10 h-10 md:w-12 md:h-12 animate-spin text-red-500 mx-auto mb-6" />
             <h2 className="text-xl md:text-2xl font-black italic tracking-tighter mb-4 md:mb-6 uppercase">等待对手加入...</h2>
             <div className="inline-flex flex-col md:flex-row items-center gap-3 bg-zinc-900/50 border border-zinc-800 rounded-2xl px-6 md:px-8 py-4 md:py-6 mb-4 w-full md:w-auto">
-              <span className="text-zinc-500 text-[10px] md:text-sm font-bold uppercase tracking-widest leading-none">房间码 Code:</span>
+              <span className="text-zinc-500 text-[10px] md:text-sm font-bold tracking-widest leading-none">房间码：</span>
               <div className="flex items-center gap-3">
                 <span className="text-2xl md:text-4xl font-mono font-black tracking-[0.2em] md:tracking-[0.3em] text-amber-400">{createdRoomCode}</span>
                 <button onClick={copyCode} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
@@ -147,14 +160,13 @@ export const FriendMatch: React.FC = () => {
                 </button>
               </div>
             </div>
-            <p className="text-zinc-600 text-[10px] md:text-sm font-bold uppercase tracking-widest">请将房间码发送给你的好友</p>
+            <p className="text-zinc-600 text-[10px] md:text-sm font-bold tracking-widest">请将房间码发送给你的好友</p>
           </motion.div>
         )}
 
-        {/* Mode selection */}
         {!waitingForOpponent && mode === 'select' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            <motion.div 
+            <motion.div
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
               onClick={() => setMode('create')}
               className="p-6 md:p-8 rounded-2xl bg-gradient-to-br from-red-900/10 to-zinc-900 border border-zinc-800 hover:border-red-600/50 cursor-pointer text-center transition-all group"
@@ -163,7 +175,7 @@ export const FriendMatch: React.FC = () => {
                 <Plus className="w-6 h-6 md:w-8 md:h-8" />
               </div>
               <h3 className="text-lg md:text-xl font-black italic tracking-tighter mb-1 uppercase">创建房间</h3>
-              <p className="text-zinc-500 text-[10px] md:text-xs font-bold uppercase tracking-widest leading-none">邀请好友 Create Room</p>
+              <p className="text-zinc-500 text-[10px] md:text-xs font-bold tracking-widest leading-none">邀请好友进入房间</p>
             </motion.div>
             <motion.div
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
@@ -174,16 +186,14 @@ export const FriendMatch: React.FC = () => {
                 <LogIn className="w-6 h-6 md:w-8 md:h-8" />
               </div>
               <h3 className="text-lg md:text-xl font-black italic tracking-tighter mb-1 uppercase">加入房间</h3>
-              <p className="text-zinc-500 text-[10px] md:text-xs font-bold uppercase tracking-widest leading-none">输入房间码 Join Room</p>
+              <p className="text-zinc-500 text-[10px] md:text-xs font-bold tracking-widest leading-none">输入房间码加入对局</p>
             </motion.div>
           </div>
         )}
 
-        {/* Create room / Join room panels */}
         {!waitingForOpponent && mode !== 'select' && (
           <>
-            {/* Deck Selection */}
-            <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">选择你的卡组</h2>
+            <h2 className="text-sm font-bold text-zinc-500 tracking-widest mb-4">选择你的卡组</h2>
             <div className="grid grid-cols-1 gap-3 mb-8">
               {myDecks.map(d => (
                 <motion.div
@@ -191,8 +201,8 @@ export const FriendMatch: React.FC = () => {
                   whileHover={{ scale: 1.01 }}
                   onClick={() => setSelectedDeckId(d.id)}
                   className={cn(
-                    "p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between",
-                    selectedDeckId === d.id ? "border-red-600 bg-red-900/15" : "border-zinc-800 bg-zinc-900/30 hover:border-zinc-700"
+                    'p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between',
+                    selectedDeckId === d.id ? 'border-red-600 bg-red-900/15' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'
                   )}
                 >
                   <div>
@@ -215,7 +225,7 @@ export const FriendMatch: React.FC = () => {
             {mode === 'create' && (
               <div className="mb-10 p-6 rounded-2xl bg-zinc-900/50 border border-zinc-800">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">回合对局时间 (秒)</h2>
+                  <h2 className="text-sm font-bold text-zinc-500 tracking-widest">回合时间（秒）</h2>
                   <span className="text-2xl font-black italic tracking-tighter text-red-500">{turnTime}s</span>
                 </div>
                 <input
@@ -224,26 +234,27 @@ export const FriendMatch: React.FC = () => {
                   max="999"
                   step="10"
                   value={turnTime}
-                  onChange={(e) => setTurnTime(parseInt(e.target.value))}
+                  onChange={(e) => setTurnTime(parseInt(e.target.value, 10))}
                   className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-600"
                 />
-                <div className="flex justify-between mt-2 text-[10px] text-zinc-600 font-bold uppercase tracking-widest">
-                  <span>Minimum (180s)</span>
-                  <span>Default (300s)</span>
-                  <span>Maximum (999s)</span>
+                <div className="flex justify-between mt-2 text-[10px] text-zinc-600 font-bold tracking-widest">
+                  <span>最短 180 秒</span>
+                  <span>默认 300 秒</span>
+                  <span>最长 999 秒</span>
                 </div>
               </div>
             )}
 
             {mode === 'create' && (
               <div className="flex justify-center mt-6">
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                <motion.button
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={handleCreateRoom}
                   disabled={creating || !selectedDeckId}
-                  className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all uppercase"
+                  className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all"
                 >
                   {creating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                  创建房间 CREATE
+                  创建房间
                 </motion.button>
               </div>
             )}
@@ -257,13 +268,14 @@ export const FriendMatch: React.FC = () => {
                   value={roomCode}
                   onChange={e => setRoomCode(e.target.value.replace(/\D/g, ''))}
                 />
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                <motion.button
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={handleJoinRoom}
                   disabled={joining || !selectedDeckId || roomCode.length < 6}
-                  className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(37,99,235,0.3)] disabled:opacity-50 transition-all uppercase"
+                  className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(37,99,235,0.3)] disabled:opacity-50 transition-all"
                 >
                   {joining ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
-                  加入房间 JOIN
+                  加入房间
                 </motion.button>
               </div>
             )}

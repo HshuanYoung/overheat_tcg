@@ -334,19 +334,19 @@ export const Collection: React.FC = () => {
 
                   <input
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
-                    placeholder="AC (费用)"
+                    placeholder="AC费用"
                     value={filters.ac}
                     onChange={e => setFilters({ ...filters, ac: e.target.value })}
                   />
                   <input
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
-                    placeholder="Damage (伤害)"
+                    placeholder="伤害"
                     value={filters.damage}
                     onChange={e => setFilters({ ...filters, damage: e.target.value })}
                   />
                   <input
                     className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
-                    placeholder="Power (力量)"
+                    placeholder="力量"
                     value={filters.power}
                     onChange={e => setFilters({ ...filters, power: e.target.value })}
                   />
@@ -486,7 +486,7 @@ export const Collection: React.FC = () => {
                   title="返回"
                 >
                   <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-1 transition-transform" />
-                  <span className="text-[10px] font-black italic uppercase tracking-widest hidden md:block">返回 BACK</span>
+                  <span className="text-[10px] font-black italic uppercase tracking-widest hidden md:block">返回</span>
                 </button>
                 {/* Large Card Image */}
                 <div className="w-full md:w-2/5 flex items-center justify-center p-6 md:p-0 bg-zinc-800/20 md:bg-transparent">
@@ -530,7 +530,7 @@ export const Collection: React.FC = () => {
                       {/* Decompose */}
                       <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
                         <div>
-                          <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">DECOMPOSE 分解</p>
+                          <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">分解</p>
                           <div className="flex items-center gap-2">
                             <Trash2 className="w-5 h-5 text-red-500" />
                             <span className="text-xl md:text-2xl font-black italic text-cyan-400">+{CRYSTAL_VALUES[selectedCard.rarity]?.decompose || 0}</span>
@@ -554,7 +554,7 @@ export const Collection: React.FC = () => {
                       {/* Craft */}
                       <div className="p-4 md:p-6 rounded-3xl bg-zinc-800/50 border border-white/5 flex items-center justify-between group hover:bg-zinc-800 transition-all">
                         <div>
-                          <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">CRAFT 制作</p>
+                          <p className="text-[10px] font-black text-zinc-500 uppercase italic mb-1">制作</p>
                           <div className="flex items-center gap-2">
                             <Plus className="w-5 h-5 text-green-500" />
                             <span className="text-xl md:text-2xl font-black italic text-red-500">-{CRYSTAL_VALUES[selectedCard.rarity]?.produce || 0}</span>
@@ -581,12 +581,12 @@ export const Collection: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-cyan-400" />
                       <div>
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase">Current Crystals</p>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase">当前卡晶</p>
                         <p className="text-lg md:text-xl font-black italic text-cyan-400">{(profile?.cardCrystals || 0).toLocaleString()}</p>
                       </div>
                     </div>
                     <button onClick={() => setSelectedCard(null)} className="text-zinc-500 hover:text-white font-black italic text-sm uppercase transition-colors">
-                      CLOSE
+                      关闭
                     </button>
                   </div>
                 </div>
@@ -680,19 +680,19 @@ const DeckCard = ({ deck, onClick, onDelete }: { deck: Deck; onClick: () => void
       </div>
       <h3 className="text-2xl font-black italic mb-1 uppercase tracking-tighter truncate">{deck.name}</h3>
       <p className="text-zinc-500 text-sm mb-6 flex items-center gap-2 font-bold uppercase">
-        {deck.cards.length} CARDS • {new Date(deck.createdAt).toLocaleDateString()}
+        {deck.cards.length} 张卡牌 • {new Date(deck.createdAt).toLocaleDateString()}
       </p>
       <div className="flex gap-2 pointer-events-auto">
         <button
           onClick={onClick}
           className="flex-1 py-3.5 bg-zinc-800 hover:bg-red-600 text-white font-black rounded-2xl transition-all text-xs uppercase italic"
         >
-          EDIT DECK
+          编辑卡组
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="w-14 flex items-center justify-center bg-zinc-800 hover:bg-red-900/50 text-red-500 rounded-2xl transition-all"
-          title="Delete Deck"
+          title="删除卡组"
         >
           <Trash2 className="w-5 h-5" />
         </button>

@@ -501,6 +501,7 @@ app.post('/api/games/friend/join', async (req, res): Promise<void> => {
 const matchmakingQueue: { userId: string; socketId?: string; timestamp: number; deck?: Card[]; turnTimerLimit?: number }[] = [];
 // Matchmaking results map: userId -> gameId
 const matchmakingResults = new Map<string, string>();
+const getMatchmakingQueueIndex = (userId: string | number) => matchmakingQueue.findIndex(q => q.userId === userId.toString());
 
 
 app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
@@ -526,7 +527,7 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
 
         // Remove self from queue if already there (to avoid duplicates or refresh timestamp)
         const userIdStr = user.userId.toString();
-        const existingIdx = matchmakingQueue.findIndex(q => q.userId === userIdStr);
+        const existingIdx = getMatchmakingQueueIndex(userIdStr);
         if (existingIdx !== -1) matchmakingQueue.splice(existingIdx, 1);
 
         // 2. Try to match with someone else
@@ -560,6 +561,27 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
     }
 });
 
+app.get('/api/games/matchmaking/status', async (req, res): Promise<void> => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const user = verifyToken(authHeader.split(' ')[1]);
+    if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
+
+    const userIdStr = user.userId.toString();
+    const existingGameId = matchmakingResults.get(userIdStr);
+    if (existingGameId) {
+        res.json({ gameId: existingGameId, matched: true });
+        return;
+    }
+
+    const queueIndex = getMatchmakingQueueIndex(userIdStr);
+    res.json({
+        matched: false,
+        queued: queueIndex !== -1,
+        position: queueIndex === -1 ? null : queueIndex + 1
+    });
+});
+
 // Cancel matchmaking
 app.post('/api/games/matchmaking/cancel', async (req, res): Promise<void> => {
     const authHeader = req.headers.authorization;
@@ -567,7 +589,7 @@ app.post('/api/games/matchmaking/cancel', async (req, res): Promise<void> => {
     const user = verifyToken(authHeader.split(' ')[1]);
     if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
 
-    const idx = matchmakingQueue.findIndex(q => q.userId === user.userId);
+    const idx = getMatchmakingQueueIndex(user.userId);
     if (idx !== -1) matchmakingQueue.splice(idx, 1);
     res.json({ success: true });
 });
@@ -1128,7 +1150,7 @@ io.on('connection', (socket) => {
         const user = verifyToken(token);
         if (user) {
             (socket as any).user = user;
-            const queueEntry = matchmakingQueue.find(q => q.userId === user.userId);
+            const queueEntry = matchmakingQueue.find(q => q.userId === user.userId.toString());
             if (queueEntry) queueEntry.socketId = socket.id;
             socket.emit('authenticated');
         } else {

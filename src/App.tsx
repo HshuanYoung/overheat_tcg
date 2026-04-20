@@ -78,9 +78,14 @@ export default function App() {
       void import('./components/PracticeSetup');
     };
 
-    if ('requestIdleCallback' in window) {
-      const idleId = window.requestIdleCallback(preloadRoutes, { timeout: 1500 });
-      return () => window.cancelIdleCallback(idleId);
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      const idleId = idleWindow.requestIdleCallback(preloadRoutes, { timeout: 1500 });
+      return () => idleWindow.cancelIdleCallback?.(idleId);
     }
 
     const timer = window.setTimeout(preloadRoutes, 800);
@@ -134,7 +139,7 @@ export default function App() {
           animate={{ scale: 1, opacity: 1 }}
           className="w-full max-w-md bg-zinc-900 border border-white/10 p-6 md:p-8 rounded-3xl mx-4"
         >
-          <h1 className="text-4xl md:text-6xl font-black text-red-600 italic mb-4 tracking-tighter">绁炶殌鍒涚棔</h1>
+          <h1 className="text-4xl md:text-6xl font-black text-red-600 italic mb-4 tracking-tighter">神蚀创痕</h1>
           <p className="text-zinc-400 mb-8 uppercase tracking-[0.2em] text-[10px] md:text-sm">OVERHEAT TCG ONLINE</p>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
@@ -157,7 +162,7 @@ export default function App() {
               type="submit"
               className="w-full py-4 mt-4 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)]"
             >
-              鐧诲綍
+              登录
             </button>
           </form>
         </motion.div>

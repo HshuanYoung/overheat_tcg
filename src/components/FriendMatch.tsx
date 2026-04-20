@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, LogIn, Loader2, Copy, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
-import { getAuthUser } from '../socket';
+import { getAuthToken, getAuthUser } from '../socket';
 import { Deck } from '../types/game';
 
 export const FriendMatch: React.FC = () => {
@@ -21,49 +21,91 @@ export const FriendMatch: React.FC = () => {
   const [createdGameId, setCreatedGameId] = useState('');
   const [error, setError] = useState('');
   const [turnTime, setTurnTime] = useState(300);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
+
+  const clearPoll = () => {
+    if (pollRef.current) {
+      clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const loadDecks = async () => {
-      if (!getAuthUser()) return;
+      if (!getAuthUser()) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const res = await fetch(`${BACKEND_URL}/api/user/decks`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`${BACKEND_URL}/api/user/decks`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         const data = await res.json();
         setMyDecks(data.decks || []);
         if (data.decks?.length > 0) setSelectedDeckId(data.decks[0].id);
       } catch (e) {
         console.error(e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
+
     loadDecks();
-  }, []);
+    void import('./BattleField');
+
+    return () => clearPoll();
+  }, [BACKEND_URL, token]);
 
   useEffect(() => {
     if (!waitingForOpponent || !createdGameId) return;
-    const interval = setInterval(async () => {
+
+    const pollFriendRoomStatus = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/games`);
-        const data = await res.json();
-        const game = (data.games || []).find((g: any) => g.id === createdGameId);
-        if (game?.playerIds && game.playerIds.length >= 2) {
-          clearInterval(interval);
-          navigate(`/battle/${createdGameId}`, { state: { deckId: selectedDeckId } });
+        const res = await fetch(`${BACKEND_URL}/api/games/friend/${createdGameId}/status`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+          schedulePoll(1200);
+          return;
         }
+
+        const data = await res.json();
+        if (data.joined) {
+          clearPoll();
+          navigate(`/battle/${createdGameId}`, { state: { deckId: selectedDeckId } });
+          return;
+        }
+
+        schedulePoll(800);
       } catch (e) {
         console.error('[FriendMatch] Poll error:', e);
+        schedulePoll(1500);
       }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [waitingForOpponent, createdGameId, navigate, selectedDeckId, BACKEND_URL]);
+    };
+
+    const schedulePoll = (delayMs: number) => {
+      clearPoll();
+      pollRef.current = setTimeout(() => {
+        void pollFriendRoomStatus();
+      }, delayMs);
+    };
+
+    void pollFriendRoomStatus();
+
+    return () => clearPoll();
+  }, [waitingForOpponent, createdGameId, navigate, selectedDeckId, BACKEND_URL, token]);
 
   const handleCreateRoom = async () => {
     if (!selectedDeckId) {
       alert('请先选择一个卡组');
       return;
     }
+
     setCreating(true);
     setError('');
     try {
@@ -76,6 +118,11 @@ export const FriendMatch: React.FC = () => {
         }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || '创建房间失败');
+        return;
+      }
+
       setCreatedRoomCode(data.roomCode);
       setCreatedGameId(data.gameId);
       setWaitingForOpponent(true);
@@ -95,6 +142,7 @@ export const FriendMatch: React.FC = () => {
       setError('请输入有效的房间码');
       return;
     }
+
     setJoining(true);
     setError('');
     try {
@@ -104,11 +152,12 @@ export const FriendMatch: React.FC = () => {
         body: JSON.stringify({ roomCode, deckId: selectedDeckId }),
       });
       const data = await res.json();
-      if (data.error) {
-        setError(data.error);
+      if (!res.ok || data.error) {
+        setError(data.error || '加入房间失败');
         setJoining(false);
         return;
       }
+
       navigate(`/battle/${data.gameId}`, { state: { deckId: selectedDeckId } });
     } catch (e: any) {
       setError(e.message || '加入房间失败');
@@ -167,7 +216,8 @@ export const FriendMatch: React.FC = () => {
         {!waitingForOpponent && mode === 'select' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <motion.div
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setMode('create')}
               className="p-6 md:p-8 rounded-2xl bg-gradient-to-br from-red-900/10 to-zinc-900 border border-zinc-800 hover:border-red-600/50 cursor-pointer text-center transition-all group"
             >
@@ -178,7 +228,8 @@ export const FriendMatch: React.FC = () => {
               <p className="text-zinc-500 text-[10px] md:text-xs font-bold tracking-widest leading-none">邀请好友进入房间</p>
             </motion.div>
             <motion.div
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setMode('join')}
               className="p-6 md:p-8 rounded-2xl bg-gradient-to-br from-blue-900/10 to-zinc-900 border border-zinc-800 hover:border-blue-600/50 cursor-pointer text-center transition-all group"
             >
@@ -209,7 +260,11 @@ export const FriendMatch: React.FC = () => {
                     <p className="font-bold">{d.name}</p>
                     <p className="text-xs text-zinc-500">{d.cards.length} 张卡牌</p>
                   </div>
-                  {selectedDeckId === d.id && <div className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center"><div className="w-1.5 h-1.5 rounded-full bg-white" /></div>}
+                  {selectedDeckId === d.id && (
+                    <div className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                    </div>
+                  )}
                 </motion.div>
               ))}
               {myDecks.length === 0 && (
@@ -248,7 +303,8 @@ export const FriendMatch: React.FC = () => {
             {mode === 'create' && (
               <div className="flex justify-center mt-6">
                 <motion.button
-                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={handleCreateRoom}
                   disabled={creating || !selectedDeckId}
                   className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 transition-all"
@@ -269,7 +325,8 @@ export const FriendMatch: React.FC = () => {
                   onChange={e => setRoomCode(e.target.value.replace(/\D/g, ''))}
                 />
                 <motion.button
-                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={handleJoinRoom}
                   disabled={joining || !selectedDeckId || roomCode.length < 6}
                   className="w-full md:w-auto px-8 md:px-10 py-3 md:py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl font-black italic text-base md:text-lg tracking-tighter flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(37,99,235,0.3)] disabled:opacity-50 transition-all"

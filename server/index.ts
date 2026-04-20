@@ -497,6 +497,46 @@ app.post('/api/games/friend/join', async (req, res): Promise<void> => {
     }
 });
 
+app.get('/api/games/friend/:gameId/status', async (req, res): Promise<void> => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const user = verifyToken(authHeader.split(' ')[1]);
+    if (!user) { res.status(401).json({ error: 'Invalid token' }); return; }
+
+    try {
+        const { gameId } = req.params;
+        if (!gameId || !gameId.startsWith('friend_')) {
+            res.status(400).json({ error: 'Invalid friend game id' });
+            return;
+        }
+
+        const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
+        if (rows.length === 0) {
+            res.status(404).json({ error: 'Game not found' });
+            return;
+        }
+
+        const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
+        const playerIds = Array.isArray(gameState.playerIds) ? gameState.playerIds : [];
+        const userIdStr = user.userId.toString();
+
+        if (!playerIds.includes(userIdStr)) {
+            res.status(403).json({ error: 'Forbidden' });
+            return;
+        }
+
+        res.json({
+            gameId,
+            joined: playerIds.length >= 2,
+            playerCount: playerIds.length,
+            status: gameState.status || 'WAITING'
+        });
+    } catch (err) {
+        console.error('Friend game status error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Matchmaking Queue
 const matchmakingQueue: { userId: string; socketId?: string; timestamp: number; deck?: Card[]; turnTimerLimit?: number }[] = [];
 // Matchmaking results map: userId -> gameId

@@ -1,4 +1,4 @@
-import { getAuthUser, socket } from '../socket';
+import { getAuthUser, getAuthToken, isSocketAuthenticated, socket } from '../socket';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Loader2, ArrowLeft, Swords, X } from 'lucide-react';
@@ -18,9 +18,10 @@ export const Matchmaking: React.FC = () => {
   const selectedDeckIdRef = useRef<string | null>(null);
   const searchingRef = useRef(false);
   const isPollingRef = useRef(false);
+  const isEnqueueingRef = useRef(false);
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
 
   const clearSearchTimers = () => {
     if (timerRef.current) {
@@ -32,6 +33,14 @@ export const Matchmaking: React.FC = () => {
       pollRef.current = null;
     }
     isPollingRef.current = false;
+    isEnqueueingRef.current = false;
+  };
+
+  const navigateToBattle = (gameId: string) => {
+    searchingRef.current = false;
+    clearSearchTimers();
+    setSearching(false);
+    navigate(`/battle/${gameId}`, { state: { deckId: selectedDeckIdRef.current } });
   };
 
   useEffect(() => {
@@ -68,11 +77,17 @@ export const Matchmaking: React.FC = () => {
     loadDecks();
     void import('./BattleField');
 
+    if (token) {
+      if (!socket.connected) {
+        socket.connect();
+      }
+      if (!isSocketAuthenticated()) {
+        socket.emit('authenticate', token);
+      }
+    }
+
     const handleMatchFound = (data: { gameId: string }) => {
-      searchingRef.current = false;
-      clearSearchTimers();
-      setSearching(false);
-      navigate(`/battle/${data.gameId}`, { state: { deckId: selectedDeckIdRef.current } });
+      navigateToBattle(data.gameId);
     };
 
     socket.on('matchFound', handleMatchFound);
@@ -82,6 +97,33 @@ export const Matchmaking: React.FC = () => {
       clearSearchTimers();
     };
   }, [BACKEND_URL, navigate, token]);
+
+  const enqueueForMatchmaking = async (): Promise<{ matched?: boolean; gameId?: string; queued?: boolean } | null> => {
+    if (!selectedDeckIdRef.current || isEnqueueingRef.current) return null;
+    isEnqueueingRef.current = true;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/games/matchmaking`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ deckId: selectedDeckIdRef.current }),
+      });
+      const data = await res.json();
+      return data;
+    } finally {
+      isEnqueueingRef.current = false;
+    }
+  };
+
+  const scheduleStatusPoll = (delayMs: number) => {
+    if (!searchingRef.current) return;
+    pollRef.current = setTimeout(() => {
+      void pollMatchStatus();
+    }, delayMs);
+  };
 
   const pollMatchStatus = async () => {
     if (!searchingRef.current || isPollingRef.current) return;
@@ -94,24 +136,21 @@ export const Matchmaking: React.FC = () => {
       const data = await res.json();
 
       if (data.matched && data.gameId) {
-        searchingRef.current = false;
-        clearSearchTimers();
-        setSearching(false);
-        navigate(`/battle/${data.gameId}`, { state: { deckId: selectedDeckIdRef.current } });
+        navigateToBattle(data.gameId);
         return;
       }
 
-      if (searchingRef.current) {
-        pollRef.current = setTimeout(() => {
-          void pollMatchStatus();
-        }, 1200);
+      if (!data.queued && searchingRef.current) {
+        const enqueueResult = await enqueueForMatchmaking();
+        if (enqueueResult?.matched && enqueueResult.gameId) {
+          navigateToBattle(enqueueResult.gameId);
+          return;
+        }
       }
+
+      scheduleStatusPoll(900);
     } catch (e) {
-      if (searchingRef.current) {
-        pollRef.current = setTimeout(() => {
-          void pollMatchStatus();
-        }, 2000);
-      }
+      scheduleStatusPoll(1500);
     } finally {
       isPollingRef.current = false;
     }
@@ -130,25 +169,14 @@ export const Matchmaking: React.FC = () => {
     timerRef.current = setInterval(() => setSearchTimer(prev => prev + 1), 1000);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/games/matchmaking`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ deckId: selectedDeckId }),
-      });
-      const data = await res.json();
+      const data = await enqueueForMatchmaking();
 
-      if (data.matched && data.gameId) {
-        searchingRef.current = false;
-        clearSearchTimers();
-        setSearching(false);
-        navigate(`/battle/${data.gameId}`, { state: { deckId: selectedDeckIdRef.current } });
+      if (data?.matched && data.gameId) {
+        navigateToBattle(data.gameId);
         return;
       }
 
-      void pollMatchStatus();
+      scheduleStatusPoll(500);
     } catch (e) {
       console.error(e);
       searchingRef.current = false;

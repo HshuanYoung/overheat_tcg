@@ -4,15 +4,29 @@ USE overheat;
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(50) PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NULL,
     password_hash VARCHAR(255) NOT NULL,
     display_name VARCHAR(50) NOT NULL,
-    role VARCHAR(20) DEFAULT 'USER'
+    role VARCHAR(20) DEFAULT 'USER',
+    coins BIGINT DEFAULT 100000,
+    card_crystals BIGINT DEFAULT 100000,
+    favorite_card_id VARCHAR(50) DEFAULT 'fav_card',
+    favorite_back_id VARCHAR(50) DEFAULT 'default',
+    created_at BIGINT
 );
 
 CREATE TABLE IF NOT EXISTS games (
     id VARCHAR(50) PRIMARY KEY,
     state JSON NOT NULL,
     status INT DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+    email VARCHAR(255) PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    code VARCHAR(6) NOT NULL,
+    expires_at BIGINT NOT NULL,
+    created_at BIGINT NOT NULL
 );
 
 -- Note: The passwords below are hashed with bcrypt. 

@@ -9,6 +9,17 @@ import bcrypt from 'bcryptjs';
 import { pool, dbInit } from './db';
 import { generateToken, verifyToken } from './auth';
 import { initServerCardLibrary, SERVER_CARD_LIBRARY } from './card_loader';
+import {
+    createVerificationCode,
+    getVerificationCodeExpireMs,
+    getVerificationCodeResendMs,
+    normalizeEmail,
+    seedStarterResources,
+    sendRegistrationVerificationEmail,
+    validateEmail,
+    validatePassword,
+    validateUsername
+} from './registration';
 import { ServerGameService } from './ServerGameService';
 import { PlayerState, Card, GAME_TIMEOUTS, GameState } from '../src/types/game';
 import fs from 'fs';
@@ -34,6 +45,8 @@ const gameLocks = new Map<string, Promise<any>>();
 const matchLogHistory = new Map<string, string[]>();
 const lastSyncedLogIndex = new Map<string, number>();
 const botMovingGames = new Set<string>();
+const STARTER_COINS = 100000;
+const STARTER_CARD_CRYSTALS = 100000;
 
 async function withGameLock<T>(gameId: string, action: () => Promise<T>): Promise<T> {
     const existingLock = gameLocks.get(gameId) || Promise.resolve();
@@ -48,6 +61,19 @@ async function withGameLock<T>(gameId: string, action: () => Promise<T>): Promis
     });
     gameLocks.set(gameId, newLock.catch(() => { })); // Ensure chain doesn't break on errors
     return newLock;
+}
+
+function buildAuthUser(user: any) {
+    return {
+        uid: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        email: user.email || null
+    };
+}
+
+function createUserId() {
+    return `user_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // Helper: Validate User Deck
@@ -363,6 +389,198 @@ app.use(express.json());
 // Initialize MariaDB Connection and then start server
 // dbInit() was moved to start() below
 
+app.post('/api/register/send-code', async (req, res): Promise<void> => {
+    const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
+    const email = typeof req.body.email === 'string' ? normalizeEmail(req.body.email) : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+        res.status(400).json({ error: usernameError });
+        return;
+    }
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+        res.status(400).json({ error: emailError });
+        return;
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+        res.status(400).json({ error: passwordError });
+        return;
+    }
+
+    try {
+        const existingUsers = await pool.query(
+            'SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1',
+            [username, email]
+        );
+        if (existingUsers.length > 0) {
+            res.status(409).json({ error: '用户名或邮箱已被注册' });
+            return;
+        }
+
+        const existingCodeRows = await pool.query(
+            'SELECT created_at FROM email_verification_codes WHERE email = ?',
+            [email]
+        );
+        if (existingCodeRows.length > 0) {
+            const lastSentAt = Number(existingCodeRows[0].created_at || 0);
+            const retryAfterMs = getVerificationCodeResendMs() - (Date.now() - lastSentAt);
+            if (retryAfterMs > 0) {
+                res.status(429).json({
+                    error: `验证码发送过于频繁，请在 ${Math.ceil(retryAfterMs / 1000)} 秒后重试`
+                });
+                return;
+            }
+        }
+
+        const code = createVerificationCode();
+        const now = Date.now();
+        const expiresAt = now + getVerificationCodeExpireMs();
+
+        await pool.query(
+            `INSERT INTO email_verification_codes (email, username, code, expires_at, created_at)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE username = VALUES(username), code = VALUES(code), expires_at = VALUES(expires_at), created_at = VALUES(created_at)`,
+            [email, username, code, expiresAt, now]
+        );
+
+        try {
+            await sendRegistrationVerificationEmail(email, code);
+        } catch (mailErr: any) {
+            await pool.query('DELETE FROM email_verification_codes WHERE email = ?', [email]);
+            console.error('Send verification email error:', mailErr);
+            res.status(500).json({ error: mailErr?.message || '验证码发送失败' });
+            return;
+        }
+
+        res.json({
+            success: true,
+            message: '验证码已发送，请前往邮箱查收',
+            expiresInMs: getVerificationCodeExpireMs()
+        });
+    } catch (err) {
+        console.error('Send register code error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/register', async (req, res): Promise<void> => {
+    const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
+    const email = typeof req.body.email === 'string' ? normalizeEmail(req.body.email) : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const verificationCode = typeof req.body.verificationCode === 'string' ? req.body.verificationCode.trim() : '';
+
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+        res.status(400).json({ error: usernameError });
+        return;
+    }
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+        res.status(400).json({ error: emailError });
+        return;
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+        res.status(400).json({ error: passwordError });
+        return;
+    }
+
+    if (!/^\d{6}$/.test(verificationCode)) {
+        res.status(400).json({ error: '请输入 6 位验证码' });
+        return;
+    }
+
+    let conn;
+    try {
+        const verificationRows = await pool.query(
+            'SELECT username, code, expires_at FROM email_verification_codes WHERE email = ?',
+            [email]
+        );
+        if (verificationRows.length === 0) {
+            res.status(400).json({ error: '请先获取邮箱验证码' });
+            return;
+        }
+
+        const verificationRow = verificationRows[0];
+        if (verificationRow.username !== username) {
+            res.status(400).json({ error: '验证码与当前用户名不匹配，请重新获取验证码' });
+            return;
+        }
+        if (Number(verificationRow.expires_at) < Date.now()) {
+            await pool.query('DELETE FROM email_verification_codes WHERE email = ?', [email]);
+            res.status(400).json({ error: '验证码已过期，请重新获取' });
+            return;
+        }
+        if (verificationRow.code !== verificationCode) {
+            res.status(400).json({ error: '验证码错误' });
+            return;
+        }
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        const duplicateRows = await conn.query(
+            'SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1',
+            [username, email]
+        );
+        if (duplicateRows.length > 0) {
+            await conn.rollback();
+            res.status(409).json({ error: '用户名或邮箱已被注册' });
+            return;
+        }
+
+        const userId = createUserId();
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        await conn.query(
+            `INSERT INTO users (
+                id, username, email, password_hash, display_name, role, coins, card_crystals,
+                favorite_card_id, favorite_back_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'fav_card', 'default', ?)`,
+            [
+                userId,
+                username,
+                email,
+                passwordHash,
+                username,
+                'user',
+                STARTER_COINS,
+                STARTER_CARD_CRYSTALS,
+                Date.now()
+            ]
+        );
+
+        await seedStarterResources(conn, userId);
+        await conn.query('DELETE FROM email_verification_codes WHERE email = ?', [email]);
+        await conn.commit();
+
+        const token = generateToken(userId, username, username, 'user');
+        res.status(201).json({
+            token,
+            user: {
+                uid: userId,
+                username,
+                displayName: username,
+                email
+            }
+        });
+    } catch (err) {
+        if (conn) {
+            await conn.rollback();
+        }
+        console.error('Register error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        if (conn) conn.release();
+    }
+});
 
 // Login Endpoint
 app.post('/api/login', async (req, res): Promise<void> => {
@@ -374,7 +592,10 @@ app.post('/api/login', async (req, res): Promise<void> => {
     }
 
     try {
-        const rows = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
+        const rows = await pool.query(
+            'SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1',
+            [username, normalizeEmail(username)]
+        );
         if (rows.length === 0) {
             res.status(401).json({ error: 'Invalid credentials' });
             return;
@@ -389,7 +610,7 @@ app.post('/api/login', async (req, res): Promise<void> => {
         }
 
         const token = generateToken(user.id, user.username, user.display_name, user.role);
-        res.json({ token, user: { uid: user.id, displayName: user.display_name, email: user.username } });
+        res.json({ token, user: buildAuthUser(user) });
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ error: 'Internal server error' });

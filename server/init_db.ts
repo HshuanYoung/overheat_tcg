@@ -12,6 +12,7 @@ async function initDB() {
             CREATE TABLE IF NOT EXISTS users (
                 id VARCHAR(50) PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
+                email VARCHAR(255) UNIQUE NULL,
                 password_hash VARCHAR(255) NOT NULL,
                 display_name VARCHAR(50) NOT NULL,
                 role VARCHAR(20) DEFAULT 'user',
@@ -52,6 +53,16 @@ async function initDB() {
         // console.log("✅ Decks table ensured");
 
         // 4. Seed Users
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS email_verification_codes (
+                email VARCHAR(255) PRIMARY KEY,
+                username VARCHAR(50) NOT NULL,
+                code VARCHAR(6) NOT NULL,
+                expires_at BIGINT NOT NULL,
+                created_at BIGINT NOT NULL
+            )
+        `);
+
         const accounts = [
             { id: 'admin', username: 'admin', password: 'admin123', name: 'Administrator', role: 'admin' },
             { id: 'user_guest1', username: 'guest1', password: 'guest111', name: 'Test User 1', role: 'user' },

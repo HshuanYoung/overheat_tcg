@@ -7,6 +7,7 @@ async function migrate() {
 
         // 1. Add favorite_card_id, favorite_back_id, coins, and card_crystals to users if not exists
         try {
+            await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) NULL;`);
             await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS favorite_card_id VARCHAR(50) DEFAULT 'fav_card';`);
             await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS favorite_back_id VARCHAR(50) DEFAULT 'default';`);
             await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS coins BIGINT DEFAULT 100000;`);
@@ -32,6 +33,16 @@ async function migrate() {
                 created_at BIGINT,
                 updated_at BIGINT,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        `);
+
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS email_verification_codes (
+                email VARCHAR(255) PRIMARY KEY,
+                username VARCHAR(50) NOT NULL,
+                code VARCHAR(6) NOT NULL,
+                expires_at BIGINT NOT NULL,
+                created_at BIGINT NOT NULL
             );
         `);
 

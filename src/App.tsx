@@ -32,12 +32,24 @@ const PageFallback = () => (
 );
 
 export default function App() {
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRulebookOpen, setIsRulebookOpen] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [registerError, setRegisterError] = useState('');
+  const [registerMessage, setRegisterMessage] = useState('');
+  const [sendingCode, setSendingCode] = useState(false);
+  const [registerSubmitting, setRegisterSubmitting] = useState(false);
+  const [sendCodeCooldown, setSendCodeCooldown] = useState(0);
 
   useEffect(() => {
     const savedUser = getAuthUser();
@@ -92,30 +104,125 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [user]);
 
+  useEffect(() => {
+    if (sendCodeCooldown <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setSendCodeCooldown(current => {
+        if (current <= 1) {
+          window.clearInterval(timer);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [sendCodeCooldown]);
+
+  const handleAuthSuccess = (token: string, authUser: any) => {
+    setAuthToken(token);
+    setAuthUser(authUser);
+    setUser(authUser);
+
+    if (!socket.connected) {
+      socket.once('connect', () => socket.emit('authenticate', token));
+      socket.connect();
+      return;
+    }
+
+    socket.emit('authenticate', token);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setLoginSubmitting(true);
+
     try {
-      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
       const res = await fetch(`${BACKEND_URL}/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username: loginUsername, password: loginPassword })
       });
       const data = await res.json();
+
       if (res.ok && data.token) {
-        setAuthToken(data.token);
-        setAuthUser(data.user);
-        setUser(data.user);
-        socket.connect();
-        socket.once('connect', () => socket.emit('authenticate', data.token));
+        handleAuthSuccess(data.token, data.user);
       } else {
-        setLoginError(data.error || 'Login failed');
+        setLoginError(data.error || '登录失败');
       }
     } catch (err) {
-      setLoginError('Network Error');
+      setLoginError('网络错误');
+    } finally {
+      setLoginSubmitting(false);
+    }
+  };
+
+  const handleSendVerificationCode = async () => {
+    setRegisterError('');
+    setRegisterMessage('');
+    setSendingCode(true);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/register/send-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: registerUsername,
+          email: registerEmail,
+          password: registerPassword
+        })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setRegisterMessage(data.message || '验证码已发送，请前往邮箱查收');
+        setSendCodeCooldown(60);
+      } else {
+        setRegisterError(data.error || '验证码发送失败');
+      }
+    } catch (err) {
+      setRegisterError('网络错误');
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegisterError('');
+    setRegisterMessage('');
+    setRegisterSubmitting(true);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: registerUsername,
+          email: registerEmail,
+          password: registerPassword,
+          verificationCode
+        })
+      });
+      const data = await res.json();
+
+      if (res.ok && data.token) {
+        handleAuthSuccess(data.token, data.user);
+      } else {
+        setRegisterError(data.error || '注册失败');
+      }
+    } catch (err) {
+      setRegisterError('网络错误');
+    } finally {
+      setRegisterSubmitting(false);
     }
   };
 
@@ -139,32 +246,112 @@ export default function App() {
           animate={{ scale: 1, opacity: 1 }}
           className="w-full max-w-md bg-zinc-900 border border-white/10 p-6 md:p-8 rounded-3xl mx-4"
         >
-          <h1 className="text-4xl md:text-6xl font-black text-red-600 italic mb-4 tracking-tighter">神蚀创痕</h1>
+          <h1 className="text-4xl md:text-6xl font-black text-red-600 italic mb-4 tracking-tighter">绁炶殌鍒涚棔</h1>
           <p className="text-zinc-400 mb-8 uppercase tracking-[0.2em] text-[10px] md:text-sm">OVERHEAT TCG ONLINE</p>
 
-          <form onSubmit={handleLogin} className="flex flex-col gap-4">
-            <input
-              type="text"
-              placeholder="Username (e.g. test1)"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              className="p-3 bg-black border border-white/20 rounded-lg text-white"
-            />
-            <input
-              type="password"
-              placeholder="Password (password123)"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="p-3 bg-black border border-white/20 rounded-lg text-white"
-            />
-            {loginError && <div className="text-red-500 text-sm font-bold">{loginError}</div>}
+          <div className="mb-6 grid grid-cols-2 rounded-2xl bg-black/60 p-1 border border-white/10">
             <button
-              type="submit"
-              className="w-full py-4 mt-4 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+              type="button"
+              onClick={() => {
+                setAuthMode('login');
+                setLoginError('');
+              }}
+              className={`rounded-xl py-3 text-sm font-bold transition-all ${authMode === 'login' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
             >
               登录
             </button>
-          </form>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('register');
+                setRegisterError('');
+                setRegisterMessage('');
+              }}
+              className={`rounded-xl py-3 text-sm font-bold transition-all ${authMode === 'register' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
+            >
+              注册
+            </button>
+          </div>
+
+          {authMode === 'login' ? (
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              <input
+                type="text"
+                placeholder="用户名或邮箱"
+                value={loginUsername}
+                onChange={e => setLoginUsername(e.target.value)}
+                className="p-3 bg-black border border-white/20 rounded-lg text-white"
+              />
+              <input
+                type="password"
+                placeholder="密码"
+                value={loginPassword}
+                onChange={e => setLoginPassword(e.target.value)}
+                className="p-3 bg-black border border-white/20 rounded-lg text-white"
+              />
+              {loginError && <div className="text-red-500 text-sm font-bold">{loginError}</div>}
+              <button
+                type="submit"
+                disabled={loginSubmitting}
+                className="w-full py-4 mt-4 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] disabled:opacity-60"
+              >
+                {loginSubmitting ? '登录中...' : '登录'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="flex flex-col gap-4">
+              <input
+                type="text"
+                placeholder="用户名"
+                value={registerUsername}
+                onChange={e => setRegisterUsername(e.target.value)}
+                className="p-3 bg-black border border-white/20 rounded-lg text-white"
+              />
+              <input
+                type="email"
+                placeholder="邮箱"
+                value={registerEmail}
+                onChange={e => setRegisterEmail(e.target.value)}
+                className="p-3 bg-black border border-white/20 rounded-lg text-white"
+              />
+              <input
+                type="password"
+                placeholder="密码"
+                value={registerPassword}
+                onChange={e => setRegisterPassword(e.target.value)}
+                className="p-3 bg-black border border-white/20 rounded-lg text-white"
+              />
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="6位验证码"
+                  value={verificationCode}
+                  onChange={e => setVerificationCode(e.target.value)}
+                  className="flex-1 p-3 bg-black border border-white/20 rounded-lg text-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendVerificationCode}
+                  disabled={sendingCode || sendCodeCooldown > 0}
+                  className="px-4 py-3 rounded-lg bg-red-600 text-white font-bold text-sm hover:bg-red-500 transition-all disabled:opacity-60 disabled:hover:bg-red-600"
+                >
+                  {sendingCode ? '发送中...' : sendCodeCooldown > 0 ? `${sendCodeCooldown}s` : '发送验证码'}
+                </button>
+              </div>
+              {registerMessage && <div className="text-emerald-400 text-sm font-bold">{registerMessage}</div>}
+              {registerError && <div className="text-red-500 text-sm font-bold">{registerError}</div>}
+              <button
+                type="submit"
+                disabled={registerSubmitting}
+                className="w-full py-4 mt-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] disabled:opacity-60"
+              >
+                {registerSubmitting ? '注册中...' : '完成注册'}
+              </button>
+              <p className="text-zinc-500 text-xs leading-relaxed">
+                注册成功后会自动发放 100000 金币、100000 卡晶，并为每张卡初始化 4 张。
+              </p>
+            </form>
+          )}
         </motion.div>
       </div>
     );
@@ -187,7 +374,7 @@ export default function App() {
               <Route path="/collection" element={<Collection />} />
               <Route path="/practice" element={<PracticeSetup />} />
               <Route path="/friend-match" element={<FriendMatch />} />
-              <Route path="/history" element={<div className="pt-24 px-12 text-zinc-500 uppercase tracking-widest text-center">瀵规垬鍘嗗彶鍗冲皢涓婄嚎</div>} />
+              <Route path="/history" element={<div className="pt-24 px-12 text-zinc-500 uppercase tracking-widest text-center">鐎佃鍨崢鍡楀蕉閸楀啿鐨㈡稉濠勫殠</div>} />
             </Routes>
           </Suspense>
         </main>

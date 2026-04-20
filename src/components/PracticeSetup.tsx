@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bot, Loader2, Play } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
+import { validateDeckForBattle } from '../lib/deckValidation';
 import { getAuthUser } from '../socket';
 import { Deck } from '../types/game';
 
@@ -16,6 +17,8 @@ export const PracticeSetup: React.FC = () => {
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = localStorage.getItem('token');
+  const selectedDeck = myDecks.find(deck => deck.id === selectedDeckId) || null;
+  const selectedDeckValidation = validateDeckForBattle(selectedDeck);
 
   useEffect(() => {
     const loadDecks = async () => {
@@ -32,7 +35,10 @@ export const PracticeSetup: React.FC = () => {
   }, []);
 
   const handleStart = async () => {
-    if (!selectedDeckId) { alert('请先选择一个卡组'); return; }
+    if (!selectedDeckValidation.valid) {
+      alert(selectedDeckValidation.error || '请选择合法的卡组');
+      return;
+    }
     setStarting(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/games/practice`, {
@@ -129,6 +135,12 @@ export const PracticeSetup: React.FC = () => {
             </div>
           )}
         </div>
+
+        {selectedDeckId && !selectedDeckValidation.valid && (
+          <div className="mb-6 p-3 rounded-xl border border-red-500/30 bg-red-900/20 text-red-300 text-sm">
+            当前选中的卡组不可用于机器人对战：{selectedDeckValidation.error}
+          </div>
+        )}
 
         {/* Turn Time Setting */}
         <div className="mb-10 p-6 rounded-2xl bg-zinc-900/50 border border-zinc-800">

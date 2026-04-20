@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Loader2, ArrowLeft, Swords, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
+import { validateDeckForBattle } from '../lib/deckValidation';
 import { Deck } from '../types/game';
 
 export const Matchmaking: React.FC = () => {
@@ -22,6 +23,8 @@ export const Matchmaking: React.FC = () => {
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = getAuthToken();
+  const selectedDeck = myDecks.find(deck => deck.id === selectedDeckId) || null;
+  const selectedDeckValidation = validateDeckForBattle(selectedDeck);
 
   const clearSearchTimers = () => {
     if (timerRef.current) {
@@ -155,8 +158,8 @@ export const Matchmaking: React.FC = () => {
   };
 
   const handleStartSearch = async () => {
-    if (!selectedDeckId) {
-      alert('请先选择一个卡组');
+    if (!selectedDeckValidation.valid) {
+      alert(selectedDeckValidation.error || '请选择合法的卡组');
       return;
     }
 
@@ -293,6 +296,12 @@ export const Matchmaking: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {selectedDeckId && !selectedDeckValidation.valid && (
+              <div className="mb-6 p-3 rounded-xl border border-red-500/30 bg-red-900/20 text-red-300 text-sm">
+                当前选中的卡组不可用于匹配：{selectedDeckValidation.error}
+              </div>
+            )}
 
             <div className="flex justify-center mt-8">
               <motion.button

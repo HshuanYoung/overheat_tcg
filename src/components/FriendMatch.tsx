@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, LogIn, Loader2, Copy, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
+import { validateDeckForBattle } from '../lib/deckValidation';
 import { getAuthToken, getAuthUser } from '../socket';
 import { Deck } from '../types/game';
 
@@ -25,6 +26,8 @@ export const FriendMatch: React.FC = () => {
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = getAuthToken();
+  const selectedDeck = myDecks.find(deck => deck.id === selectedDeckId) || null;
+  const selectedDeckValidation = validateDeckForBattle(selectedDeck);
 
   const clearPoll = () => {
     if (pollRef.current) {
@@ -101,8 +104,8 @@ export const FriendMatch: React.FC = () => {
   }, [waitingForOpponent, createdGameId, navigate, selectedDeckId, BACKEND_URL, token]);
 
   const handleCreateRoom = async () => {
-    if (!selectedDeckId) {
-      alert('请先选择一个卡组');
+    if (!selectedDeckValidation.valid) {
+      alert(selectedDeckValidation.error || '请选择合法的卡组');
       return;
     }
 
@@ -134,8 +137,8 @@ export const FriendMatch: React.FC = () => {
   };
 
   const handleJoinRoom = async () => {
-    if (!selectedDeckId) {
-      alert('请先选择一个卡组');
+    if (!selectedDeckValidation.valid) {
+      alert(selectedDeckValidation.error || '请选择合法的卡组');
       return;
     }
     if (!roomCode || roomCode.length < 6) {
@@ -274,6 +277,12 @@ export const FriendMatch: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {selectedDeckId && !selectedDeckValidation.valid && (
+              <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-xl text-red-400 text-sm">
+                当前选中的卡组不可用于对战：{selectedDeckValidation.error}
+              </div>
+            )}
 
             {error && <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-xl text-red-400 text-sm">{error}</div>}
 

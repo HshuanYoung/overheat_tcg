@@ -22,8 +22,8 @@ interface PlayFieldProps {
   allianceInitiator?: string;
   timer?: number;
   cardBackUrl?: string;
-  viewingZone?: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null;
-  setViewingZone?: (zone: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null) => void;
+  viewingZone?: { title: string, cards: Card[], type: string, erosionBackIds?: string[], isOpponentZone?: boolean } | null;
+  setViewingZone?: (zone: { title: string, cards: Card[], type: string, erosionBackIds?: string[], isOpponentZone?: boolean } | null) => void;
 }
 
 const CardSlot: React.FC<{
@@ -70,11 +70,11 @@ const CardSlot: React.FC<{
         )}
         onClick={(e) => {
           if (onClick) onClick(e);
-          if (!isFaceUp && card && onPreview) onPreview(card);
+          if (!isFaceUp && card && onPreview && !isOpponent) onPreview(card);
         }}
         onContextMenu={(e) => {
           e.preventDefault();
-          if (card && onPreview) onPreview(card);
+          if (card && onPreview && (isFaceUp || !isOpponent)) onPreview(card);
         }}
       >
         {isDeck ? (
@@ -131,7 +131,8 @@ const CardListModal: React.FC<{
   cardBackUrl?: string;
   zoneType: string;
   erosionBackIds?: string[];
-}> = ({ title, cards = [], isOpen, onClose, onPreviewCard, onCardClick, cardBackUrl, zoneType, erosionBackIds = [] }) => {
+  isOpponentZone?: boolean;
+}> = ({ title, cards = [], isOpen, onClose, onPreviewCard, onCardClick, cardBackUrl, zoneType, erosionBackIds = [], isOpponentZone = false }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm" onClick={onClose}>
@@ -143,26 +144,34 @@ const CardListModal: React.FC<{
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 custom-scrollbar">
-          {cards?.map((card, i) => (
-            <div
-              key={i}
-              className="aspect-[3/4] cursor-pointer"
-              onClick={(e) => {
-                if (onCardClick) {
-                  onCardClick(card, zoneType, i, e);
-                } else {
-                  onPreviewCard?.(card);
-                }
-              }}
-            >
-              <CardComponent
-                card={card}
-                disableZoom
-                cardBackUrl={cardBackUrl}
-                isBack={zoneType === 'erosion' && erosionBackIds.includes(card.gamecardId)}
-              />
-            </div>
-          ))}
+          {cards?.map((card, i) => {
+            const isHiddenErosionBack = zoneType === 'erosion' && erosionBackIds.includes(card.gamecardId);
+            const clickZone =
+              zoneType === 'erosion'
+                ? (isHiddenErosionBack ? 'erosion_back' : 'erosion_front')
+                : zoneType;
+
+            return (
+              <div
+                key={i}
+                className="aspect-[3/4] cursor-pointer"
+                onClick={(e) => {
+                  if (onCardClick) {
+                    onCardClick(card, clickZone, i, e);
+                  } else {
+                    onPreviewCard?.(card);
+                  }
+                }}
+              >
+                <CardComponent
+                  card={card}
+                  disableZoom
+                  cardBackUrl={cardBackUrl}
+                  isBack={isHiddenErosionBack}
+                />
+              </div>
+            );
+          })}
           {(cards?.length || 0) === 0 && <div className="col-span-full py-20 text-center opacity-20 italic">这里没有卡牌</div>}
         </div>
       </div>
@@ -183,8 +192,8 @@ const PlayerHalf: React.FC<{
   game?: GameState;
   allianceInitiator?: string;
   cardBackUrl?: string;
-  viewingZone?: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null;
-  setViewingZone?: (zone: { title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null) => void;
+  viewingZone?: { title: string, cards: Card[], type: string, erosionBackIds?: string[], isOpponentZone?: boolean } | null;
+  setViewingZone?: (zone: { title: string, cards: Card[], type: string, erosionBackIds?: string[], isOpponentZone?: boolean } | null) => void;
 }> = ({ player, isOpponent, onCardClick, onPreviewCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone }) => {
   if (!player) return null;
   const getMobileErosionCount = (playerState: PlayerState): number | string => {
@@ -211,6 +220,7 @@ const PlayerHalf: React.FC<{
         onCardClick={onCardClick}
         cardBackUrl={cardBackUrl}
         erosionBackIds={viewingZone?.erosionBackIds}
+        isOpponentZone={viewingZone?.isOpponentZone}
       />
 
       {/* SIDEBAR 1: Left Columns */}
@@ -261,7 +271,8 @@ const PlayerHalf: React.FC<{
                   title: '侵蚀区',
                   cards: [...backCards, ...frontCards],
                   type: 'erosion',
-                  erosionBackIds: backCards.map(c => c.gamecardId)
+                  erosionBackIds: backCards.map(c => c.gamecardId),
+                  isOpponentZone: false
                 });
               }}
               isFaceUp={player.erosionFront?.some(c => c !== null)}
@@ -324,8 +335,8 @@ const PlayerHalf: React.FC<{
                       <div className="relative aspect-[3/4] w-full">
                         {displayCard ? (
                           <CardSlot
-                            card={displayCard} isFaceUp={displayCard.isFaceUp} onPreview={onPreviewCard}
-                            onClick={(e) => displayCard.isFaceUp && onCardClick?.(displayCard, 'erosion_front', i, e)}
+                            card={displayCard} isFaceUp={displayCard.isFaceUp} onPreview={displayCard.isFaceUp ? onPreviewCard : undefined}
+                            onClick={(e) => onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
                             isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             showCount={false} isOpponent={isOpponent} displayMode="erosion_item" slotLabel={num} cardBackUrl={cardBackUrl}
@@ -487,7 +498,8 @@ const PlayerHalf: React.FC<{
                   title: isOpponent ? '敌方侵蚀区' : '侵蚀区',
                   cards: [...backCards, ...frontCards],
                   type: 'erosion',
-                  erosionBackIds: backCards.map(c => c.gamecardId)
+                  erosionBackIds: backCards.map(c => c.gamecardId),
+                  isOpponentZone: true
                 });
               }}
               isFaceUp={player.erosionFront?.some(c => c !== null)}

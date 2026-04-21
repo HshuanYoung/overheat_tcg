@@ -63,7 +63,7 @@ export const BattleField: React.FC = () => {
   const [selectedQueryIds, setSelectedQueryIds] = useState<string[]>([]);
   const [favoriteBackId, setFavoriteBackId] = useState<string>('default');
   const [showFullLogs, setShowFullLogs] = useState(false);
-  const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[], type: string, erosionBackIds?: string[] } | null>(null);
+  const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[], type: string, erosionBackIds?: string[], isOpponentZone?: boolean } | null>(null);
 
   const [timer, setTimer] = useState<number>(30);
   const [cardMenu, setCardMenu] = useState<{
@@ -1000,14 +1000,14 @@ export const BattleField: React.FC = () => {
                 <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4">
                   <p className="text-[#f27d26] font-bold tracking-widest text-sm">请点击下方卡牌进行选择</p>
                   <div className="w-full max-h-[58vh] overflow-y-auto overflow-x-hidden custom-scrollbar px-2 md:max-h-none md:overflow-x-auto md:overflow-y-visible md:px-0">
-                    <div className="mx-auto grid w-full max-w-[20rem] grid-cols-2 gap-2 py-4 place-items-center md:mx-0 md:w-max md:max-w-none md:flex md:min-w-max md:items-stretch md:gap-4 md:px-6">
+                    <div className="mx-auto grid w-full max-w-[23rem] grid-cols-2 gap-2.5 py-4 place-items-center md:mx-0 md:w-max md:max-w-none md:flex md:min-w-max md:items-stretch md:gap-4 md:px-6">
                       {me.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT').map((card, i) => (
                         <motion.div
                           key={card!.gamecardId}
                           whileHover={{ y: -10 }}
                           onClick={() => setSelectedErosionCardId(card!.gamecardId)}
                           className={cn(
-                            "w-full max-w-[9.6rem] shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:w-48 md:max-w-none md:first:ml-2 md:last:mr-2 md:first:origin-left md:last:origin-right",
+                            "w-full max-w-[10.8rem] shrink-0 cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:w-48 md:max-w-none md:first:ml-2 md:last:mr-2 md:first:origin-left md:last:origin-right",
                             selectedErosionCardId === card!.gamecardId ? "border-[#f27d26] scale-105 shadow-[0_0_20px_rgba(242,125,38,0.4)]" : "border-transparent opacity-60"
                           )}
                         >
@@ -1093,7 +1093,7 @@ export const BattleField: React.FC = () => {
                             <Zap className="w-4 h-4" />
                             手牌代替支付
                           </div>
-                          <div className="grid grid-cols-2 gap-3 pb-2">
+                          <div className="grid grid-cols-2 gap-3 pb-2 justify-items-center">
                             {getHandPaymentOptions(pendingPlayCard.color, pendingPlayCard.acValue, pendingPlayCard.gamecardId).map(card => {
                               const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
                               return (
@@ -1103,7 +1103,7 @@ export const BattleField: React.FC = () => {
                                   whileTap={{ scale: 0.95 }}
                                   onClick={() => togglePaymentFeijing(card.gamecardId)}
                                   className={cn(
-                                    "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                    "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
                                     isSelected ? "border-blue-500 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
                                   )}
                                 >
@@ -1127,7 +1127,7 @@ export const BattleField: React.FC = () => {
                             <Sword className="w-4 h-4" />
                             横置支付（费用 -1）
                           </div>
-                          <div className="grid grid-cols-2 gap-3 pb-2">
+                          <div className="grid grid-cols-2 gap-3 pb-2 justify-items-center">
                             {me.unitZone.filter(c => c && !c.isExhausted).map(card => {
                               const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
                               return (
@@ -1137,7 +1137,7 @@ export const BattleField: React.FC = () => {
                                   whileTap={{ scale: 0.95 }}
                                   onClick={() => togglePaymentExhaust(card!.gamecardId)}
                                   className={cn(
-                                    "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                    "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
                                     isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
                                   )}
                                 >
@@ -1161,7 +1161,7 @@ export const BattleField: React.FC = () => {
                         <Trash2 className="w-4 h-4" />
                         侵蚀区支付 (Erosion Payment - Select {Math.abs(pendingPlayCard.acValue)} cards)
                       </div>
-                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
+                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
                         {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map(card => {
                           const isSelected = paymentSelection.erosionFrontIds.includes(card!.gamecardId);
                           return (
@@ -1171,7 +1171,7 @@ export const BattleField: React.FC = () => {
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentErosionFront(card!.gamecardId)}
                               className={cn(
-                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
                                 isSelected ? "border-red-500 scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
                               )}
                             >
@@ -2228,12 +2228,12 @@ export const BattleField: React.FC = () => {
               </div>
 
               {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? (
-                <div className="flex w-full max-w-full gap-3 md:gap-6 overflow-x-auto overflow-y-hidden p-2 md:p-6 custom-scrollbar">
+                <div className="grid w-full max-w-[23rem] grid-cols-2 gap-3 p-2 md:flex md:max-w-full md:gap-6 md:overflow-x-auto md:overflow-y-hidden md:p-6 custom-scrollbar">
                   {game.pendingQuery.options.map((option, i) => {
                     const isSelected = selectedQueryIds.includes(option.card.gamecardId);
                     const isDiscardQuery = game.pendingQuery!.title.includes('舍弃') || game.pendingQuery!.title.includes('Discard');
                     return (
-                      <div key={`${option.card.gamecardId}-${i}`} className="flex w-[140px] md:w-48 shrink-0 flex-col items-center gap-4 group">
+                      <div key={`${option.card.gamecardId}-${i}`} className="flex w-full max-w-[10.8rem] md:w-48 md:max-w-none shrink-0 flex-col items-center gap-4 group justify-self-center">
                         <div className="relative w-full">
                           <motion.div
                             whileHover={{ scale: 1.08, y: -12 }}
@@ -2338,7 +2338,7 @@ export const BattleField: React.FC = () => {
                         <Zap className="w-4 h-4" />
                         手牌代替支付
                       </div>
-                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
+                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
                         {getHandPaymentOptions(game.pendingQuery?.paymentColor, game.pendingQuery?.paymentCost).map(card => {
                           const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
                           return (
@@ -2348,7 +2348,7 @@ export const BattleField: React.FC = () => {
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentFeijing(card.gamecardId)}
                               className={cn(
-                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
                                 isSelected ? "border-blue-500 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >
@@ -2372,7 +2372,7 @@ export const BattleField: React.FC = () => {
                         <Sword className="w-4 h-4" />
                         横置支付（费用 -1）
                       </div>
-                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
+                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
                         {me.unitZone.filter(c => c && !c.isExhausted).map(card => {
                           const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
                           return (
@@ -2382,7 +2382,7 @@ export const BattleField: React.FC = () => {
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentExhaust(card!.gamecardId)}
                               className={cn(
-                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
                                 isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >
@@ -2406,7 +2406,7 @@ export const BattleField: React.FC = () => {
                         <Layers className="w-4 h-4" />
                         水平支付（费用 -1）
                       </div>
-                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
+                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
                         {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map(card => {
                           const isSelected = paymentSelection.erosionFrontIds.includes(card!.gamecardId);
                           return (
@@ -2416,7 +2416,7 @@ export const BattleField: React.FC = () => {
                               whileTap={{ scale: 0.95 }}
                               onClick={() => togglePaymentErosionFront(card!.gamecardId)}
                               className={cn(
-                                "aspect-[3/4] cursor-pointer transition-all rounded-lg overflow-hidden border-2",
+                                "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
                                 isSelected ? "border-red-500 scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
                               )}
                             >

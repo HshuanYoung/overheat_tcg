@@ -1727,6 +1727,11 @@ export const ServerGameService = {
       if (!unit) throw new Error('Defender not found in unit zone');
       if (unit.isExhausted) throw new Error('Defender is already exhausted');
 
+      const lockedTargetId = gameState.battleState.defenseLockedToTargetId;
+      if (lockedTargetId && defenderId !== lockedTargetId) {
+        throw new Error('由于效果限制，这场战斗中只能由被指定的单位进行防御');
+      }
+
       const minPower = gameState.battleState.defensePowerRestriction || 0;
       if (minPower > 0 && (unit.power || 0) < minPower) {
         throw new Error(`无法防御：对方的效果使得力量值低于 ${minPower} 的单位不能进行防御`);
@@ -3332,7 +3337,12 @@ export const ServerGameService = {
         const totalAttackerDamage = attackingUnits.reduce((sum, u) => sum + (u.damage || 0), 0);
         const botErosionCount = bot.erosionFront.filter(Boolean).length + bot.erosionBack.filter(Boolean).length;
 
-        const availableDefenders = bot.unitZone.filter(c => c && !c.isExhausted);
+        const lockedTargetId = gameState.battleState?.defenseLockedToTargetId;
+        const availableDefenders = bot.unitZone.filter(c =>
+          c &&
+          !c.isExhausted &&
+          (!lockedTargetId || c.gamecardId === lockedTargetId)
+        );
 
         // 1. Find best "Winner" (Power > Attacker)
         let defender = availableDefenders.find(c => (c.power || 0) > totalAttackerPower);

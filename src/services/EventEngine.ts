@@ -142,6 +142,7 @@ export class EventEngine {
       ];
       allCards.forEach(card => {
         if (card) {
+          delete (card as any).__lockPowerToBaseSourceName;
           if (!card.baseColorReq) {
             card.baseColorReq = { ...(card.colorReq || {}) };
           }
@@ -239,6 +240,23 @@ export class EventEngine {
       });
     };
     Object.values(gameState.players).forEach(applyEffects);
+
+    // 2.5 Apply post-processing locks that must override other stat changes.
+    Object.values(gameState.players).forEach(player => {
+      [...player.unitZone, ...player.itemZone, ...player.erosionFront].forEach(card => {
+        if (!card) return;
+
+        const lockPowerSource = (card as any).__lockPowerToBaseSourceName;
+        if (lockPowerSource && card.basePower !== undefined) {
+          card.power = card.basePower;
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: lockPowerSource,
+            description: '力量值不会变动'
+          });
+        }
+      });
+    });
 
     // 3. New: Equipment Influence Display
     const allUnitMap = new Map<string, Card>();

@@ -369,6 +369,7 @@ export interface GameState {
     attackers: string[]; // gamecardIds
     defender?: string; // gamecardId
     unitTargetId?: string; // Explicit target for the attack (forces unit combat)
+    defenseLockedToTargetId?: string; // If set, only this unit can be declared as defender for this battle
     isAlliance: boolean;
     askConfront?: 'ASKING_OPPONENT' | 'ASKING_TURN_PLAYER';
     defensePowerRestriction?: number;

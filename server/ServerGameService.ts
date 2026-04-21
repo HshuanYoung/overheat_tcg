@@ -1110,7 +1110,7 @@ export const ServerGameService = {
             isAlliance: !!stackItem.isAlliance
           };
           gameState.phase = stackItem.skipDefense ? 'BATTLE_FREE' : 'DEFENSE_DECLARATION';
-          gameState.logs.push(`[攻击宣告] 连锁结算完成，进入${stackItem.skipDefense ? '战斗自由' : '防御宣言'}阶段`);
+          gameState.logs.push(`[攻击宣言] 连锁结算完成，进入${stackItem.skipDefense ? '战斗自由' : '防御宣言'}阶段`);
           // Clear previous phase so we don't return to MAIN
           gameState.previousPhase = undefined;
 

@@ -35,7 +35,7 @@ const applyForcedGuard = async (instance: Card, target: Card, gameState: GameSta
   gameState.phaseTimerStart = Date.now();
 
   EventEngine.recalculateContinuousEffects(gameState);
-  gameState.logs.push(`[${instance.fullName}] 强制本次攻击与 [${target.fullName}] 进行战斗，跳过防御宣告。`);
+  gameState.logs.push(`[${instance.fullName}] 强制本次攻击与 [${target.fullName}] 进行战斗，跳过防御宣言。`);
 };
 
 const continuous_10402024_power_fixed: CardEffect = {

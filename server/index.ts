@@ -185,8 +185,9 @@ function triggerBotIfNeeded(gameState: any, gameId: string) {
     const isBotAsked = gameState.battleState && gameState.battleState.askConfront === 'ASKING_OPPONENT';
     const isBotPriority = gameState.priorityPlayerId === 'BOT_PLAYER';
     const isBotQuery = gameState.pendingQuery && gameState.pendingQuery.playerUid === 'BOT_PLAYER';
+    const isBotDefending = gameState.phase === 'DEFENSE_DECLARATION' && !bot.isTurn;
 
-    if (currentPlayerId === 'BOT_PLAYER' || isBotAsked || isBotPriority || isBotQuery) {
+    if (currentPlayerId === 'BOT_PLAYER' || isBotAsked || isBotPriority || isBotQuery || isBotDefending) {
         // console.log(`[Bot] Triggering bot move for game ${gameId}. Reason: ${currentPlayerId === 'BOT_PLAYER' ? 'Turn' : isBotAsked ? 'Confrontation' : isBotPriority ? 'Priority' : 'Query'}`);
         handleBotMove(gameState, gameId);
     }
@@ -370,7 +371,8 @@ setInterval(async () => {
                 // Bot action check
                 const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
                 const isBotQuery = gameState.pendingQuery && gameState.pendingQuery.playerUid === 'BOT_PLAYER';
-                if (currentPlayerId === 'BOT_PLAYER' || gameState.priorityPlayerId === 'BOT_PLAYER' || isBotQuery) {
+                const isBotDefending = gameState.phase === 'DEFENSE_DECLARATION' && !gameState.players['BOT_PLAYER']?.isTurn;
+                if (currentPlayerId === 'BOT_PLAYER' || gameState.priorityPlayerId === 'BOT_PLAYER' || isBotQuery || isBotDefending) {
                     const syncCallback = async (state: any) => {
                         await syncAndSaveState(gameId, state);
                     };

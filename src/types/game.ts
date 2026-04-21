@@ -238,6 +238,7 @@ export interface Card {
   nextEffectProtection?: boolean;
   silencedEffectIds?: string[];
   temporaryBuffSources?: { [key: string]: string }; // Map of buff type to source card name
+  temporaryBuffDetails?: { [key: string]: { sourceCardName: string; value?: number; description?: string }[] };
 }
 
 export interface PlayerState {
@@ -374,6 +375,7 @@ export interface GameState {
     askConfront?: 'ASKING_OPPONENT' | 'ASKING_TURN_PLAYER';
     defensePowerRestriction?: number;
     resolvedUnitIds?: string[];
+    forcedGuardTargetId?: string;
   };
   effectUsage?: Record<string, number>;
   phaseTimerStart?: number;

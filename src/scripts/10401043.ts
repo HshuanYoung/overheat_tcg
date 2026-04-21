@@ -20,9 +20,20 @@ const trigger_10401043_power_up: CardEffect = {
   },
   execute: async (instance: Card, gameState: GameState) => {
     instance.temporaryPowerBuff = (instance.temporaryPowerBuff || 0) + 500;
+    const powerDetails = instance.temporaryBuffDetails?.power || [];
+    const existingEntry = powerDetails.find(detail => detail.sourceCardName === instance.fullName);
+    if (existingEntry) {
+      existingEntry.value = (existingEntry.value || 0) + 500;
+    } else {
+      powerDetails.push({ sourceCardName: instance.fullName, value: 500 });
+    }
     instance.temporaryBuffSources = {
       ...(instance.temporaryBuffSources || {}),
       power: instance.fullName
+    };
+    instance.temporaryBuffDetails = {
+      ...(instance.temporaryBuffDetails || {}),
+      power: powerDetails
     };
 
     EventEngine.recalculateContinuousEffects(gameState);

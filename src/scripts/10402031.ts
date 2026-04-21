@@ -8,7 +8,7 @@ const card: Card = {
   type: 'UNIT',
   color: 'BLUE',
   gamecardId: null as any,
-  colorReq: { BLUE: 1 },
+  colorReq: {},
   faction: '九尾商会联盟',
   acValue: 3,
   power: 2500,

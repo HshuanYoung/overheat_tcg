@@ -11,6 +11,24 @@ export class EventEngine {
   static dispatchEvent(gameState: GameState, event: GameEvent) {
     // 1. Find all active effects that listen to this event
     const triggeredEffects: { card: Card, effect: CardEffect, effectIndex: number, playerUid: string }[] = [];
+    const findCardByGamecardId = (gamecardId?: string) => {
+      if (!gamecardId) return undefined;
+      for (const player of Object.values(gameState.players)) {
+        const found = [
+          ...player.hand,
+          ...player.unitZone,
+          ...player.itemZone,
+          ...player.grave,
+          ...player.exile,
+          ...player.erosionFront,
+          ...player.erosionBack,
+          ...player.playZone,
+          ...player.deck
+        ].find(card => card && card.gamecardId === gamecardId);
+        if (found) return found;
+      }
+      return undefined;
+    };
 
     const BATTLEFIELD_ZONES: TriggerLocation[] = ['UNIT', 'ITEM'];
 
@@ -46,7 +64,8 @@ export class EventEngine {
               }
 
               // Check limits and requirements
-              if (!GameService.checkEffectLimitsAndReqs(gameState, player.uid, card, effect, cardLoc, event)) {
+              const checkResult = GameService.checkEffectLimitsAndReqs(gameState, player.uid, card, effect, cardLoc, event);
+              if (!checkResult.valid) {
                 return;
               }
 
@@ -84,21 +103,22 @@ export class EventEngine {
 
     // 2. Queue all valid triggers into the triggeredEffectsQueue for sequential resolution
     for (const { card, effect, effectIndex, playerUid } of triggeredEffects) {
+      const pendingSourceCard = findCardByGamecardId(gameState.pendingQuery?.context?.sourceCardId);
       const hasQueuedDuplicate = !!(
         effect.limitCount === 1 &&
         gameState.triggeredEffectsQueue?.some(item =>
           item.playerUid === playerUid &&
-          item.card?.gamecardId === card.gamecardId &&
+          (effect.limitNameType ? item.card?.id === card.id : item.card?.gamecardId === card.gamecardId) &&
           (item.effect?.id || '') === (effect.id || '') &&
-          item.effectIndex === effectIndex
+          (effect.limitNameType || item.effectIndex === effectIndex)
         )
       );
       const hasPendingDuplicate = !!(
         effect.limitCount === 1 &&
         gameState.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
         gameState.pendingQuery?.playerUid === playerUid &&
-        gameState.pendingQuery?.context?.sourceCardId === card.gamecardId &&
-        gameState.pendingQuery?.context?.effectIndex === effectIndex
+        (effect.limitNameType ? pendingSourceCard?.id === card.id : gameState.pendingQuery?.context?.sourceCardId === card.gamecardId) &&
+        (effect.limitNameType || gameState.pendingQuery?.context?.effectIndex === effectIndex)
       );
 
       if (hasQueuedDuplicate || hasPendingDuplicate) {
@@ -175,8 +195,21 @@ export class EventEngine {
           }
 
           if (card.temporaryPowerBuff) {
-            const source = card.temporaryBuffSources?.['power'] || '效果';
-            card.influencingEffects.push({ sourceCardName: source, description: `临时力量加成: +${card.temporaryPowerBuff}` });
+            const source = card.temporaryBuffSources?.['power'] || '??';
+            card.influencingEffects.push({ sourceCardName: source, description: `??????: +${card.temporaryPowerBuff}` });
+          }
+          const powerDetails = card.temporaryBuffDetails?.['power'] || [];
+          if (powerDetails.length > 0) {
+            card.influencingEffects = card.influencingEffects.filter(effect => !effect.description.includes('????'));
+            powerDetails.forEach(detail => {
+              card.influencingEffects!.push({
+                sourceCardName: detail.sourceCardName,
+                description: `??????: +${detail.value || 0}`
+              });
+            });
+          }
+          if (gameState.battleState?.forcedGuardTargetId === card.gamecardId) {
+            card.influencingEffects.push({ sourceCardName: '????', description: '?????' });
           }
           if (card.temporaryDamageBuff) {
             const source = card.temporaryBuffSources?.['damage'] || '效果';

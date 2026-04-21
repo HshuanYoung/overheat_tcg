@@ -105,6 +105,11 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
 
         {/* Top Right: Keyword Indicators */}
         <div className="absolute top-0.5 right-0.5 md:top-1 md:right-1 z-10 flex flex-col items-end gap-0.5">
+          {card.influencingEffects?.some(effect => effect.description.includes('强制护卫中')) && (
+            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-blue-900/85 border border-blue-300/40 flex items-center justify-center shadow-lg" title="强制护卫中">
+              <Shield className="w-2.5 h-2.5 md:w-3 md:h-3 text-blue-300" />
+            </div>
+          )}
           {card.isrush && (
             <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-[#4a0d4a] border border-white/20 flex items-center justify-center shadow-lg" title="速攻">
               <span className="text-[8px] md:text-[10px] font-black text-white italic">速</span>

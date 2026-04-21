@@ -188,6 +188,7 @@ export const ServerGameService = {
     card.temporaryRush = false;
     card.temporaryCanAttackAny = false;
     card.temporaryBuffSources = {};
+    card.temporaryBuffDetails = {};
     card.influencingEffects = [];
     if (masterCard) {
       card.basePower = masterCard.basePower ?? masterCard.power;
@@ -2330,6 +2331,7 @@ export const ServerGameService = {
             u.temporaryRush = false;
             u.temporaryCanAttackAny = false;
             u.temporaryBuffSources = {};
+            u.temporaryBuffDetails = {};
             u.isrush = u.baseIsrush;
             u.isAnnihilation = u.baseAnnihilation || false;
             u.power = u.basePower;
@@ -2454,6 +2456,13 @@ export const ServerGameService = {
     const effect = trigger.effect || card.effects?.[effectIndex];
 
     if (!effect) {
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      return;
+    }
+
+    const triggerLocation = card.cardlocation as TriggerLocation;
+    const triggerCheck = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, card, effect, triggerLocation, event);
+    if (!triggerCheck.valid) {
       await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
       return;
     }

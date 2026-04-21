@@ -1,5 +1,6 @@
 import { Card, CardEffect, GameEvent, GameState, PlayerState } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { EventEngine } from '../services/EventEngine';
 
 const hasGuildGodmarkUnit = (playerState: PlayerState) => {
   return playerState.unitZone.some(unit =>
@@ -16,6 +17,25 @@ const getGuardianCandidates = (playerState: PlayerState) => {
     !unit.isExhausted &&
     hasGuildGodmarkUnit(playerState)
   );
+};
+
+const applyForcedGuard = async (instance: Card, target: Card, gameState: GameState, playerState: PlayerState) => {
+  if (!gameState.battleState) return;
+
+  await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+    type: 'ROTATE_HORIZONTAL',
+    targetFilter: { gamecardId: target.gamecardId }
+  }, instance);
+
+  gameState.battleState.unitTargetId = target.gamecardId;
+  gameState.battleState.defender = target.gamecardId;
+  gameState.battleState.defenseLockedToTargetId = target.gamecardId;
+  gameState.battleState.forcedGuardTargetId = target.gamecardId;
+  gameState.phase = 'BATTLE_FREE';
+  gameState.phaseTimerStart = Date.now();
+
+  EventEngine.recalculateContinuousEffects(gameState);
+  gameState.logs.push(`[${instance.fullName}] 强制本次攻击与 [${target.fullName}] 进行战斗，跳过防御宣告。`);
 };
 
 const continuous_10402024_power_fixed: CardEffect = {
@@ -35,8 +55,8 @@ const trigger_10402024_guard: CardEffect = {
   triggerEvent: 'CARD_ATTACK_DECLARED',
   isGlobal: true,
   isMandatory: true,
-  description: '【诱发】你的单位区有「九尾商会联盟」的神蚀单位，且这个单位为竖置状态时，对手的单位进行攻击：对方必须攻击这张卡。这场战斗中，你其他的单位不能宣言防御。如果场上有多个单位有此效果，对方选择其中1张作为攻击对象。',
-  condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
+  description: '【诱发】你的单位区有“九尾商会联盟”的神蚀单位，且这个单位为竖置状态时，对手的单位进行攻击时：对方必须攻击这张卡。这场战斗中，你其他的单位不能宣言防御。如果场上有多个单位有此效果，对方选择其中1张作为攻击对象。',
+  condition: (_gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     if (event?.type !== 'CARD_ATTACK_DECLARED' || event.playerUid === playerState.uid) return false;
     if (instance.cardlocation !== 'UNIT' || instance.isExhausted) return false;
     if (!hasGuildGodmarkUnit(playerState)) return false;
@@ -51,9 +71,7 @@ const trigger_10402024_guard: CardEffect = {
     if (candidates.length === 0) return;
 
     if (candidates.length === 1) {
-      gameState.battleState.unitTargetId = candidates[0].gamecardId;
-      gameState.battleState.defenseLockedToTargetId = candidates[0].gamecardId;
-      gameState.logs.push(`[${instance.fullName}] 效果生效：本次攻击必须以 [${candidates[0].fullName}] 为对象，其他单位不能宣言防御。`);
+      await applyForcedGuard(instance, candidates[0], gameState, playerState);
       return;
     }
 
@@ -78,8 +96,8 @@ const trigger_10402024_guard: CardEffect = {
       }
     };
   },
-  onQueryResolve: async (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[]) => {
-    if (!gameState.battleState || selections.length === 0) return;
+  onQueryResolve: async (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[], context: any) => {
+    if (context?.step !== 'SELECT_GUARD_TARGET' || !gameState.battleState || selections.length === 0) return;
 
     const targetId = selections[0];
     const validTargets = getGuardianCandidates(playerState);
@@ -90,9 +108,7 @@ const trigger_10402024_guard: CardEffect = {
       return;
     }
 
-    gameState.battleState.unitTargetId = targetId;
-    gameState.battleState.defenseLockedToTargetId = targetId;
-    gameState.logs.push(`[${instance.fullName}] 效果生效：本次攻击必须以 [${targetCard.fullName}] 为对象，其他单位不能宣言防御。`);
+    await applyForcedGuard(instance, targetCard, gameState, playerState);
   }
 };
 

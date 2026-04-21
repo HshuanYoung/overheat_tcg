@@ -27,9 +27,9 @@ const card: Card = {
       id: 'minotaur_leader_activate',
       type: 'ACTIVATE',
       limitCount: 1,
-      limitNameType: true,
+      limitNameType: false,
       triggerLocation: ['UNIT'],
-      description: '【同名回合1次】舍弃1张手牌：选择单位区中1张名字包含「牛头人」的单位，在本回合中力量值+1000。',
+      description: '【1回合1次】舍弃1张手牌：选择单位区中1张名字包含「牛头人」的单位，在本回合中力量值+1000。',
       condition: (gameState, playerState) => {
         return playerState.hand.length > 0;
       },

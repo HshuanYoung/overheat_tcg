@@ -359,6 +359,7 @@ export class AtomicEffectExecutor {
 
       if (effect.value !== undefined) {
         if (!card.temporaryBuffSources) card.temporaryBuffSources = {};
+        if (!card.temporaryBuffDetails) card.temporaryBuffDetails = {};
         const sourceName = sourceCard ? sourceCard.fullName : '效果';
 
         if (stat === 'power') {
@@ -366,6 +367,14 @@ export class AtomicEffectExecutor {
             card.basePower = (card.basePower || 0) + effect.value;
           } else if (effect.turnDuration === 1) {
             card.temporaryPowerBuff = (card.temporaryPowerBuff || 0) + effect.value;
+            const existingDetails = card.temporaryBuffDetails['power'] || [];
+            const existingEntry = existingDetails.find(entry => entry.sourceCardName === sourceName);
+            if (existingEntry) {
+              existingEntry.value = (existingEntry.value || 0) + effect.value;
+            } else {
+              existingDetails.push({ sourceCardName: sourceName, value: effect.value });
+            }
+            card.temporaryBuffDetails['power'] = existingDetails;
             card.temporaryBuffSources['power'] = sourceName;
           }
           card.power = (card.power || 0) + effect.value;
@@ -846,6 +855,7 @@ export class AtomicEffectExecutor {
       card.temporaryRush = false;
       card.temporaryCanAttackAny = false;
       card.temporaryBuffSources = {};
+      card.temporaryBuffDetails = {};
       card.influencingEffects = [];
       if (card.basePower !== undefined) card.power = card.basePower;
       if (card.baseDamage !== undefined) card.damage = card.baseDamage;

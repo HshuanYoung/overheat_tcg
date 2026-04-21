@@ -168,6 +168,31 @@ export const ServerGameService = {
     }
   },
 
+  normalizeForcedGuardBattleState(gameState: GameState) {
+    const forcedGuardTargetId = gameState.battleState?.forcedGuardTargetId;
+    if (!forcedGuardTargetId || !gameState.battleState) return;
+
+    const defenderPlayerId = gameState.playerIds[gameState.currentTurnPlayer === 0 ? 1 : 0];
+    const defenderPlayer = gameState.players[defenderPlayerId];
+    const target = defenderPlayer?.unitZone.find(unit => unit?.gamecardId === forcedGuardTargetId);
+
+    if (!target) {
+      delete gameState.battleState.forcedGuardTargetId;
+      return;
+    }
+
+    target.isExhausted = true;
+    gameState.battleState.unitTargetId = target.gamecardId;
+    gameState.battleState.defender = target.gamecardId;
+    gameState.battleState.defenseLockedToTargetId = target.gamecardId;
+
+    if (gameState.phase === 'DEFENSE_DECLARATION') {
+      gameState.phase = 'BATTLE_FREE';
+      gameState.phaseTimerStart = Date.now();
+      gameState.logs.push(`[系统] 强制护卫生效，跳过防御宣告并与 [${target.fullName}] 进行战斗。`);
+    }
+  },
+
   refreshCardAsNewInstance(card: Card) {
     const masterCard = SERVER_CARD_LIBRARY[card.uniqueId] || SERVER_CARD_LIBRARY[card.id];
     const newGamecardId = Math.random().toString(36).substring(2, 10);
@@ -1313,6 +1338,7 @@ export const ServerGameService = {
         try {
           gameState.logs.push(`[系统] 正在执行脚本回调 ${effect.id || effectIndex}`);
           await (effect.onQueryResolve as any)(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
+          ServerGameService.normalizeForcedGuardBattleState(gameState);
           EventEngine.recalculateContinuousEffects(gameState);
         } catch (err: any) {
           console.error(`[Error] CRASH in onQueryResolve:`, err);
@@ -2528,6 +2554,9 @@ export const ServerGameService = {
     if (effect.execute) {
       await (effect.execute as any)(card, gameState, gameState.players[playerUid], event);
     }
+
+    ServerGameService.normalizeForcedGuardBattleState(gameState);
+    EventEngine.recalculateContinuousEffects(gameState);
 
     // 6. Dispatch Event
     EventEngine.dispatchEvent(gameState, {

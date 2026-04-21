@@ -195,21 +195,21 @@ export class EventEngine {
           }
 
           if (card.temporaryPowerBuff) {
-            const source = card.temporaryBuffSources?.['power'] || '??';
-            card.influencingEffects.push({ sourceCardName: source, description: `??????: +${card.temporaryPowerBuff}` });
+            const source = card.temporaryBuffSources?.['power'] || '效果';
+            card.influencingEffects.push({ sourceCardName: source, description: `临时力量加成: +${card.temporaryPowerBuff}` });
           }
           const powerDetails = card.temporaryBuffDetails?.['power'] || [];
           if (powerDetails.length > 0) {
-            card.influencingEffects = card.influencingEffects.filter(effect => !effect.description.includes('????'));
+            card.influencingEffects = card.influencingEffects.filter(effect => !effect.description.includes('力量加成'));
             powerDetails.forEach(detail => {
               card.influencingEffects!.push({
                 sourceCardName: detail.sourceCardName,
-                description: `??????: +${detail.value || 0}`
+                description: `临时力量加成: +${detail.value || 0}`
               });
             });
           }
           if (gameState.battleState?.forcedGuardTargetId === card.gamecardId) {
-            card.influencingEffects.push({ sourceCardName: '????', description: '?????' });
+            card.influencingEffects.push({ sourceCardName: '系统状态', description: '强制护卫中' });
           }
           if (gameState.battleState?.forcedGuardTargetId === card.gamecardId) {
             const hasGuardLabel = card.influencingEffects.some(effect => effect.description === '强制护卫中');

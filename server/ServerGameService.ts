@@ -1190,6 +1190,8 @@ export const ServerGameService = {
 
     await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
 
+    ServerGameService.normalizeForcedGuardBattleState(gameState);
+    EventEngine.recalculateContinuousEffects(gameState);
     ServerGameService.checkBattleInterruption(gameState);
   },
 

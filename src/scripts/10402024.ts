@@ -29,21 +29,27 @@ const findCardOwner = (gameState: GameState, cardId: string) => {
 const applyForcedGuard = async (instance: Card, target: Card, gameState: GameState, ownerState: PlayerState) => {
   if (!gameState.battleState) return;
 
+  const liveTarget = ownerState.unitZone.find(
+    (unit): unit is Card => !!unit && unit.gamecardId === target.gamecardId
+  ) || target;
+
   await AtomicEffectExecutor.execute(gameState, ownerState.uid, {
     type: 'ROTATE_HORIZONTAL',
-    targetFilter: { gamecardId: target.gamecardId }
+    targetFilter: { gamecardId: liveTarget.gamecardId }
   }, instance);
 
-  gameState.battleState.unitTargetId = target.gamecardId;
-  gameState.battleState.defender = target.gamecardId;
-  gameState.battleState.defenseLockedToTargetId = target.gamecardId;
-  gameState.battleState.forcedGuardTargetId = target.gamecardId;
+  liveTarget.isExhausted = true;
+
+  gameState.battleState.unitTargetId = liveTarget.gamecardId;
+  gameState.battleState.defender = liveTarget.gamecardId;
+  gameState.battleState.defenseLockedToTargetId = liveTarget.gamecardId;
+  gameState.battleState.forcedGuardTargetId = liveTarget.gamecardId;
   gameState.battleState.forcedGuardLogged = false;
   gameState.phase = 'BATTLE_FREE';
   gameState.phaseTimerStart = Date.now();
 
   EventEngine.recalculateContinuousEffects(gameState);
-  gameState.logs.push(`[${instance.fullName}] 强制本次攻击与 [${target.fullName}] 进行战斗，跳过防御宣告。`);
+  gameState.logs.push(`[${instance.fullName}] 强制本次攻击与 [${liveTarget.fullName}] 进行战斗，跳过防御宣告。`);
 };
 
 const continuous_10402024_power_fixed: CardEffect = {

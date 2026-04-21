@@ -376,6 +376,7 @@ export interface GameState {
     defensePowerRestriction?: number;
     resolvedUnitIds?: string[];
     forcedGuardTargetId?: string;
+    forcedGuardLogged?: boolean;
   };
   effectUsage?: Record<string, number>;
   phaseTimerStart?: number;

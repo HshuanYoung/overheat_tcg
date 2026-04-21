@@ -189,7 +189,11 @@ export const ServerGameService = {
     if (gameState.phase === 'DEFENSE_DECLARATION') {
       gameState.phase = 'BATTLE_FREE';
       gameState.phaseTimerStart = Date.now();
+    }
+
+    if (!gameState.battleState.forcedGuardLogged) {
       gameState.logs.push(`[系统] 强制护卫生效，跳过防御宣告并与 [${target.fullName}] 进行战斗。`);
+      gameState.battleState.forcedGuardLogged = true;
     }
   },
 

@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { SERVER_CARD_LIBRARY } from './card_loader';
+import { getBaseCardIds } from './card_inventory';
 
 const REGISTRATION_SENDER_EMAIL = '2032461502@qq.com';
 const REGISTRATION_SENDER_PASS =
@@ -96,7 +96,7 @@ export async function sendRegistrationVerificationEmail(targetEmail: string, cod
 }
 
 export async function seedStarterResources(conn: any, userId: string) {
-    const cardIds = Object.keys(SERVER_CARD_LIBRARY).filter(cardId => !cardId.includes(':legacy'));
+    const cardIds = getBaseCardIds();
 
     await conn.query(
         `INSERT INTO pack_history (user_id, total_packs, packs_since_sr, packs_since_ur)
@@ -114,4 +114,3 @@ export async function seedStarterResources(conn: any, userId: string) {
         );
     }
 }
-

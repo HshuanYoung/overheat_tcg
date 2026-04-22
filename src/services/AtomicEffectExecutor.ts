@@ -677,8 +677,8 @@ export class AtomicEffectExecutor {
   static matchesColor(card: Card, targetColor: string): boolean {
     if (card.color === targetColor) return true;
 
-    // Robust check for 10500055 (string/number safe)
-    const isOmni = String(card.id) === '10500055' || (card.effects && card.effects.some(e => e.id === '10500055_omni'));
+    // Robust check for 105000481 (string/number safe)
+    const isOmni = String(card.id) === '105000481' || (card.effects && card.effects.some(e => e.id === '105000481_omni'));
 
     if (isOmni && ['UNIT', 'EROSION_FRONT'].includes(card.cardlocation as string)) {
       return true;
@@ -870,7 +870,7 @@ export class AtomicEffectExecutor {
       }
     }
 
-    // Movement Replacement logic (e.g. 10401041)
+    // Movement Replacement logic (e.g. 104010484)
     if (isEffect && (toZone === 'HAND' || toZone === 'DECK' || toZone === 'EROSION_FRONT' || toZone === 'EROSION_BACK')) {
       if (card.effects) {
         for (const effect of card.effects) {

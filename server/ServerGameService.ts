@@ -11,9 +11,9 @@ export const ServerGameService = {
     return (card as any).data?.fullEffectSilencedTurn === gameState.turnCount;
   },
 
-  canUse20400008AsPaymentSubstitute(paymentCard: Card | undefined, cardColor?: string, cost?: number, playingCardId?: string) {
+  canUse204000145AsPaymentSubstitute(paymentCard: Card | undefined, cardColor?: string, cost?: number, playingCardId?: string) {
     return !!paymentCard &&
-      paymentCard.id === '20400008' &&
+      paymentCard.id === '204000145' &&
       paymentCard.gamecardId !== playingCardId &&
       cardColor === 'BLUE' &&
       !!cost &&
@@ -213,7 +213,7 @@ export const ServerGameService = {
 
     const candidates = defenderPlayer.unitZone.filter((unit): unit is Card =>
       !!unit &&
-      unit.id === '10402024' &&
+      unit.id === '104020246' &&
       !unit.isExhausted
     );
 
@@ -456,7 +456,7 @@ export const ServerGameService = {
       ServerGameService.refreshCardAsNewInstance(card);
     }
 
-    // Movement Replacement logic (e.g. 10401041)
+    // Movement Replacement logic (e.g. 104010484)
     if (options?.isEffect && (targetZone === 'HAND' || targetZone === 'DECK' || targetZone === 'EROSION_FRONT' || targetZone === 'EROSION_BACK')) {
       if (card.effects) {
         for (const effect of card.effects) {
@@ -550,7 +550,7 @@ export const ServerGameService = {
       }
     }
 
-    // 1.1 Godmark Limit Check (e.g. 10401021)
+    // 1.1 Godmark Limit Check (e.g. 1040101739)
     if (card.godMark) {
       // Check for limits on the field OR on the card itself
       const fieldEffects = player.unitZone
@@ -577,8 +577,8 @@ export const ServerGameService = {
     const checkOmni = (c: Card | null) => {
       if (!c) return false;
       // Use robust ID matching (string/number safe)
-      const isTargetId = String(c.id) === '10500055';
-      const hasOmniEffect = c.effects && c.effects.some(e => e.id === '10500055_omni');
+      const isTargetId = String(c.id) === '105000481';
+      const hasOmniEffect = c.effects && c.effects.some(e => e.id === '105000481_omni');
       return isTargetId || hasOmniEffect;
     };
 
@@ -614,10 +614,10 @@ export const ServerGameService = {
       }
     } else if (cost > 0) {
       let remainingCost = cost;
-      const has20400008Substitute = player.hand.some(c =>
-        ServerGameService.canUse20400008AsPaymentSubstitute(c, card.color, cost, card.gamecardId)
+      const has204000145Substitute = player.hand.some(c =>
+        ServerGameService.canUse204000145AsPaymentSubstitute(c, card.color, cost, card.gamecardId)
       );
-      if (has20400008Substitute) {
+      if (has204000145Substitute) {
         remainingCost = 0;
       }
 
@@ -694,7 +694,7 @@ export const ServerGameService = {
     if (cost > 0) {
       let remainingCost = cost;
       let feijingCard: Card | undefined;
-      let use20400008Replacement = false;
+      let use204000145Replacement = false;
 
       if (paymentSelection.feijingCardId) {
         if (paymentSelection.feijingCardId === playingCardId) {
@@ -702,12 +702,12 @@ export const ServerGameService = {
         }
         feijingCard = player.hand.find(c =>
           c.gamecardId === paymentSelection.feijingCardId &&
-          (c.feijingMark || c.id === '20400008')
+          (c.feijingMark || c.id === '204000145')
         );
         if (feijingCard) {
-          if (ServerGameService.canUse20400008AsPaymentSubstitute(feijingCard, cardColor, cost, playingCardId)) {
+          if (ServerGameService.canUse204000145AsPaymentSubstitute(feijingCard, cardColor, cost, playingCardId)) {
             remainingCost = 0;
-            use20400008Replacement = true;
+            use204000145Replacement = true;
           } else if (cardColor && feijingCard.color !== cardColor) {
             return { success: false, reason: '菲晶卡颜色与打出的卡牌颜色不匹配' };
           } else if (!feijingCard.feijingMark) {
@@ -753,7 +753,7 @@ export const ServerGameService = {
         } else if (player.hand.some(c => c?.gamecardId === feijingCard!.gamecardId)) {
           fromZone = 'HAND';
         }
-        ServerGameService.moveCard(gameState, playerId, fromZone, playerId, use20400008Replacement ? 'EXILE' : 'GRAVE', feijingCard.gamecardId);
+        ServerGameService.moveCard(gameState, playerId, fromZone, playerId, use204000145Replacement ? 'EXILE' : 'GRAVE', feijingCard.gamecardId);
       }
       for (let i = 0; i < remainingCost; i++) {
         // 2. The cards in the damaged deck do not have enough damage value
@@ -1192,7 +1192,7 @@ export const ServerGameService = {
           // Clear previous phase so we don't return to MAIN
           gameState.previousPhase = undefined;
 
-          // Re-calculate effects to ensure 30205010's defensePowerRestriction is applied to the new battleState
+          // Re-calculate effects to ensure 302050013's defensePowerRestriction is applied to the new battleState
           EventEngine.recalculateContinuousEffects(gameState);
           break;
       }
@@ -2073,7 +2073,7 @@ export const ServerGameService = {
       if (unit) unit.isExhausted = true;
     });
 
-    // Re-trigger check for Goddard effects like 30205011 that depend on combat state/phase
+    // Re-trigger check for Goddard effects like 302050014 that depend on combat state/phase
     // Process triggers while still in DAMAGE_CALCULATION and with valid battleState
     await ServerGameService.checkTriggeredEffects(gameState);
 
@@ -2127,7 +2127,7 @@ export const ServerGameService = {
       let card = player.deck.pop()!;
       let loopDestination = finalDestination;
 
-      // Check for movement substitution (e.g. 10401041) - Only if not already forced to Grave by Goddess mode
+      // Check for movement substitution (e.g. 104010484) - Only if not already forced to Grave by Goddess mode
       if (loopDestination === 'EROSION_FRONT' && card.effects) {
         for (const effect of card.effects) {
           if (effect.type === 'CONTINUOUS' && effect.movementReplacementDestination) {
@@ -2999,7 +2999,7 @@ export const ServerGameService = {
     if (choice === 'A') goingToGrave = [...handleableCards];
     else if (choice === 'B' || choice === 'C') goingToGrave = handleableCards.filter(c => c.gamecardId !== selectedCardId);
 
-    // Check for EROSION_KEEP effects (10403015)
+    // Check for EROSION_KEEP effects (104030455)
     const keepEffectCard = player.unitZone.find(c =>
       c && c.effects && c.effects.some(e =>
         e.erosionKeepReplacement &&

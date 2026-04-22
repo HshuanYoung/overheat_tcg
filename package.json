@@ -6,6 +6,8 @@
   "scripts": {
     "init": "tsx server/init_db.ts && tsx server/init_store.ts && tsx server/seed_admin.ts",
     "deletecards": "tsx server/delete_user_cards.ts",
+    "resetcards": "tsx server/reset_all_user_cards.ts",
+    "generate:card-scripts": "tsx script/generate-card-scripts.ts",
     "dev": "concurrently \"npm run frontend\" \"npm run backend\"",
     "frontend": "vite --port=3000 --host=0.0.0.0",
     "backend": "tsx watch server/index.ts",
@@ -47,6 +49,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "xlsx": "^0.18.5"
   }
 }

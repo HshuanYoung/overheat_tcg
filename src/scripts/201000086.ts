@@ -1,0 +1,37 @@
+import { Card } from '../types/game';
+
+/**
+ * Auto-generated from Card.xlsx + Card2.xlsx.
+ * Source CardID: 201000086
+ * Card2 Row: 405
+ * Card Row: 275
+ * Source CardNo: BT05-W09
+ * Package: BT05(C)
+ * ID Source: card-xlsx
+ * Keywords: N/A
+ * Card Detail:
+ * {选择战场上的1张非神蚀道具卡}:将被选择的卡破坏。之后，恢复2（随机选择你的墓地中的2张卡，将其放置到你的卡组底）。
+ * TODO: confirm ID / godMark / rarity variants and implement effects.
+ */
+const card: Card = {
+  id: '201000086',
+  fullName: '粉碎',
+  specialName: '',
+  type: 'STORY',
+  color: 'WHITE',
+  gamecardId: null as any,
+  colorReq: { WHITE: 1 },
+  faction: '无',
+  acValue: 1,
+  godMark: false,
+  displayState: 'FRONT_UPRIGHT',
+  feijingMark: false,
+  canResetCount: 0,
+  effects: [],
+  rarity: 'C',
+  availableRarities: ['C'],
+  cardPackage: 'BT05',
+  uniqueId: null as any,
+};
+
+export default card;

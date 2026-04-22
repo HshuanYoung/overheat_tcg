@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 import { pool, dbInit } from './db';
 import { generateToken, verifyToken } from './auth';
 import { initServerCardLibrary, SERVER_CARD_LIBRARY } from './card_loader';
+import { getLiveCardVariations } from './card_inventory';
 import {
     createVerificationCode,
     getVerificationCodeExpireMs,
@@ -1103,34 +1104,18 @@ app.get('/api/user/collection', async (req, res): Promise<void> => {
 let CARD_POOL: string[] = [];
 let CARD_RARITIES: Record<string, string> = {};
 
-function syncStoreFromPics() {
-    const picsDir = path.join(process.cwd(), 'pics');
-    if (!fs.existsSync(picsDir)) {
-        console.warn('[Store] pics directory not found, skipping sync.');
-        return;
-    }
-
+function syncStoreFromLibrary() {
     const newPool: string[] = [];
     const newRarities: Record<string, string> = {};
 
-    const rarities = fs.readdirSync(picsDir);
-    for (const r of rarities) {
-        const rPath = path.join(picsDir, r);
-        if (fs.statSync(rPath).isDirectory()) {
-            const files = fs.readdirSync(rPath);
-            for (const file of files) {
-                if (file.endsWith('.jpg')) {
-                    const cardId = file.replace('.jpg', '');
-                    newPool.push(cardId);
-                    newRarities[cardId] = r;
-                }
-            }
-        }
+    for (const card of getLiveCardVariations()) {
+        newPool.push(card.uniqueId);
+        newRarities[card.uniqueId] = card.rarity;
     }
 
     CARD_POOL = newPool;
     CARD_RARITIES = newRarities;
-    console.log(`[Store] Synced ${CARD_POOL.length} cards from pics folder.`);
+    console.log(`[Store] Synced ${CARD_POOL.length} cards from script library.`);
 }
 
 
@@ -1173,7 +1158,7 @@ app.post('/api/store/buy-pack', async (req, res): Promise<void> => {
             return;
         }
 
-        const allCards = Object.values(SERVER_CARD_LIBRARY).filter(c => !c.uniqueId.includes(':legacy'));
+        const allCards = getLiveCardVariations();
         const drawnCards: Card[] = [];
 
         if (isPrizePack) {
@@ -1721,8 +1706,8 @@ const start = async () => {
     try {
         console.log('[Server] Initializing card library...');
         await initServerCardLibrary();
-        console.log('[Server] Syncing store from pics...');
-        syncStoreFromPics();
+        console.log('[Server] Syncing store from script library...');
+        syncStoreFromLibrary();
         console.log('[Server] Connecting to database...');
         await dbInit();
 

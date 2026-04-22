@@ -1,5 +1,6 @@
 import { pool } from './db.js';
-import { SERVER_CARD_LIBRARY, initServerCardLibrary } from './card_loader.js';
+import { initServerCardLibrary } from './card_loader.js';
+import { getBaseCardIds } from './card_inventory.js';
 
 async function seedAdmin() {
     let conn;
@@ -40,7 +41,7 @@ async function seedAdmin() {
         }
         // console.log("✅ Admin and test account balances set to 100k/100k");
 
-        const cardIds = Object.keys(SERVER_CARD_LIBRARY).filter(id => !id.includes(':legacy'));
+        const cardIds = getBaseCardIds();
         
         for (const uid of targetUserIds) {
 

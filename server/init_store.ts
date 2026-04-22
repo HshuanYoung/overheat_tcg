@@ -1,12 +1,14 @@
-import { pool } from './db';
-import fs from 'fs';
-import path from 'path';
+import { pool, dbInit } from './db';
+import { initServerCardLibrary } from './card_loader';
+import { getBaseCardIds } from './card_inventory';
 
 
 async function initStore() {
     // console.log("Starting Store Schema Migration...");
     let conn;
     try {
+        await initServerCardLibrary();
+        await dbInit();
         conn = await pool.getConnection();
 
         // 1. Add coins column to users table
@@ -50,38 +52,22 @@ async function initStore() {
         `);
         // console.log("✅ pack_history table ensured");
 
-        // 4. Give all existing users the initial card collection (4 copies of each card)
+        // 4. Give all existing users the initial card collection (4 copies of each base card)
         const users = await conn.query('SELECT id FROM users');
-        
-        // Scan pics folder for card IDs
-        const cardIds: string[] = [];
-        const picsDir = path.join(process.cwd(), 'pics');
-        if (fs.existsSync(picsDir)) {
-            const rarities = fs.readdirSync(picsDir);
-            for (const r of rarities) {
-                const rPath = path.join(picsDir, r);
-                if (fs.statSync(rPath).isDirectory()) {
-                    const files = fs.readdirSync(rPath);
-                    for (const file of files) {
-                        if (file.endsWith('.jpg')) {
-                            cardIds.push(file.replace('.jpg', ''));
-                        }
-                    }
-                }
-            }
-        }
-
+        const cardIds = getBaseCardIds();
 
         for (const user of users) {
             for (const cardId of cardIds) {
                 await conn.query(
-                    `INSERT IGNORE INTO user_cards (user_id, card_id, quantity) VALUES (?, ?, 4)`,
+                    `INSERT INTO user_cards (user_id, card_id, quantity) VALUES (?, ?, 4)
+                     ON DUPLICATE KEY UPDATE quantity = 4`,
                     [user.id, cardId]
                 );
             }
             // Initialize pack history
             await conn.query(
-                `INSERT IGNORE INTO pack_history (user_id, total_packs, packs_since_sr, packs_since_ur) VALUES (?, 0, 0, 0)`,
+                `INSERT INTO pack_history (user_id, total_packs, packs_since_sr, packs_since_ur) VALUES (?, 0, 0, 0)
+                 ON DUPLICATE KEY UPDATE total_packs = 0, packs_since_sr = 0, packs_since_ur = 0`,
                 [user.id]
             );
         }

@@ -229,6 +229,7 @@ export interface Card {
   fullImageUrl?: string;
   rarity?: Rarity;
   availableRarities?: Rarity[];
+  cardPackage?: string;
   faction: Faction | string;
   baseFaction?: Faction | string;
   runtimeFingerprint?: string;

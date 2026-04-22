@@ -1,0 +1,45 @@
+import { Card } from '../types/game';
+
+/**
+ * Auto-generated from Card.xlsx + Card2.xlsx.
+ * Source CardID: 103090423
+ * Card2 Row: 640
+ * Card Row: 532
+ * Source CardNo: BT08-G03
+ * Package: BT08(C)
+ * ID Source: card-xlsx
+ * Keywords: N/A
+ * Card Detail:
+ * 〖5~8〗【永】{你的战场上的卡名含有《银乐》的单位有3个以上}:这个单位〖伤害+1〗〖力量+1000〗并获得【歼灭】。
+ * TODO: confirm ID / godMark / rarity variants and implement effects.
+ */
+const card: Card = {
+  id: '103090423',
+  fullName: '银乐舞女',
+  specialName: '',
+  type: 'UNIT',
+  color: 'GREEN',
+  gamecardId: null as any,
+  colorReq: {},
+  faction: '瑟诺布',
+  acValue: 3,
+  power: 2500,
+  basePower: 2500,
+  damage: 2,
+  baseDamage: 2,
+  godMark: false,
+  displayState: 'FRONT_UPRIGHT',
+  isExhausted: false,
+  isrush: false,
+  isAnnihilation: true,
+  canAttack: true,
+  feijingMark: false,
+  canResetCount: 0,
+  effects: [],
+  rarity: 'C',
+  availableRarities: ['C'],
+  cardPackage: 'BT08',
+  uniqueId: null as any,
+};
+
+export default card;

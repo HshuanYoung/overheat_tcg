@@ -9,9 +9,9 @@ import { GameState, Card, CardEffect, TriggerLocation, GameEvent } from '../type
 const isFullEffectSilencedThisTurn = (gameState: GameState | null, card: Card) =>
   !!gameState && (card as any).data?.fullEffectSilencedTurn === gameState.turnCount;
 
-const canUse20400008AsPaymentSubstitute = (paymentCard: Card | undefined, cardColor?: string, cost?: number, playingCardId?: string) =>
+const canUse204000145AsPaymentSubstitute = (paymentCard: Card | undefined, cardColor?: string, cost?: number, playingCardId?: string) =>
   !!paymentCard &&
-  paymentCard.id === '20400008' &&
+  paymentCard.id === '204000145' &&
   paymentCard.gamecardId !== playingCardId &&
   cardColor === 'BLUE' &&
   !!cost &&
@@ -145,8 +145,8 @@ export const GameService = {
 
     const checkOmni = (c: any) => {
       if (!c) return false;
-      const isTargetId = String(c.id) === '10500055';
-      const hasOmniEffect = c.effects && c.effects.some((e: any) => e.id === '10500055_omni');
+      const isTargetId = String(c.id) === '105000481';
+      const hasOmniEffect = c.effects && c.effects.some((e: any) => e.id === '105000481_omni');
       return isTargetId || hasOmniEffect;
     };
 
@@ -179,10 +179,10 @@ export const GameService = {
       }
     } else if (cost > 0) {
       let remainingCost = cost;
-      const has20400008Substitute = player.hand.some((c: any) =>
-        canUse20400008AsPaymentSubstitute(c, card.color, cost, card.gamecardId)
+      const has204000145Substitute = player.hand.some((c: any) =>
+        canUse204000145AsPaymentSubstitute(c, card.color, cost, card.gamecardId)
       );
-      if (has20400008Substitute) {
+      if (has204000145Substitute) {
         remainingCost = 0;
       }
       const hasFeijing = player.hand.some((c: any) =>

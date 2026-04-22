@@ -1,0 +1,37 @@
+import { Card } from '../types/game';
+
+/**
+ * Auto-generated from Card.xlsx + Card2.xlsx.
+ * Source CardID: 202000053
+ * Card2 Row: 136
+ * Card Row: 136
+ * Source CardNo: BT02-R13
+ * Package: BT02(C)
+ * ID Source: card-xlsx
+ * Keywords: N/A
+ * Card Detail:
+ * 只能在你的回合中使用。选择你的1个单位，本回合中，那个单位下一次战斗破坏对手单位时，你可以将其〖重置〗。
+ * TODO: confirm ID / godMark / rarity variants and implement effects.
+ */
+const card: Card = {
+  id: '202000053',
+  fullName: '电光石火',
+  specialName: '',
+  type: 'STORY',
+  color: 'RED',
+  gamecardId: null as any,
+  colorReq: { RED: 1 },
+  faction: '无',
+  acValue: 2,
+  godMark: false,
+  displayState: 'FRONT_UPRIGHT',
+  feijingMark: false,
+  canResetCount: 0,
+  effects: [],
+  rarity: 'C',
+  availableRarities: ['C'],
+  cardPackage: 'BT02',
+  uniqueId: null as any,
+};
+
+export default card;

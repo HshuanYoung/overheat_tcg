@@ -393,8 +393,8 @@ export const BattleField: React.FC = () => {
   const opponentUid = useMemo(() => (game && myUid) ? Object.keys(game.players).find(uid => uid.toString() !== myUid.toString()) : null, [game, myUid]);
   const opponent = useMemo(() => (game && opponentUid) ? game.players[opponentUid] : null, [game, opponentUid]);
 
-  const canUse20400008AsPaymentSubstitute = (card: Card, paymentColor?: string, paymentCost?: number, excludeCardId?: string) =>
-    card.id === '20400008' &&
+  const canUse204000145AsPaymentSubstitute = (card: Card, paymentColor?: string, paymentCost?: number, excludeCardId?: string) =>
+    card.id === '204000145' &&
     card.gamecardId !== excludeCardId &&
     paymentColor === 'BLUE' &&
     !!paymentCost &&
@@ -402,7 +402,7 @@ export const BattleField: React.FC = () => {
     paymentCost <= 3;
 
   const getHandPaymentValue = (card: Card, paymentColor?: string, paymentCost?: number, excludeCardId?: string) => {
-    if (canUse20400008AsPaymentSubstitute(card, paymentColor, paymentCost, excludeCardId)) {
+    if (canUse204000145AsPaymentSubstitute(card, paymentColor, paymentCost, excludeCardId)) {
       return paymentCost || 0;
     }
     if (card.feijingMark && (card.color === paymentColor || !paymentColor || paymentColor === 'NONE')) {

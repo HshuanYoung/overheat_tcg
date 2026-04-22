@@ -2805,7 +2805,7 @@ export const BattleField: React.FC = () => {
                 </h2>
                 <div className="relative aspect-[3/4] w-full max-w-[240px] md:max-w-none rounded-2xl overflow-hidden shadow-2xl ring-2 ring-[#f27d26]/30 bg-black/40">
                   <img
-                    src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false)}
+                    src={previewCard.fullImageUrl || getCardImageUrl(previewCard.id, previewCard.rarity, false, previewCard.availableRarities)}
                     alt={previewCard.fullName}
                     className="w-full h-full object-contain"
                     referrerPolicy="no-referrer"

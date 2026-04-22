@@ -64,8 +64,8 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
     if (onClick) onClick();
   };
 
-  const imageUrl = card.imageUrl || getCardImageUrl(card.id, card.rarity, true);
-  const fullImageUrl = card.fullImageUrl || getCardImageUrl(card.id, card.rarity, false);
+  const imageUrl = card.imageUrl || getCardImageUrl(card.id, card.rarity, true, card.availableRarities);
+  const fullImageUrl = card.fullImageUrl || getCardImageUrl(card.id, card.rarity, false, card.availableRarities);
   const exhausted = isExhausted ?? !!card.isExhausted;
 
   const showStats = displayMode !== 'erosion_item' && displayMode !== 'none';

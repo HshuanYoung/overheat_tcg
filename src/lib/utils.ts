@@ -48,13 +48,23 @@ const PHASE_LABELS: Record<string, string> = {
   SHENYI_CHOICE: '神依选择'
 };
 
-export function getCardImageUrl(cardId: string, rarity: string, thumbnail: boolean = false) {
+export function getCardImageUrl(
+  cardId: string,
+  rarity: string,
+  thumbnail: boolean = false,
+  availableRarities: string[] = []
+) {
   const rarityUpper = (rarity || 'C').toUpperCase();
-  const base = '/pics';
+  const normalizedRarities = availableRarities.map(r => (r || '').toUpperCase()).filter(Boolean);
+  const hasMultipleRarities = normalizedRarities.length > 1;
+  const baseRarity = normalizedRarities[0];
+  const rarityPath = hasMultipleRarities && rarityUpper !== baseRarity ? `/${rarityUpper}` : '';
+
   if (thumbnail) {
-    return `${base}/${rarityUpper}/thumbnail/${cardId}.jpg`;
+    return `/pics${rarityPath}/thumbnail/${cardId}.jpg`;
   }
-  return `${base}/${rarityUpper}/${cardId}.jpg`;
+
+  return `/pics${rarityPath}/${cardId}.jpg`;
 }
 
 export function getLocationLabel(location?: string | null): string {

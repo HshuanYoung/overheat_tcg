@@ -684,7 +684,7 @@ export const DeckBuilder: React.FC = () => {
                     className="w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 shadow-lg cursor-zoom-in"
                     onClick={() => setZoomedCard(card)}
                   >
-                    <img src={getCardImageUrl(card.id, card.rarity, true)} className={cn("w-full h-full object-cover", !isOwned && "brightness-[0.4]")} />
+                    <img src={getCardImageUrl(card.id, card.rarity, true, card.availableRarities)} className={cn("w-full h-full object-cover", !isOwned && "brightness-[0.4]")} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-black italic text-sm truncate">{card.fullName}</h4>
@@ -742,7 +742,7 @@ export const DeckBuilder: React.FC = () => {
                     zoomedCard.rarity === 'UR' || zoomedCard.rarity === 'SER' ? 'bg-amber-500' : 'bg-red-600'
                   )} />
                   <img
-                    src={getCardImageUrl(zoomedCard.id, zoomedCard.rarity, false)}
+                    src={getCardImageUrl(zoomedCard.id, zoomedCard.rarity, false, zoomedCard.availableRarities)}
                     alt={zoomedCard.fullName}
                     className="relative w-full object-contain rounded-[1.5rem] shadow-2xl border-4 border-white/10 max-h-[45vh] md:max-h-none"
                   />

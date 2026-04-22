@@ -496,7 +496,7 @@ export const Collection: React.FC = () => {
                       selectedCard.rarity === 'UR' || selectedCard.rarity === 'SER' ? 'bg-amber-500' : 'bg-red-600'
                     )} />
                     <img
-                      src={getCardImageUrl(selectedCard.id, selectedCard.rarity, false)}
+                      src={getCardImageUrl(selectedCard.id, selectedCard.rarity, false, selectedCard.availableRarities)}
                       alt={selectedCard.fullName}
                       className="relative w-full object-contain rounded-[1.5rem] shadow-2xl border-4 border-white/10 max-h-[45vh] md:max-h-none"
                     />

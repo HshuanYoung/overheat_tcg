@@ -399,7 +399,7 @@ export const Store: React.FC = () => {
                               {card ? (
                                 <>
                                   <img
-                                    src={card.fullImageUrl || getCardImageUrl(drawn.id, drawn.rarity, false)}
+                                    src={card.fullImageUrl || getCardImageUrl(drawn.id, drawn.rarity, false, card.availableRarities)}
                                     className="w-full h-full object-cover"
                                   />
                                   <div className={cn("absolute inset-0 bg-gradient-to-t to-transparent", RARITY_BG[drawn.rarity])} />

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React from 'react';
+import { motion } from 'motion/react';
 import { Card as CardType, Rarity } from '../types/game';
 import { clsx } from 'clsx';
-import { Sword, Shield, Zap, Info, Star, X, Plus } from 'lucide-react';
-import { cn, getCardImageUrl } from '../lib/utils';
+import { Sword, Shield, Zap, Plus } from 'lucide-react';
+import { getCardImageUrl } from '../lib/utils';
 
 interface CardProps {
   card?: CardType;
@@ -32,7 +32,7 @@ const getRarityClass = (rarity: Rarity) => {
   }
 };
 
-export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, count, isBack, disableZoom, statusBorder, isExhausted, displayMode, cardBackUrl }) => {
+const CardComponentImpl: React.FC<CardProps> = ({ card, onClick, className, count, isBack, disableZoom, statusBorder, isExhausted, displayMode, cardBackUrl }) => {
   if (isBack || !card) {
     return (
       <motion.div
@@ -46,6 +46,9 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
           src={cardBackUrl || "/assets/card_bg/default_card_bg.jpg"}
           alt="卡背"
           className="absolute inset-0 w-full h-full object-cover"
+          loading="lazy"
+          decoding="async"
+          draggable={false}
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-black/20" />
@@ -97,6 +100,9 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
             src={imageUrl}
             alt={card.fullName || fullImageUrl}
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+            decoding="async"
+            draggable={false}
             referrerPolicy="no-referrer"
           />
 
@@ -205,3 +211,6 @@ export const CardComponent: React.FC<CardProps> = ({ card, onClick, className, c
     </>
   );
 };
+
+export const CardComponent = React.memo(CardComponentImpl);
+CardComponent.displayName = 'CardComponent';

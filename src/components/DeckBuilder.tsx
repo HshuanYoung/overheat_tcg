@@ -1,15 +1,17 @@
 import { getAuthUser } from '../socket';
-import React, { useState, useEffect } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Save, Trash2, Plus, Search, Loader2, Copy, Edit3, X, Sparkles, ArrowLeft, Shuffle, ListFilter, Zap, Shield } from 'lucide-react';
-import { CARD_LIBRARY } from '../data/cards';
+import { CARD_LIBRARY, getCardByReference } from '../data/cards';
 import { FACTIONS } from '../data/factions';
 import { Card as CardType, Deck } from '../types/game';
 import { CardComponent } from './Card';
 import { cn, getCardImageUrl, getCardTypeLabel } from '../lib/utils';
 import { CARD_BACKS } from '../data/customization';
 import { TriggerLocation } from '../types/game';
+
+const INITIAL_VISIBLE_CARD_COUNT = 48;
 
 export const DeckBuilder: React.FC = () => {
   const navigate = useNavigate();
@@ -28,6 +30,7 @@ export const DeckBuilder: React.FC = () => {
   const [cardCrystals, setCardCrystals] = useState(0);
   const [favoriteBackId, setFavoriteBackId] = useState('default');
   const [actionLoading, setActionLoading] = useState(false);
+  const [visibleCardCount, setVisibleCardCount] = useState(INITIAL_VISIBLE_CARD_COUNT);
   const [filters, setFilters] = useState({
     ac: '',
     damage: '',
@@ -39,6 +42,7 @@ export const DeckBuilder: React.FC = () => {
   });
   const [showDecksMobile, setShowDecksMobile] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false); // Changed from showLibraryMobile
+  const deferredSearchTerm = useDeferredValue(searchTerm.trim());
 
   const CRYSTAL_VALUES: Record<string, { decompose: number, produce: number }> = {
     C: { decompose: 1, produce: 5 },
@@ -111,7 +115,7 @@ export const DeckBuilder: React.FC = () => {
   };
 
   const handleCraft = async (cardId: string) => {
-    const card = CARD_LIBRARY.find(c => c.uniqueId === cardId || c.id === cardId);
+    const card = getCardByReference(cardId);
     if (!card) return;
     const cost = CRYSTAL_VALUES[card.rarity]?.produce || 0;
     if (cardCrystals < cost) { alert('卡晶不足'); return; }
@@ -165,11 +169,7 @@ export const DeckBuilder: React.FC = () => {
   };
 
   const loadDeckToEditor = (savedDeck: Deck) => {
-    // Attempt to find by uniqueId first, then by legacy id
-    const cards = savedDeck.cards.map(uid =>
-      CARD_LIBRARY.find(c => c.uniqueId === uid) ||
-      CARD_LIBRARY.find(c => c.id === uid)
-    ).filter((c): c is CardType => !!c);
+    const cards = savedDeck.cards.map(uid => getCardByReference(uid)).filter((c): c is CardType => !!c);
 
     setDeck(cards);
     setDeckName(savedDeck.name);
@@ -274,8 +274,7 @@ export const DeckBuilder: React.FC = () => {
 
   const addToDeck = (card: CardType) => {
     // Count per card ID (not uniqueId) for limit check
-    const count = deck.filter(c => c.id === card.id).length;
-    const godMarkCount = deck.filter(c => c.godMark).length;
+    const count = deckBaseCounts[card.id] || 0;
 
     if (count < 4 && deck.length < 50) {
       if (card.godMark && godMarkCount >= 10) {
@@ -327,6 +326,30 @@ export const DeckBuilder: React.FC = () => {
     setDeck(sorted);
   };
 
+  useEffect(() => {
+    setVisibleCardCount(INITIAL_VISIBLE_CARD_COUNT);
+  }, [deferredSearchTerm, filters]);
+
+  const favoriteBackUrl = useMemo(
+    () => CARD_BACKS.find(back => back.id === favoriteBackId)?.url,
+    [favoriteBackId]
+  );
+
+  const deckBaseCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    for (const card of deck) {
+      counts[card.id] = (counts[card.id] || 0) + 1;
+    }
+
+    return counts;
+  }, [deck]);
+
+  const godMarkCount = useMemo(
+    () => deck.reduce((total, card) => total + (card.godMark ? 1 : 0), 0),
+    [deck]
+  );
+
   const shuffleDeck = () => {
     const shuffled = [...deck];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -336,11 +359,11 @@ export const DeckBuilder: React.FC = () => {
     setDeck(shuffled);
   };
 
-  const filteredCards = CARD_LIBRARY.filter(c => {
+  const filteredCards = useMemo(() => CARD_LIBRARY.filter(c => {
     // Text search
-    const matchesSearch = c.fullName.includes(searchTerm) ||
-      (c.specialName && c.specialName.includes(searchTerm)) ||
-      c.effects?.some(e => e.description.includes(searchTerm));
+    const matchesSearch = c.fullName.includes(deferredSearchTerm) ||
+      (c.specialName && c.specialName.includes(deferredSearchTerm)) ||
+      c.effects?.some(e => e.description.includes(deferredSearchTerm));
     if (!matchesSearch) return false;
 
     // Filters
@@ -357,7 +380,12 @@ export const DeckBuilder: React.FC = () => {
     if (filters.ownership === 'NOT_OWNED' && isOwned) return false;
 
     return true;
-  });
+  }), [collection, deferredSearchTerm, filters]);
+
+  const visibleCards = useMemo(
+    () => filteredCards.slice(0, visibleCardCount),
+    [filteredCards, visibleCardCount]
+  );
 
   return (
     <div className="flex h-[calc(100vh-64px)] mt-16 overflow-hidden bg-zinc-950 relative">
@@ -537,7 +565,7 @@ export const DeckBuilder: React.FC = () => {
                     card={card}
                     disableZoom={true}
                     displayMode="deck"
-                    cardBackUrl={CARD_BACKS.find(b => b.id === favoriteBackId)?.url}
+                    cardBackUrl={favoriteBackUrl}
                   />
                 </div>
                 <button
@@ -669,11 +697,12 @@ export const DeckBuilder: React.FC = () => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {filteredCards.map(card => {
+          {visibleCards.map(card => {
             const isOwned = (collection[card.uniqueId] || collection[card.id] || 0) > 0;
             return (
               <div
                 key={card.uniqueId}
+                style={{ contentVisibility: 'auto', containIntrinsicSize: '96px 148px' }}
                 className={cn(
                   "bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 hover:border-zinc-600 transition-all group relative",
                   !isOwned && "opacity-60 grayscale-[0.5]"
@@ -684,7 +713,7 @@ export const DeckBuilder: React.FC = () => {
                     className="w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 shadow-lg cursor-zoom-in"
                     onClick={() => setZoomedCard(card)}
                   >
-                    <img src={getCardImageUrl(card.id, card.rarity, true, card.availableRarities)} className={cn("w-full h-full object-cover", !isOwned && "brightness-[0.4]")} />
+                    <img src={getCardImageUrl(card.id, card.rarity, true, card.availableRarities)} className={cn("w-full h-full object-cover", !isOwned && "brightness-[0.4]")} loading="lazy" decoding="async" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-black italic text-sm truncate">{card.fullName}</h4>
@@ -703,6 +732,14 @@ export const DeckBuilder: React.FC = () => {
               </div>
             );
           })}
+          {filteredCards.length > visibleCards.length && (
+            <button
+              onClick={() => setVisibleCardCount(current => current + INITIAL_VISIBLE_CARD_COUNT)}
+              className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm font-black italic text-zinc-300 transition-all hover:border-red-500/40 hover:text-white"
+            >
+              加载更多卡牌 ({visibleCards.length}/{filteredCards.length})
+            </button>
+          )}
         </div>
       </div>
 
@@ -745,13 +782,14 @@ export const DeckBuilder: React.FC = () => {
                     src={getCardImageUrl(zoomedCard.id, zoomedCard.rarity, false, zoomedCard.availableRarities)}
                     alt={zoomedCard.fullName}
                     className="relative w-full object-contain rounded-[1.5rem] shadow-2xl border-4 border-white/10 max-h-[45vh] md:max-h-none"
+                    decoding="async"
                   />
                   <div className="absolute bottom-4 -right-2 bg-red-600 px-3 py-1.5 rounded-xl border border-red-400 font-black italic shadow-2xl rotate-12 z-20">
                     <span className="text-sm">x{collection[zoomedCard.uniqueId] || 0}</span>
                   </div>
                   <div className="absolute -bottom-4 -left-4 bg-zinc-800 px-4 py-2 rounded-xl border border-white/10 font-black italic shadow-2xl -rotate-6 z-20 flex flex-col items-center">
                     <span className="text-[10px] opacity-60 text-red-500">卡组内</span>
-                    <span>{deck.filter(c => c.id === zoomedCard.id).length} / 4</span>
+                    <span>{deckBaseCounts[zoomedCard.id] || 0} / 4</span>
                   </div>
                 </div>
               </div>

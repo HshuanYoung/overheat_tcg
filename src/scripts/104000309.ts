@@ -22,7 +22,7 @@ const card: Card = {
   color: 'BLUE',
   gamecardId: null as any,
   colorReq: { BLUE: 1 },
-  faction: '蓝',
+  faction: '无',
   acValue: 4,
   power: 3500,
   basePower: 3500,

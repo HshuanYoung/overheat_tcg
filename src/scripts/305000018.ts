@@ -1,4 +1,4 @@
-import { Card, CardEffect } from '../types/game';
+import { Card, CardEffect, GameEvent, GameState, PlayerState } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
 const effect_305000018_replace_damage: CardEffect = {
@@ -6,24 +6,25 @@ const effect_305000018_replace_damage: CardEffect = {
   type: 'CONTINUOUS',
   content: 'REPLACE_DAMAGE_TO_EROSION',
   movementReplacementDestination: 'EXILE',
-  description: 'Cards that would enter erosion due to damage are exiled instead.'
+  description: '因伤害而进入侵蚀区的单位改为放逐。',
+  condition: (_gameState: GameState, _playerState: PlayerState, instance: Card) =>
+    instance.cardlocation === 'ITEM'
 };
 
 const effect_305000018_return_to_deck: CardEffect = {
   id: '305000018_return_to_deck',
   type: 'TRIGGER',
-  triggerEvent: 'PHASE_CHANGED',
+  triggerEvent: 'TURN_END' as any,
   triggerLocation: ['ITEM'],
-  description: 'At the end of the opponent turn, put this card on the bottom of the deck.',
-  condition: (_gameState, playerState, instance, event) => {
-    return (
-      instance.cardlocation === 'ITEM' &&
-      event?.type === 'PHASE_CHANGED' &&
-      event.data?.phase === 'START' &&
-      playerState.isTurn
-    );
-  },
+  isMandatory: true,
+  description: '在对手回合结束时，将此卡从你的道具区放置到卡组底。',
+  condition: (_gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) =>
+    instance.cardlocation === 'ITEM' &&
+    event?.type === ('TURN_END' as any) &&
+    event.playerUid !== playerState.uid,
   execute: async (instance, gameState, playerState) => {
+    if (instance.cardlocation !== 'ITEM') return;
+
     AtomicEffectExecutor.moveCard(
       gameState,
       playerState.uid,
@@ -38,7 +39,8 @@ const effect_305000018_return_to_deck: CardEffect = {
         effectSourceCardId: instance.gamecardId
       }
     );
-    gameState.logs.push(`[${instance.id}] moved itself to the bottom of the deck at the end of the opponent turn.`);
+
+    gameState.logs.push(`[${instance.id}] 在对手回合结束时被放置到卡组底。`);
   }
 };
 

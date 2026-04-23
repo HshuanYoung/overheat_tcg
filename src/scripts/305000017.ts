@@ -5,7 +5,7 @@ const effect_305000017_skip_ready: CardEffect = {
   id: '305000017_skip_ready',
   type: 'CONTINUOUS',
   content: 'SKIP_OWN_START_READY',
-  description: 'This item does not ready during your start phase.'
+  description: '你的回合开始时，这个单位不能竖置'
 };
 
 const effect_305000017_activate: CardEffect = {
@@ -56,7 +56,7 @@ const effect_305000017_activate: CardEffect = {
           ownUnits.map(unit => ({ card: unit, source: 'UNIT' as const }))
         ),
         title: 'Choose A Unit',
-        description: 'Choose 1 allied unit.',
+        description: '选择一个单位，这个单位本回合如果要被破坏，改为返回手牌。',
         minSelections: 1,
         maxSelections: 1,
         callbackKey: 'EFFECT_RESOLVE',
@@ -102,7 +102,7 @@ const card: Card = {
   effects: [effect_305000017_skip_ready, effect_305000017_activate],
   rarity: 'C',
   availableRarities: ['C'],
-  cardPackage: 'BT01,ST04',
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

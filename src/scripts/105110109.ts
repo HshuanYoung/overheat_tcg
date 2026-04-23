@@ -1,4 +1,65 @@
-import { Card } from '../types/game';
+import { Card, CardEffect, GameEvent, GameState } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { createSelectCardQuery } from './_bt02YellowUtils';
+
+const getDestroyableItems = (gameState: GameState) =>
+  Object.values(gameState.players).flatMap(player =>
+    player.itemZone.filter((card: Card | null): card is Card => !!card && !card.godMark)
+  );
+
+const effect_105110109_enter: CardEffect = {
+  id: '105110109_enter',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
+  description: '【诱】:[〖0:黄黄〗]这个单位进入战场时，你可以选择1张非神蚀道具卡，将其破坏。',
+  condition: (gameState, playerState, instance, event?: GameEvent) => {
+    if (
+      event?.type !== 'CARD_ENTERED_ZONE' ||
+      event.sourceCardId !== instance.gamecardId ||
+      event.data?.zone !== 'UNIT' ||
+      instance.cardlocation !== 'UNIT'
+    ) {
+      return false;
+    }
+
+    const yellowUnits = playerState.unitZone.filter(
+      (card): card is Card => !!card && AtomicEffectExecutor.matchesColor(card, 'YELLOW')
+    ).length;
+    if (yellowUnits < 2) return false;
+
+    return getDestroyableItems(gameState).length > 0;
+  },
+  execute: async (instance, gameState, playerState) => {
+    const targets = getDestroyableItems(gameState);
+    if (targets.length === 0) return;
+
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      targets,
+      'Choose An Item',
+      '你可以选择1张非神蚀道具卡，将其破坏。',
+      0,
+      1,
+      {
+        sourceCardId: instance.gamecardId,
+        effectId: '105110109_enter',
+        step: 'SELECT_ITEM'
+      },
+      () => 'ITEM'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step !== 'SELECT_ITEM' || selections.length === 0) return;
+
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+      type: 'DESTROY_CARD',
+      targetFilter: { gamecardId: selections[0], type: 'ITEM', godMark: false }
+    }, instance);
+  }
+};
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,10 +95,10 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: [effect_105110109_enter],
   rarity: 'C',
   availableRarities: ['C'],
-  cardPackage: 'BT01,ST04',
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

@@ -789,9 +789,18 @@ export const ServerGameService = {
       let remainingCost = cost;
       let feijingCard: Card | undefined;
       let use204000145Replacement = false;
+      let reservedDeckCard: Card | undefined;
+
+      if (playingCardId) {
+        const reservedIndex = player.deck.findIndex(c => c?.gamecardId === playingCardId);
+        if (reservedIndex !== -1) {
+          reservedDeckCard = player.deck.splice(reservedIndex, 1)[0];
+        }
+      }
 
       if (paymentSelection.feijingCardId) {
         if (paymentSelection.feijingCardId === playingCardId) {
+          if (reservedDeckCard) player.deck.push(reservedDeckCard);
           return { success: false, reason: '不能使用正在打出的卡牌作为菲晶卡支付费用' };
         }
         feijingCard = player.hand.find(c =>
@@ -806,13 +815,16 @@ export const ServerGameService = {
             remainingCost = 0;
             use204000145Replacement = true;
           } else if (cardColor && feijingCard.color !== cardColor) {
+            if (reservedDeckCard) player.deck.push(reservedDeckCard);
             return { success: false, reason: '菲晶卡颜色与打出的卡牌颜色不匹配' };
           } else if (!feijingCard.feijingMark) {
+            if (reservedDeckCard) player.deck.push(reservedDeckCard);
             return { success: false, reason: '选择的手牌不能用于代替支付该费用' };
           } else {
             remainingCost = Math.max(0, remainingCost - 3);
           }
         } else {
+          if (reservedDeckCard) player.deck.push(reservedDeckCard);
           return { success: false, reason: '选择的手牌支付卡无效' };
         }
       }
@@ -835,6 +847,7 @@ export const ServerGameService = {
       if (remainingCost > 0) {
         const totalErosion = player.erosionFront.filter(c => c !== null).length + player.erosionBack.filter(c => c !== null).length;
         if (remainingCost >= 10 - totalErosion) {
+          if (reservedDeckCard) player.deck.push(reservedDeckCard);
           return { success: false, reason: '侵蚀区空间不足以支付剩余费用 (不能达到 10 张)' };
         }
       }
@@ -855,6 +868,7 @@ export const ServerGameService = {
       for (let i = 0; i < remainingCost; i++) {
         // 2. The cards in the damaged deck do not have enough damage value
         if (player.deck.length === 0) {
+          if (reservedDeckCard) player.deck.push(reservedDeckCard);
           gameState.logs.push(`[游戏结束] ${player.displayName} 的卡组中没有足够的卡牌来支付剩余费用，判负。`);
           gameState.gameStatus = 2;
           gameState.winReason = 'DECK_OUT_COST';
@@ -872,6 +886,9 @@ export const ServerGameService = {
             player.erosionFront.push(topCard);
           }
         }
+      }
+      if (reservedDeckCard) {
+        player.deck.push(reservedDeckCard);
       }
       return { success: true };
     }
@@ -1449,7 +1466,7 @@ export const ServerGameService = {
           query.paymentCost || 0,
           paymentSelection,
           query.paymentColor,
-          query.context?.targetCardId // Use optional chaining for safety
+          query.context?.targetCardId || query.context?.targetId // Use optional chaining for safety
         );
 
         if (!result.success) {
@@ -1868,6 +1885,9 @@ export const ServerGameService = {
       if (!unit) throw new Error('Attacker not found in unit zone');
       if (unit.isExhausted) throw new Error('Attacker is already exhausted');
       if (unit.canAttack === false) throw new Error(`单位 [${unit.fullName}] 无法攻击`);
+      if (isAlliance && (unit as any).data?.cannotAllianceByEffect) {
+        throw new Error(`单位 [${unit.fullName}] 由于效果不能组成联军`);
+      }
       if ((unit as any).battleForbiddenByEffect) throw new Error(`单位 [${unit.fullName}] 由于效果不能参与战斗`);
 
       if (targetId) {
@@ -2271,7 +2291,11 @@ export const ServerGameService = {
       // Check for movement substitution (e.g. 104010484) - Only if not already forced to Grave by Goddess mode
       if (loopDestination === 'EROSION_FRONT' && card.effects) {
         for (const effect of card.effects) {
-          if (effect.type === 'CONTINUOUS' && effect.movementReplacementDestination) {
+          if (
+            effect.type === 'CONTINUOUS' &&
+            effect.movementReplacementDestination &&
+            effect.content !== 'REPLACE_DAMAGE_TO_EROSION'
+          ) {
             if (!effect.condition || effect.condition(gameState, player, card)) {
               gameState.logs.push(`[替换效果] ${card.fullName} 的移动目的地从 EROSION_FRONT 被替换为 ${effect.movementReplacementDestination}`);
               loopDestination = effect.movementReplacementDestination;
@@ -2282,20 +2306,20 @@ export const ServerGameService = {
       }
 
       if (loopDestination === 'EROSION_FRONT') {
-        const replacementSources = [
-          ...player.unitZone,
-          ...player.itemZone,
-          ...player.erosionFront
-        ].filter((sourceCard): sourceCard is Card => !!sourceCard);
+        const replacementSources = Object.values(gameState.players).flatMap(owner =>
+          [...owner.unitZone, ...owner.itemZone, ...owner.erosionFront]
+            .filter((sourceCard): sourceCard is Card => !!sourceCard)
+            .map(sourceCard => ({ sourceCard, owner }))
+        );
 
-        for (const sourceCard of replacementSources) {
+        for (const { sourceCard, owner } of replacementSources) {
           for (const effect of sourceCard.effects || []) {
             if (
               effect.type === 'CONTINUOUS' &&
               effect.content === 'REPLACE_DAMAGE_TO_EROSION' &&
               effect.movementReplacementDestination
             ) {
-              if (!effect.condition || effect.condition(gameState, player, sourceCard)) {
+              if (!effect.condition || effect.condition(gameState, owner, sourceCard)) {
                 gameState.logs.push(`[替换效果] [${sourceCard.fullName}] 将伤害导致的侵蚀改为进入 ${effect.movementReplacementDestination}`);
                 loopDestination = effect.movementReplacementDestination;
                 break;
@@ -2409,6 +2433,11 @@ export const ServerGameService = {
 
     if (!isEffect && (unit as any).battleImmuneByEffect) {
       gameState.logs.push(`[${unit.fullName}] 因效果不会被战斗破坏。`);
+      return false;
+    }
+
+    if ((unit as any).data?.indestructibleByEffect) {
+      gameState.logs.push(`[${unit.fullName}] 因效果不会被破坏。`);
       return false;
     }
 
@@ -3358,6 +3387,7 @@ export const ServerGameService = {
         await ServerGameService.checkTriggeredEffects(gameState);
         // If we now have a pending query, don't proceed to turn transition yet
         if (gameState.pendingQuery) return;
+        if (gameState.phase !== 'END' || !gameState.players[player.uid]?.isTurn) return;
       }
     }
 

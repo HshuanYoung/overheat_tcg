@@ -436,17 +436,65 @@ export class AtomicEffectExecutor {
 
     for (let i = 0; i < finalAmount; i++) {
       const card = player.deck.pop()!;
-      card.displayState = 'FRONT_UPRIGHT';
-      card.cardlocation = finalDestination;
+      let loopDestination: TriggerLocation = finalDestination;
 
-      if (finalDestination === 'EROSION_FRONT') {
+      if (loopDestination === 'EROSION_FRONT' && card.effects) {
+        for (const effect of card.effects) {
+          if (
+            effect.type === 'CONTINUOUS' &&
+            effect.movementReplacementDestination &&
+            effect.content !== 'REPLACE_DAMAGE_TO_EROSION'
+          ) {
+            if (!effect.condition || effect.condition(gameState, player, card)) {
+              gameState.logs.push(`[替换效果] ${card.fullName} 的移动目的地从 EROSION_FRONT 被替换为 ${effect.movementReplacementDestination}`);
+              loopDestination = effect.movementReplacementDestination;
+              break;
+            }
+          }
+        }
+      }
+
+      if (loopDestination === 'EROSION_FRONT') {
+        const replacementSources = Object.values(gameState.players).flatMap(owner =>
+          [...owner.unitZone, ...owner.itemZone, ...owner.erosionFront]
+            .filter((sourceCard): sourceCard is Card => !!sourceCard)
+            .map(sourceCard => ({ sourceCard, owner }))
+        );
+
+        for (const { sourceCard, owner } of replacementSources) {
+          for (const effect of sourceCard.effects || []) {
+            if (
+              effect.type === 'CONTINUOUS' &&
+              effect.content === 'REPLACE_DAMAGE_TO_EROSION' &&
+              effect.movementReplacementDestination
+            ) {
+              if (!effect.condition || effect.condition(gameState, owner, sourceCard)) {
+                gameState.logs.push(`[替换效果] [${sourceCard.fullName}] 将伤害导致的侵蚀改为进入 ${effect.movementReplacementDestination}`);
+                loopDestination = effect.movementReplacementDestination;
+                break;
+              }
+            }
+          }
+
+          if (loopDestination !== 'EROSION_FRONT') {
+            break;
+          }
+        }
+      }
+
+      card.displayState = 'FRONT_UPRIGHT';
+      card.cardlocation = loopDestination;
+
+      if (loopDestination === 'EROSION_FRONT') {
         const emptyIndex = player.erosionFront.findIndex(c => c === null);
         if (emptyIndex !== -1) player.erosionFront[emptyIndex] = card;
         else player.erosionFront.push(card);
-      } else if (finalDestination === 'GRAVE') {
+      } else if (loopDestination === 'GRAVE') {
         player.grave.push(card);
-      } else if (finalDestination === 'HAND') {
+      } else if (loopDestination === 'HAND') {
         player.hand.push(card);
+      } else if (loopDestination === 'EXILE') {
+        player.exile.push(card);
       }
 
       // Check for goddess transformation during resolution
@@ -655,7 +703,7 @@ export class AtomicEffectExecutor {
   static findCardById(gameState: GameState, cardId: string): Card | undefined {
     for (const uid of Object.keys(gameState.players)) {
       const p = gameState.players[uid];
-      const zones = [p.hand, p.unitZone, p.itemZone, p.grave, p.exile, p.deck, p.erosionFront, p.erosionBack];
+      const zones = [p.hand, p.unitZone, p.itemZone, p.grave, p.exile, p.deck, p.erosionFront, p.erosionBack, p.playZone];
       for (const zone of zones) {
         const card = zone.find(c => c && c.gamecardId === cardId);
         if (card) return card;
@@ -667,7 +715,7 @@ export class AtomicEffectExecutor {
   static findCardOwnerKey(gameState: GameState, cardId: string): string | undefined {
     for (const uid of Object.keys(gameState.players)) {
       const p = gameState.players[uid];
-      const hasCard = [...p.hand, ...p.unitZone, ...p.itemZone, ...p.grave, ...p.exile, ...p.erosionFront, ...p.erosionBack, ...p.deck]
+      const hasCard = [...p.hand, ...p.unitZone, ...p.itemZone, ...p.grave, ...p.exile, ...p.erosionFront, ...p.erosionBack, ...p.deck, ...p.playZone]
         .some(c => c && c.gamecardId === cardId);
       if (hasCard) return uid;
     }
@@ -873,7 +921,11 @@ export class AtomicEffectExecutor {
     if (isEffect && (toZone === 'HAND' || toZone === 'DECK' || toZone === 'EROSION_FRONT' || toZone === 'EROSION_BACK')) {
       if (card.effects) {
         for (const effect of card.effects) {
-          if (effect.type === 'CONTINUOUS' && effect.movementReplacementDestination) {
+          if (
+            effect.type === 'CONTINUOUS' &&
+            effect.movementReplacementDestination &&
+            effect.content !== 'REPLACE_DAMAGE_TO_EROSION'
+          ) {
             const player = gameState.players[toPlayerUid];
             if (!effect.condition || effect.condition(gameState, player, card)) {
               gameState.logs.push(`[替换效果] ${card.fullName} 的移动目的地从 ${toZone} 被替换为 ${effect.movementReplacementDestination}`);
@@ -909,6 +961,7 @@ export class AtomicEffectExecutor {
     findToZone(targetPlayer.deck, 'DECK');
     findToZone(targetPlayer.erosionFront, 'EROSION_FRONT');
     findToZone(targetPlayer.erosionBack, 'EROSION_BACK');
+    findToZone(targetPlayer.playZone, 'PLAY');
 
     if (['UNIT', 'ITEM', 'EROSION_FRONT', 'EROSION_BACK'].includes(toZone)) {
       const emptyIdx = toArray.findIndex(c => c === null);

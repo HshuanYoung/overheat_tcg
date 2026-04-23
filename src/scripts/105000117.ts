@@ -1,4 +1,30 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+
+const effect_105000117_continuous: CardEffect = {
+  id: '105000117_continuous',
+  type: 'CONTINUOUS',
+  content: 'SELF_HAND_COST',
+  description: 'If you control no units and have no face-up erosion cards, this card becomes AC 0 in your hand.',
+  applyContinuous: (gameState, instance) => {
+    if (instance.cardlocation !== 'HAND') return;
+
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId);
+    if (!ownerUid) return;
+
+    const owner = gameState.players[ownerUid];
+    const hasUnits = owner.unitZone.some(card => !!card);
+    const hasFaceUpErosion = owner.erosionFront.some(card => !!card && card.displayState === 'FRONT_UPRIGHT');
+    if (hasUnits || hasFaceUpErosion) return;
+
+    instance.acValue = 0;
+    instance.influencingEffects = instance.influencingEffects || [];
+    instance.influencingEffects.push({
+      sourceCardName: instance.fullName,
+      description: '没有单位且没有正面侵蚀：AC变为0'
+    });
+  }
+};
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,9 +60,9 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: [effect_105000117_continuous],
   rarity: 'C',
-  availableRarities: ['C'],
+  availableRarities: ['C', 'PR'],
   cardPackage: 'BT01',
   uniqueId: null as any,
 };

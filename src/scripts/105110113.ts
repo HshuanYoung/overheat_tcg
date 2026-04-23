@@ -1,4 +1,169 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { canPutItemOntoBattlefield, createChoiceQuery, createSelectCardQuery, revealDeckCards } from './_bt03YellowUtils';
+import { moveCard } from './_bt02YellowUtils';
+
+const effect_105110113_continuous: CardEffect = {
+  id: '105110113_continuous',
+  type: 'CONTINUOUS',
+  description: '如果你的战场上的道具卡有2张以上的话，这个单位〖伤害+1〗〖力量+1000〗。',
+  applyContinuous: (gameState, instance) => {
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId);
+    if (!ownerUid) return;
+
+    const owner = gameState.players[ownerUid];
+    const itemCount = owner.itemZone.filter((card): card is Card => !!card).length;
+    if (itemCount < 2) return;
+
+    instance.damage = (instance.damage || 0) + 1;
+    instance.power = (instance.power || 0) + 1000;
+    instance.influencingEffects = instance.influencingEffects || [];
+    instance.influencingEffects.push({
+      sourceCardName: instance.fullName,
+      description: '战场上的道具卡数量：+1伤害 / +1000力量'
+    });
+  }
+};
+
+const effect_105110113_use_erosion_item: CardEffect = {
+  id: '105110113_use_erosion_item',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '主要阶段。支付ACCESS费用，从你的侵蚀区使用1张道具卡。',
+  condition: (gameState, playerState, instance) =>
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    instance.cardlocation === 'UNIT' &&
+    playerState.erosionFront.some(
+      (card): card is Card => !!card && card.type === 'ITEM' && canPutItemOntoBattlefield(playerState, card)
+    ),
+  execute: async (instance, gameState, playerState) => {
+    const targets = playerState.erosionFront.filter(
+      (card): card is Card => !!card && card.type === 'ITEM' && canPutItemOntoBattlefield(playerState, card)
+    );
+    if (targets.length === 0) return;
+
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      targets,
+      'Choose An Item Card',
+      '选择1张来自侵蚀区的道具卡，支付其ACCESS费用来使用。',
+      1,
+      1,
+      {
+        sourceCardId: instance.gamecardId,
+        effectId: '105110113_use_erosion_item',
+        step: 'CHOOSE_ITEM'
+      },
+      () => 'EROSION_FRONT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'CHOOSE_ITEM') {
+      const target = AtomicEffectExecutor.findCardById(gameState, selections[0]);
+      if (!target || target.cardlocation !== 'EROSION_FRONT' || target.type !== 'ITEM') return;
+
+      if (!canPutItemOntoBattlefield(playerState, target)) return;
+
+      if ((target.acValue || 0) > 0) {
+        gameState.pendingQuery = {
+          id: Math.random().toString(36).substring(7),
+          type: 'SELECT_PAYMENT',
+          playerUid: playerState.uid,
+          options: [],
+          title: `Pay Cost: ${target.fullName}`,
+          description: `Pay ${target.acValue} cost to use this item card from your erosion zone.`,
+          minSelections: 1,
+          maxSelections: 1,
+          callbackKey: 'EFFECT_RESOLVE',
+          paymentCost: target.acValue,
+          paymentColor: target.color,
+          context: {
+            sourceCardId: instance.gamecardId,
+            effectId: '105110113_use_erosion_item',
+            step: 'PAY_AND_USE_ITEM',
+            targetId: target.gamecardId
+          }
+        };
+        return;
+      }
+
+      await AtomicEffectExecutor.execute(
+        gameState,
+        playerState.uid,
+        {
+          type: 'MOVE_FROM_EROSION',
+          targetFilter: { gamecardId: target.gamecardId },
+          destinationZone: 'ITEM'
+        },
+        instance
+      );
+      gameState.logs.push(`[${instance.fullName}] 使用了 [${target.fullName}] 从侵蚀区.`);
+      return;
+    }
+
+    if (context?.step !== 'PAY_AND_USE_ITEM') return;
+
+    const target = AtomicEffectExecutor.findCardById(gameState, context.targetId);
+    if (!target || target.cardlocation !== 'EROSION_FRONT' || target.type !== 'ITEM') return;
+    if (!canPutItemOntoBattlefield(playerState, target)) return;
+
+    await AtomicEffectExecutor.execute(
+      gameState,
+      playerState.uid,
+      {
+        type: 'MOVE_FROM_EROSION',
+        targetFilter: { gamecardId: target.gamecardId },
+        destinationZone: 'ITEM'
+      },
+      instance
+    );
+    gameState.logs.push(`[${instance.fullName}] paid to use [${target.fullName}] from the erosion zone.`);
+  }
+};
+
+const effect_105110113_reveal_top: CardEffect = {
+  id: '105110113_reveal_top',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '你的回合。公开你卡组顶的1张卡，然后将那张卡放置到卡组顶或卡组底。',
+  condition: (_gameState, playerState, instance) =>
+    playerState.isTurn &&
+    instance.cardlocation === 'UNIT' &&
+    playerState.deck.length > 0,
+  execute: async (instance, gameState, playerState) => {
+    const revealed = revealDeckCards(gameState, playerState.uid, 1, instance)[0];
+    if (!revealed) return;
+
+    createChoiceQuery(
+      gameState,
+      playerState.uid,
+      'Deck Top Choice',
+      `Revealed card: ${revealed.fullName}`,
+      [
+        { id: 'TOP', label: '置顶' },
+        { id: 'BOTTOM', label: '置底' }
+      ],
+      {
+        sourceCardId: instance.gamecardId,
+        effectId: '105110113_reveal_top',
+        targetId: revealed.gamecardId
+      }
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (selections[0] !== 'BOTTOM') return;
+
+    const target = AtomicEffectExecutor.findCardById(gameState, context?.targetId);
+    if (!target || target.cardlocation !== 'DECK') return;
+
+    moveCard(gameState, playerState.uid, target, 'DECK', instance, { insertAtBottom: true });
+    gameState.logs.push(`[${instance.fullName}] 将 [${target.fullName}] 放置在卡组底。`);
+  }
+};
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -10,7 +175,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【永】:若你的战场上的道具卡有2张以上的话，这个单位〖伤害+1〗〖力量+1000〗。
+ * 【永】：若你的战场上的道具卡有2张以上的话，这个单位〖伤害+1〗〖力量+1000〗。
  * 【启】〖1回合1次〗:你的主要阶段中才可以发动，且不能用于对抗。支付ACCESS值来使用你的侵蚀区中的1张道具卡。
  * 【启】〖1回合1次〗:你的回合中才可以发动。公开你的卡组顶的1张卡，将那张卡放置到卡组顶或卡组底。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
@@ -36,10 +201,14 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: [
+    effect_105110113_continuous,
+    effect_105110113_use_erosion_item,
+    effect_105110113_reveal_top
+  ],
   rarity: 'R',
-  availableRarities: ['R'],
-  cardPackage: 'BT01,特殊',
+  availableRarities: ['R', 'PR'],
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

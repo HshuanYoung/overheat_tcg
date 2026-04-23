@@ -101,7 +101,7 @@ export const BattleField: React.FC = () => {
     if (!previewCard || !game) return;
 
     const allCards = [
-      ...Object.values(game.players).flatMap(player => [
+      ...((Object.values(game.players || {}) as PlayerState[]).flatMap(player => [
         ...player.hand,
         ...player.deck,
         ...player.grave,
@@ -111,7 +111,7 @@ export const BattleField: React.FC = () => {
         ...player.erosionFront,
         ...player.erosionBack,
         ...player.playZone
-      ]),
+      ])),
       ...game.counterStack.map(item => item.card).filter(Boolean),
       ...(game.pendingQuery?.options?.map(option => option.card).filter(Boolean) || [])
     ].filter(Boolean) as Card[];
@@ -437,6 +437,20 @@ export const BattleField: React.FC = () => {
       return total + (card ? getHandPaymentValue(card, paymentColor, paymentCost, excludeCardId) : 0);
     }, 0);
   };
+
+  const pendingQuery = game?.pendingQuery;
+  const normalizedPendingQueryType = pendingQuery?.type?.replace(/-/g, '_').toUpperCase();
+  const pendingQueryOptions = Array.isArray(pendingQuery?.options) ? pendingQuery.options : [];
+  const isSelectCardPendingQuery = normalizedPendingQueryType === 'SELECT_CARD';
+  const selectablePendingQueryOptions = isSelectCardPendingQuery
+    ? pendingQueryOptions.filter(option => !!option?.card && !option.disabled)
+    : [];
+  const isInspectOnlyPendingQuery = isSelectCardPendingQuery &&
+    (pendingQuery?.minSelections ?? 0) === 0 &&
+    selectablePendingQueryOptions.length === 0;
+  const querySubmitLabel = isSelectCardPendingQuery
+    ? (isInspectOnlyPendingQuery ? '确认' : '确认选择')
+    : '确认支付';
 
   if (!game || !myUid || !me) {
     return (
@@ -802,7 +816,7 @@ export const BattleField: React.FC = () => {
     try {
       let selections = selectedQueryIds;
       // Normalize type check to handle potential variations
-      const queryType = game.pendingQuery.type.replace(/-/g, '_').toUpperCase();
+      const queryType = game.pendingQuery.type?.replace(/-/g, '_').toUpperCase();
 
       if (queryType === 'SELECT_PAYMENT') {
         const mappedPayment = {
@@ -1828,9 +1842,10 @@ export const BattleField: React.FC = () => {
                 (() => {
                   const isMyCard = me.unitZone.some(c => c?.gamecardId === cardMenu.card.gamecardId);
                   if (isMyCard && canUnitAttack(cardMenu.card)) {
+                    const cannotAlliance = !!(cardMenu.card as any).data?.cannotAllianceByEffect;
                     return (
                       <div className="flex flex-col gap-2 md:gap-1 items-center">
-                        {!cardMenu.card.inAllianceGroup && (
+                        {(!cardMenu.card.inAllianceGroup || cannotAlliance) && (
                           <motion.button
                             whileHover={{ scale: 1.1 }}
                             className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
@@ -1842,7 +1857,7 @@ export const BattleField: React.FC = () => {
                             攻击
                           </motion.button>
                         )}
-                        <motion.button
+                        {!cardMenu.card.inAllianceGroup && !cannotAlliance && <motion.button
                           whileHover={{ scale: 1.1 }}
                           className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#ef4444] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
                           onClick={() => {
@@ -1851,7 +1866,7 @@ export const BattleField: React.FC = () => {
                           }}
                         >
                           联攻
-                        </motion.button>
+                        </motion.button>}
                       </div>
                     );
                   }
@@ -2215,12 +2230,12 @@ export const BattleField: React.FC = () => {
                 <p className="text-zinc-400 uppercase tracking-[0.15em] md:tracking-[0.4em] text-[9px] md:text-sm max-w-2xl mx-auto leading-relaxed">
                   {game.pendingQuery.description}
                 </p>
-                {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' && (
+                {normalizedPendingQueryType === 'SELECT_CARD' && (
                   <div className="mt-4 px-6 py-2 bg-white/5 rounded-full border border-white/10 inline-block font-mono text-xs text-zinc-500">
                     需要选择：{game.pendingQuery.minSelections} - {game.pendingQuery.maxSelections}
                   </div>
                 )}
-                {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_PAYMENT' && (
+                {normalizedPendingQueryType === 'SELECT_PAYMENT' && (
                   <div className="mt-2 md:mt-4 flex items-center justify-center gap-3 md:gap-6">
                     <div className="flex items-center gap-2">
                       <span className="text-zinc-500 text-[8px] md:text-[10px] font-bold tracking-widest">需求</span>
@@ -2238,49 +2253,56 @@ export const BattleField: React.FC = () => {
                 )}
               </div>
 
-              {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? (
+              {normalizedPendingQueryType === 'SELECT_CARD' ? (
                 <div className="grid w-full max-w-[23rem] grid-cols-2 gap-3 p-2 md:flex md:max-w-full md:gap-6 md:overflow-x-auto md:overflow-y-hidden md:p-6 custom-scrollbar">
-                  {game.pendingQuery.options.map((option, i) => {
-                    const isSelected = selectedQueryIds.includes(option.card.gamecardId);
+                  {pendingQueryOptions.filter(option => !!option?.card).map((option, i) => {
+                    const optionCard = option.card!;
+                    const optionId = optionCard.gamecardId || option.id || `${i}`;
+                    const isSelected = selectedQueryIds.includes(optionId);
+                    const selectionOrder = selectedQueryIds.indexOf(optionId) + 1;
+                    const isDisabled = !!option.disabled;
                     const isDiscardQuery = game.pendingQuery!.title.includes('舍弃') || game.pendingQuery!.title.includes('Discard');
                     return (
-                      <div key={`${option.card.gamecardId}-${i}`} className="flex w-full max-w-[10.8rem] md:w-48 md:max-w-none shrink-0 flex-col items-center gap-4 group justify-self-center">
+                      <div key={`${optionId}-${i}`} className="flex w-full max-w-[10.8rem] md:w-48 md:max-w-none shrink-0 flex-col items-center gap-4 group justify-self-center">
                         <div className="relative w-full">
                           <motion.div
-                            whileHover={{ scale: 1.08, y: -12 }}
-                            whileTap={{ scale: 0.95 }}
+                            whileHover={isDisabled ? undefined : { scale: 1.08, y: -12 }}
+                            whileTap={isDisabled ? undefined : { scale: 0.95 }}
                             onClick={() => {
+                              if (isDisabled) return;
                               setSelectedQueryIds(prev => {
-                                const alreadySelected = prev.includes(option.card.gamecardId);
-                                if (alreadySelected) return prev.filter(id => id !== option.card.gamecardId);
+                                const alreadySelected = prev.includes(optionId);
+                                if (alreadySelected) return prev.filter(id => id !== optionId);
                                 if (prev.length >= (game.pendingQuery?.maxSelections || 1)) {
-                                  if (game.pendingQuery?.maxSelections === 1) return [option.card.gamecardId];
+                                  if (game.pendingQuery?.maxSelections === 1) return [optionId];
                                   return prev;
                                 }
-                                return [...prev, option.card.gamecardId];
+                                return [...prev, optionId];
                               });
                             }}
                             className={cn(
-                              "w-full cursor-pointer transition-all rounded-lg md:rounded-2xl overflow-hidden border-2 relative group-hover:shadow-2xl",
+                              "w-full transition-all rounded-lg md:rounded-2xl overflow-hidden border-2 relative",
                               isSelected
                                 ? isDiscardQuery ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.4)] scale-105" : "border-[#f27d26] shadow-[0_0_40px_rgba(242,125,38,0.4)] scale-105"
-                                : "border-white/5 opacity-80 hover:opacity-100"
+                                : isDisabled
+                                  ? "border-white/5 opacity-45 cursor-not-allowed"
+                                  : "border-white/5 opacity-80 hover:opacity-100 cursor-pointer group-hover:shadow-2xl"
                             )}
                           >
-                            {(option.card.id === 'PLAYER_SELF' || option.card.id === 'PLAYER_OPPONENT') ? (
+                            {(optionCard.id === 'PLAYER_SELF' || optionCard.id === 'PLAYER_OPPONENT') ? (
                               <div className="w-full aspect-[3/4] bg-zinc-800 rounded-lg md:rounded-2xl flex flex-col items-center justify-center p-2 md:p-4 border border-white/10">
                                 <img
-                                  src={`/assets/icons/${option.card.id === 'PLAYER_SELF' ? 'myself' : 'opponent'}.JPG`}
-                                  alt={option.card.fullName}
+                                  src={`/assets/icons/${optionCard.id === 'PLAYER_SELF' ? 'myself' : 'opponent'}.JPG`}
+                                  alt={optionCard.fullName}
                                   className="w-16 h-16 md:w-32 md:h-32 object-contain mb-2 md:mb-4 rounded-full border-2 md:border-4 border-[#f27d26]/30"
                                 />
-                                <span className="text-[#f27d26] font-display font-black text-[10px] md:text-xl uppercase italic tracking-widest text-center">{option.card.fullName}</span>
+                                <span className="text-[#f27d26] font-display font-black text-[10px] md:text-xl uppercase italic tracking-widest text-center">{optionCard.fullName}</span>
                               </div>
-                            ) : getGraphicOptionMeta(option.card) ? (
-                              renderGraphicQueryOption(option.card)
+                            ) : getGraphicOptionMeta(optionCard) ? (
+                              renderGraphicQueryOption(optionCard)
                             ) : (
                               <div className="aspect-[3/4] drop-shadow-2xl">
-                                <CardComponent card={option.card} disableZoom={true} cardBackUrl={cardBackUrl} />
+                                <CardComponent card={optionCard} disableZoom={true} cardBackUrl={cardBackUrl} />
                               </div>
                             )}
 
@@ -2297,7 +2319,7 @@ export const BattleField: React.FC = () => {
                                     "w-14 h-14 rounded-full flex items-center justify-center shadow-2xl relative",
                                     isDiscardQuery ? "bg-red-600 text-white" : "bg-[#f27d26] text-black"
                                   )}>
-                                    {isDiscardQuery ? <Trash2 className="w-8 h-8" /> : <Zap className="w-8 h-8 fill-current" />}
+                                    <span className="text-3xl font-black italic leading-none">{selectionOrder}</span>
                                     <motion.div
                                       animate={{ scale: [1, 1.2, 1] }}
                                       transition={{ repeat: Infinity, duration: 2 }}
@@ -2307,6 +2329,12 @@ export const BattleField: React.FC = () => {
                                 </motion.div>
                               )}
                             </AnimatePresence>
+
+                            {isDisabled && (
+                              <div className="absolute inset-x-3 bottom-3 rounded-xl border border-white/10 bg-black/75 px-3 py-2 text-center text-[10px] font-black uppercase tracking-widest text-white/70 pointer-events-none">
+                                {option.disabledReason || 'Cannot select'}
+                              </div>
+                            )}
                           </motion.div>
 
                           <div className="absolute -top-3 -right-3 px-3 py-1 bg-black/80 border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-2xl z-20 text-white/70">
@@ -2329,9 +2357,9 @@ export const BattleField: React.FC = () => {
                           )}
                         </div>
                         <div className="text-center">
-                          <p className="text-white text-[13px] font-black uppercase tracking-tight truncate max-w-[192px]">{option.card.fullName}</p>
+                          <p className="text-white text-[13px] font-black uppercase tracking-tight truncate max-w-[192px]">{optionCard.fullName}</p>
                           <p className="text-zinc-500 text-[9px] uppercase tracking-widest mt-0.5">
-                            {getCardTypeLabel(option.card.type)}
+                            {getCardTypeLabel(optionCard.type)}
                             {option.slotLabel ? ` · ${option.slotLabel}` : ''}
                           </p>
                         </div>
@@ -2339,7 +2367,7 @@ export const BattleField: React.FC = () => {
                     );
                   })}
                 </div>
-              ) : game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_PAYMENT' ? (
+              ) : normalizedPendingQueryType === 'SELECT_PAYMENT' ? (
                 /* Payment Selection for Query */
                 <div className="flex flex-col gap-8 w-full max-w-4xl max-h-[50vh] overflow-y-auto p-4 custom-scrollbar">
                   {/* Hand Replacement Section */}
@@ -2448,7 +2476,7 @@ export const BattleField: React.FC = () => {
                     提示：剩余费用将自动以侵蚀伤害的形式从你的牌库中扣除。
                   </p>
                 </div>
-              ) : game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'ASK_TRIGGER' ? (
+              ) : normalizedPendingQueryType === 'ASK_TRIGGER' ? (
                 <div className="flex gap-8 mt-4 w-full justify-center max-w-md">
                   <button
                     onClick={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, ['YES'])}
@@ -2463,9 +2491,9 @@ export const BattleField: React.FC = () => {
                     取消
                   </button>
                 </div>
-              ) : game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CHOICE' ? (
+              ) : normalizedPendingQueryType === 'SELECT_CHOICE' ? (
                 <div className="grid grid-cols-2 gap-4 mt-4 w-full justify-center max-w-2xl px-6 md:px-12">
-                  {game.pendingQuery.options.map((option, i) => (
+                  {pendingQueryOptions.map((option, i) => (
                     <button
                       key={i}
                       onClick={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [option.id || option.card?.gamecardId || ''])}
@@ -2485,14 +2513,14 @@ export const BattleField: React.FC = () => {
                 </div>
               ) : null}
 
-              {!['ASK_TRIGGER', 'SELECT_CHOICE'].includes(game.pendingQuery.type.replace(/-/g, '_').toUpperCase()) && (
+              {!['ASK_TRIGGER', 'SELECT_CHOICE'].includes(normalizedPendingQueryType || '') && (
                 <div className="flex flex-col items-center gap-6">
                   <button
                     onClick={handleQuerySubmit}
-                    disabled={game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' && selectedQueryIds.length < game.pendingQuery.minSelections}
+                    disabled={normalizedPendingQueryType === 'SELECT_CARD' && selectedQueryIds.length < game.pendingQuery.minSelections}
                     className="px-8 md:px-16 py-3 md:py-5 bg-[#f27d26] text-white font-black italic uppercase tracking-[0.2em] rounded-2xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_20px_50px_rgba(242,125,38,0.3)] hover:scale-105 active:scale-95 text-xs md:text-base"
                   >
-                    {game.pendingQuery.type.replace(/-/g, '_').toUpperCase() === 'SELECT_CARD' ? '确认选择' : '确认支付'}
+                    {querySubmitLabel}
                   </button>
                   <div className="flex items-center gap-2 text-zinc-600 uppercase text-[10px] font-black tracking-widest">
                     <Loader2 className="w-3 h-3 animate-spin" />

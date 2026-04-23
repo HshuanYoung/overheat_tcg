@@ -1,4 +1,228 @@
-import { Card } from '../types/game';
+import { Card, CardEffect, GameState, PlayerState, TriggerLocation } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { createChoiceQuery, createSelectCardQuery, getBattlefieldUnits } from './_bt03YellowUtils';
+
+const EFFECT_ID = '105110112_activate';
+
+const hasLostActivate = (instance: Card) => !!(instance as any).data?.lostActivateEffect_105110112;
+
+const markActivateLost = (instance: Card) => {
+  (instance as any).data = {
+    ...((instance as any).data || {}),
+    lostActivateEffect_105110112: true
+  };
+};
+
+const createPlayerSelectQuery = (
+  gameState: GameState,
+  playerState: PlayerState,
+  instance: Card,
+  step: string,
+  title: string,
+  description: string
+) => {
+  gameState.pendingQuery = {
+    id: Math.random().toString(36).substring(7),
+    type: 'SELECT_CARD',
+    playerUid: playerState.uid,
+    options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, [
+      {
+        card: {
+          gamecardId: 'PLAYER_SELF',
+          id: 'PLAYER_SELF',
+          fullName: '我方玩家',
+          type: 'UNIT',
+          color: 'NONE'
+        } as any,
+        source: 'UNIT' as TriggerLocation
+      },
+      {
+        card: {
+          gamecardId: 'PLAYER_OPPONENT',
+          id: 'PLAYER_OPPONENT',
+          fullName: '对手玩家',
+          type: 'UNIT',
+          color: 'NONE'
+        } as any,
+        source: 'UNIT' as TriggerLocation
+      }
+    ]),
+    title,
+    description,
+    minSelections: 1,
+    maxSelections: 1,
+    callbackKey: 'EFFECT_RESOLVE',
+    context: {
+      sourceCardId: instance.gamecardId,
+      effectId: EFFECT_ID,
+      step
+    }
+  };
+};
+
+const effect_105110112_activate: CardEffect = {
+  id: EFFECT_ID,
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  description: '从下列效果选择一个，执行后这个单位失去这个【启】能力：\n◆抽1张卡。\n◆选择1名玩家，给予他1点伤害。\n◆选择你的1张手牌舍弃，选择1个〖力量1500〗以下的单位，将其破坏。',
+  condition: (gameState, playerState, instance) =>
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    instance.cardlocation === 'UNIT' &&
+    !hasLostActivate(instance),
+  execute: async (instance, gameState, playerState) => {
+    const weakUnits = getBattlefieldUnits(gameState).filter(unit => (unit.power || 0) <= 1500);
+    const optionList = [
+      { id: 'DRAW', label: '抽1张卡' },
+      { id: 'DAMAGE', label: '选择1名玩家，给予他1点伤害' }
+    ];
+
+    if (playerState.hand.length > 0 && weakUnits.length > 0) {
+      optionList.push({
+        id: 'DESTROY',
+        label: '舍弃1张手牌，破坏1个力量1500以下的单位'
+      });
+    }
+
+    createChoiceQuery(
+      gameState,
+      playerState.uid,
+      'Choose An Effect',
+      '选择1项效果并执行。之后，这个单位失去这个【启】能力。',
+      optionList,
+      {
+        sourceCardId: instance.gamecardId,
+        effectId: EFFECT_ID,
+        step: 'CHOOSE_MODE'
+      }
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.effectId !== EFFECT_ID || selections.length === 0) return;
+
+    if (context.step === 'CHOOSE_MODE') {
+      const choice = selections[0];
+
+      if (choice === 'DRAW') {
+        markActivateLost(instance);
+        await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 1 }, instance);
+        gameState.logs.push(`[${instance.fullName}] 抽了1张卡。`);
+        return;
+      }
+
+      if (choice === 'DAMAGE') {
+        markActivateLost(instance);
+        createPlayerSelectQuery(
+          gameState,
+          playerState,
+          instance,
+          'DEAL_DAMAGE',
+          'Choose A Player',
+          '选择1名玩家，给予他1点伤害。'
+        );
+        return;
+      }
+
+      if (choice === 'DESTROY') {
+        const weakUnits = getBattlefieldUnits(gameState).filter(unit => (unit.power || 0) <= 1500);
+        if (playerState.hand.length === 0 || weakUnits.length === 0) return;
+
+        markActivateLost(instance);
+        createSelectCardQuery(
+          gameState,
+          playerState.uid,
+          [...playerState.hand],
+          'Choose A Card To Discard',
+          '选择1张手牌舍弃。',
+          1,
+          1,
+          {
+            sourceCardId: instance.gamecardId,
+            effectId: EFFECT_ID,
+            step: 'DISCARD_HAND'
+          },
+          () => 'HAND'
+        );
+      }
+      return;
+    }
+
+    if (context.step === 'DEAL_DAMAGE') {
+      const targetUid =
+        selections[0] === 'PLAYER_SELF'
+          ? playerState.uid
+          : gameState.playerIds.find(uid => uid !== playerState.uid)!;
+
+      if (targetUid === playerState.uid) {
+        await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DEAL_EFFECT_DAMAGE_SELF', value: 1 }, instance);
+      } else {
+        await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DEAL_EFFECT_DAMAGE', value: 1 }, instance);
+      }
+
+      gameState.logs.push(`[${instance.fullName}] 给予了 ${targetUid === playerState.uid ? '自己' : '对手'} 1点效果伤害。`);
+      return;
+    }
+
+    if (context.step === 'DISCARD_HAND') {
+      const discardId = selections[0];
+      const discardCard = AtomicEffectExecutor.findCardById(gameState, discardId);
+      if (!discardCard || discardCard.cardlocation !== 'HAND') return;
+
+      await AtomicEffectExecutor.execute(
+        gameState,
+        playerState.uid,
+        {
+          type: 'DISCARD_CARD',
+          targetFilter: { gamecardId: discardId }
+        },
+        instance
+      );
+
+      const weakUnits = getBattlefieldUnits(gameState).filter(unit => (unit.power || 0) <= 1500);
+      if (weakUnits.length === 0) {
+        gameState.logs.push(`[${instance.fullName}] discarded a card, but there was no valid unit to destroy.`);
+        return;
+      }
+
+      createSelectCardQuery(
+        gameState,
+        playerState.uid,
+        weakUnits,
+        'Choose A Unit',
+        '选择1个力量1500以下的单位，将其破坏。',
+        1,
+        1,
+        {
+          sourceCardId: instance.gamecardId,
+          effectId: EFFECT_ID,
+          step: 'DESTROY_UNIT'
+        },
+        () => 'UNIT'
+      );
+      return;
+    }
+
+    if (context.step !== 'DESTROY_UNIT') return;
+
+    const target = AtomicEffectExecutor.findCardById(gameState, selections[0]);
+    if (!target || target.cardlocation !== 'UNIT' || (target.power || 0) > 1500) return;
+
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, target.gamecardId);
+    if (!ownerUid) return;
+
+    await AtomicEffectExecutor.execute(
+      gameState,
+      ownerUid,
+      {
+        type: 'DESTROY_CARD',
+        targetFilter: { gamecardId: target.gamecardId }
+      },
+      instance
+    );
+
+    gameState.logs.push(`[${instance.fullName}] 破坏了 [${target.fullName}] `);
+  }
+};
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -37,10 +261,10 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: [effect_105110112_activate],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'BT01,ST04',
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

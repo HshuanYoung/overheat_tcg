@@ -1,4 +1,26 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+
+const effect_105000116_continuous: CardEffect = {
+  id: '105000116_continuous',
+  type: 'CONTINUOUS',
+  description: 'If you control an item, this unit gets +1 damage and +1000 power.',
+  applyContinuous: (gameState, instance) => {
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId);
+    if (!ownerUid) return;
+
+    const owner = gameState.players[ownerUid];
+    if (!owner.itemZone.some(card => !!card)) return;
+
+    instance.damage = (instance.damage || 0) + 1;
+    instance.power = (instance.power || 0) + 1000;
+    instance.influencingEffects = instance.influencingEffects || [];
+    instance.influencingEffects.push({
+      sourceCardName: instance.fullName,
+      description: '场上有道具卡：+1伤害，+1000力量'
+    });
+  }
+};
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +56,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: [effect_105000116_continuous],
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT01',

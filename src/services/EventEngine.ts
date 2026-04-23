@@ -165,6 +165,12 @@ export class EventEngine {
           delete (card as any).battleForbiddenByEffect;
           delete (card as any).cannotBeAttackTargetByEffect;
           delete (card as any).battleImmuneByEffect;
+          if ((card as any).data?.cannotAllianceByEffect !== undefined) {
+            delete (card as any).data.cannotAllianceByEffect;
+          }
+          if ((card as any).data?.indestructibleByEffect !== undefined) {
+            delete (card as any).data.indestructibleByEffect;
+          }
           if ((card as any).data?.unaffectedByOpponentCardEffects !== undefined) {
             delete (card as any).data.unaffectedByOpponentCardEffects;
           }
@@ -265,7 +271,11 @@ export class EventEngine {
 
     // 2. Apply all continuous effects from active zones
     const applyEffects = (player: PlayerState) => {
-      const activeZones = [...player.unitZone, ...player.itemZone, ...player.erosionFront];
+      const handContinuousCards = player.hand.filter(card =>
+        !!card &&
+        card.effects?.some(effect => effect.type === 'CONTINUOUS' && effect.content === 'SELF_HAND_COST')
+      );
+      const activeZones = [...player.unitZone, ...player.itemZone, ...player.erosionFront, ...handContinuousCards];
       activeZones.forEach(card => {
         if (card && card.effects) {
           if (this.isFullEffectSilenced(gameState, card)) {

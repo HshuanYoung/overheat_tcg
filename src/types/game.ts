@@ -302,6 +302,8 @@ export interface EffectQuery {
     slotNumber?: number;
     slotLabel?: string;
     zoneLabel?: string;
+    disabled?: boolean;
+    disabledReason?: string;
   }[];
   title: string;
   description: string;

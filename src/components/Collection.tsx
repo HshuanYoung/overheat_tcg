@@ -18,6 +18,24 @@ const RARITY_BADGE: Record<string, string> = {
 type CollectionTab = 'DECKS' | 'CARDS' | 'BACKS' | 'RAY_CARDS';
 const INITIAL_VISIBLE_CARD_COUNT = 48;
 
+const tokenizeCardPackage = (value?: string | null) =>
+  (value || '')
+    .toUpperCase()
+    .replace(/[，、]/g, ',')
+    .split(/[,\s|/]+/)
+    .map(token => token.trim())
+    .filter(Boolean);
+
+const matchesCardPackageFilter = (cardPackage: string | undefined, query: string) => {
+  const queryTokens = tokenizeCardPackage(query);
+  if (queryTokens.length === 0) {
+    return true;
+  }
+
+  const packageTokens = tokenizeCardPackage(cardPackage);
+  return queryTokens.every(token => packageTokens.some(pkg => pkg.includes(token)));
+};
+
 export const Collection: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -38,7 +56,7 @@ export const Collection: React.FC = () => {
   const [filterColor, setFilterColor] = useState<string | null>(null);
   const [visibleCardCount, setVisibleCardCount] = useState(INITIAL_VISIBLE_CARD_COUNT);
   const [filters, setFilters] = useState({
-    ac: '', damage: '', power: '', faction: 'ALL', ownership: 'ALL'
+    ac: '', damage: '', power: '', cardPackage: '', faction: 'ALL', ownership: 'ALL'
   });
   const deferredSearchTerm = useDeferredValue(searchTerm.trim());
   const {
@@ -200,6 +218,7 @@ export const Collection: React.FC = () => {
     if (filters.ac !== '' && card.acValue.toString() !== filters.ac) return false;
     if (filters.damage !== '' && card.damage?.toString() !== filters.damage) return false;
     if (filters.power !== '' && card.power?.toString() !== filters.power) return false;
+    if (!matchesCardPackageFilter(card.cardPackage, filters.cardPackage)) return false;
     if (filters.faction !== 'ALL' && card.faction !== filters.faction) return false;
     const isOwned = (collection[card.uniqueId] || collection[card.id] || 0) > 0;
     if (filters.ownership === 'OWNED' && !isOwned) return false;
@@ -377,6 +396,12 @@ export const Collection: React.FC = () => {
                     placeholder="力量"
                     value={filters.power}
                     onChange={e => setFilters({ ...filters, power: e.target.value })}
+                  />
+                  <input
+                    className="bg-zinc-900/50 border border-white/5 rounded-xl px-2 md:px-3 py-2 md:py-2.5 text-[10px] md:text-xs font-bold text-white focus:outline-none"
+                    placeholder="卡包，如 BT01 / ST04"
+                    value={filters.cardPackage}
+                    onChange={e => setFilters({ ...filters, cardPackage: e.target.value })}
                   />
                 </div>
               </div>

@@ -14,6 +14,24 @@ import { LoadingOverlay } from './LoadingOverlay';
 
 const INITIAL_VISIBLE_CARD_COUNT = 48;
 
+const tokenizeCardPackage = (value?: string | null) =>
+  (value || '')
+    .toUpperCase()
+    .replace(/[，、]/g, ',')
+    .split(/[,\s|/]+/)
+    .map(token => token.trim())
+    .filter(Boolean);
+
+const matchesCardPackageFilter = (cardPackage: string | undefined, query: string) => {
+  const queryTokens = tokenizeCardPackage(query);
+  if (queryTokens.length === 0) {
+    return true;
+  }
+
+  const packageTokens = tokenizeCardPackage(cardPackage);
+  return queryTokens.every(token => packageTokens.some(pkg => pkg.includes(token)));
+};
+
 export const DeckBuilder: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -37,6 +55,7 @@ export const DeckBuilder: React.FC = () => {
     ac: '',
     damage: '',
     power: '',
+    cardPackage: '',
     color: 'ALL',
     faction: 'ALL',
     rarity: 'ALL',
@@ -403,6 +422,7 @@ export const DeckBuilder: React.FC = () => {
     if (filters.ac !== '' && c.acValue.toString() !== filters.ac) return false;
     if (filters.damage !== '' && c.damage?.toString() !== filters.damage) return false;
     if (filters.power !== '' && c.power?.toString() !== filters.power) return false;
+    if (!matchesCardPackageFilter(c.cardPackage, filters.cardPackage)) return false;
     if (filters.color !== 'ALL' && c.color !== filters.color) return false;
     if (filters.faction !== 'ALL' && c.faction !== filters.faction) return false;
     if (filters.rarity !== 'ALL' && c.rarity !== filters.rarity) return false;
@@ -708,6 +728,15 @@ export const DeckBuilder: React.FC = () => {
               />
             </div>
             <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500 font-bold uppercase">卡包</label>
+              <input
+                className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs"
+                placeholder="例如 BT01 / ST04"
+                value={filters.cardPackage}
+                onChange={e => setFilters({ ...filters, cardPackage: e.target.value })}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
               <label className="text-[10px] text-zinc-500 font-bold uppercase">颜色</label>
               <select
                 className="bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white appearance-none"
@@ -788,6 +817,7 @@ export const DeckBuilder: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <h4 className="font-black italic text-sm truncate">{card.fullName}</h4>
                     <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">{getCardTypeLabel(card.type)} - {card.rarity}</p>
+                    <p className="text-[10px] text-zinc-500 mb-1">卡包：{card.cardPackage || '未知'}</p>
                     <p className="text-[10px] text-zinc-400 font-bold">数量：{collection[card.uniqueId] || collection[card.id] || 0}</p>
                   </div>
                 </div>

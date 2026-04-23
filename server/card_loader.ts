@@ -4,6 +4,11 @@ import { Card } from '../src/types/game';
 
 const SCRIPTS_DIR = path.join(process.cwd(), 'src', 'scripts');
 
+const isCardModule = (cardModule: any): cardModule is { default: Card } =>
+  !!cardModule?.default &&
+  typeof cardModule.default === 'object' &&
+  typeof cardModule.default.id === 'string';
+
 export async function loadServerCards(): Promise<Card[]> {
   const cards: Card[] = [];
   const files = fs.readdirSync(SCRIPTS_DIR);
@@ -11,7 +16,7 @@ export async function loadServerCards(): Promise<Card[]> {
   for (const file of files) {
     if (file.endsWith('.ts')) {
       const cardModule = await import(`../src/scripts/${file}`);
-      if (cardModule.default) {
+      if (isCardModule(cardModule)) {
         const baseCard = cardModule.default;
         if (baseCard.availableRarities && baseCard.availableRarities.length > 0) {
           baseCard.availableRarities.forEach((r: any) => {

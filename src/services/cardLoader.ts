@@ -5,10 +5,15 @@ const modules = import.meta.glob('../scripts/*.ts', { eager: true });
 
 export const CARD_LIBRARY: Record<string, Card> = {};
 
+const isCardModule = (mod: any): mod is { default: Card } =>
+  !!mod?.default &&
+  typeof mod.default === 'object' &&
+  typeof mod.default.id === 'string';
+
 // Process modules to fill the library
 Object.keys(modules).forEach((path) => {
   const mod = modules[path] as any;
-  if (mod.default && mod.default.id) {
+  if (isCardModule(mod)) {
     CARD_LIBRARY[mod.default.id] = mod.default;
   }
 });

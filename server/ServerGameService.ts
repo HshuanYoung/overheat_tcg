@@ -40,6 +40,27 @@ export const ServerGameService = {
       !!effect.erosionTotalLimit;
   },
 
+  isTenPlusEffect(effect: CardEffect) {
+    return !!effect.erosionTotalLimit && effect.erosionTotalLimit[0] >= 10;
+  },
+
+  isGoddessTierEffect(effect: CardEffect) {
+    if (ServerGameService.isTenPlusEffect(effect)) return true;
+
+    const triggerEvents = Array.isArray(effect.triggerEvent)
+      ? effect.triggerEvent
+      : effect.triggerEvent
+        ? [effect.triggerEvent]
+        : [];
+
+    return triggerEvents.includes('GODDESS_TRANSFORMATION');
+  },
+
+  effectHasSubGoddessErosionRequirement(effect: CardEffect) {
+    return ServerGameService.effectHasErosionRequirement(effect) &&
+      !ServerGameService.isGoddessTierEffect(effect);
+  },
+
   hasGlobalDisableErosionRequirementEffects(gameState: GameState) {
     return Object.values(gameState.players).some(player =>
       [...player.unitZone, ...player.itemZone, ...player.erosionFront]
@@ -450,8 +471,8 @@ export const ServerGameService = {
     if (globalDisableAllActivated && (effect.type === 'ACTIVATE' || effect.type === 'ACTIVATED')) {
       return { valid: false, reason: '当前有持续效果使所有卡失去【启】能力' };
     }
-    if (globalDisableErosionRequirementEffects && ServerGameService.effectHasErosionRequirement(effect)) {
-      return { valid: false, reason: '当前有持续效果使所有带侵蚀区数量要求的能力失效' };
+    if (globalDisableErosionRequirementEffects && ServerGameService.effectHasSubGoddessErosionRequirement(effect)) {
+      return { valid: false, reason: '当前有持续效果使所有女神化以下的侵蚀区数量要求能力失效' };
     }
 
     // 7. Faction-lock Check

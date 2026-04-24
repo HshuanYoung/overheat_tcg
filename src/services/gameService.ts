@@ -14,10 +14,25 @@ const isPseudoGoddessActiveForCard = (gameState: GameState | null, card?: Card |
 
 const isTenPlusEffect = (effect: CardEffect) => !!effect.erosionTotalLimit && effect.erosionTotalLimit[0] >= 10;
 
+const isGoddessTierEffect = (effect: CardEffect) => {
+  if (isTenPlusEffect(effect)) return true;
+
+  const triggerEvents = Array.isArray(effect.triggerEvent)
+    ? effect.triggerEvent
+    : effect.triggerEvent
+      ? [effect.triggerEvent]
+      : [];
+
+  return triggerEvents.includes('GODDESS_TRANSFORMATION');
+};
+
 const effectHasErosionRequirement = (effect: CardEffect) =>
   !!effect.erosionFrontLimit ||
   !!effect.erosionBackLimit ||
   !!effect.erosionTotalLimit;
+
+const effectHasSubGoddessErosionRequirement = (effect: CardEffect) =>
+  effectHasErosionRequirement(effect) && !isGoddessTierEffect(effect);
 
 const getEffectivePlayerForCard = (gameState: GameState | null, player: PlayerState | undefined, card?: Card | null) => {
   if (!player) return player;
@@ -90,8 +105,16 @@ export const GameService = {
     return isTenPlusEffect(effect);
   },
 
+  isGoddessTierEffect(effect: CardEffect) {
+    return isGoddessTierEffect(effect);
+  },
+
   effectHasErosionRequirement(effect: CardEffect) {
     return effectHasErosionRequirement(effect);
+  },
+
+  effectHasSubGoddessErosionRequirement(effect: CardEffect) {
+    return effectHasSubGoddessErosionRequirement(effect);
   },
 
   hasGlobalDisableErosionRequirementEffects(gameState: GameState | null) {
@@ -360,8 +383,8 @@ export const GameService = {
       return { valid: false, reason: 'All activated abilities are currently disabled' };
     }
 
-    if (globalDisableErosionRequirementEffects && effectHasErosionRequirement(effect)) {
-      return { valid: false, reason: 'Abilities with erosion-count requirements are currently disabled' };
+    if (globalDisableErosionRequirementEffects && effectHasSubGoddessErosionRequirement(effect)) {
+      return { valid: false, reason: 'Sub-goddess erosion-count abilities are currently disabled' };
     }
 
     return { valid: true };

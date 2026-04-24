@@ -56,7 +56,7 @@ export class EventEngine {
                 const canUsePseudoTenPlusTrigger =
                   card.gamecardId === pseudoTenPlusTargetCardId &&
                   GameService.isPseudoGoddessActiveForCard(gameState, card) &&
-                  GameService.isTenPlusEffect(effect);
+                  GameService.isGoddessTierEffect(effect);
 
                 if (!canUsePseudoTenPlusTrigger) {
                   return;

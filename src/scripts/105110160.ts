@@ -4,7 +4,7 @@ const effect_105110160_disable_erosion_requirement_effects: CardEffect = {
   id: '105110160_disable_erosion_requirement_effects',
   type: 'CONTINUOUS',
   content: 'DISABLE_EROSION_REQUIREMENT_EFFECTS',
-  description: 'All cards lose abilities with erosion-count requirements while this unit is active.'
+  description: '【永续】此单位在场时，所有卡失去【oh】能力。'
 };
 
 const effect_105110160_self_protection: CardEffect = {

@@ -9,6 +9,16 @@ import { GameState, Card, CardEffect, TriggerLocation, GameEvent, PlayerState } 
 const isFullEffectSilencedThisTurn = (gameState: GameState | null, card: Card) =>
   !!gameState && (card as any).data?.fullEffectSilencedTurn === gameState.turnCount;
 
+const isPseudoGoddessActiveForCard = (gameState: GameState | null, card?: Card | null) =>
+  !!gameState && !!card && (card as any).data?.pseudoGoddessTenPlusTurn === gameState.turnCount;
+
+const isTenPlusEffect = (effect: CardEffect) => !!effect.erosionTotalLimit && effect.erosionTotalLimit[0] >= 10;
+
+const getEffectivePlayerForCard = (gameState: GameState | null, player: PlayerState | undefined, card?: Card | null) => {
+  if (!player) return player;
+  return isPseudoGoddessActiveForCard(gameState, card) ? { ...player, isGoddessMode: true } : player;
+};
+
 const canUse204000145AsPaymentSubstitute = (paymentCard: Card | undefined, cardColor?: string, cost?: number, playingCardId?: string) =>
   !!paymentCard &&
   paymentCard.id === '204000145' &&
@@ -52,6 +62,18 @@ const hasGlobalDisableAllActivated = (gameState: GameState | null) => {
 };
 
 export const GameService = {
+  isPseudoGoddessActiveForCard(gameState: GameState | null, card?: Card | null) {
+    return isPseudoGoddessActiveForCard(gameState, card);
+  },
+
+  isTenPlusEffect(effect: CardEffect) {
+    return isTenPlusEffect(effect);
+  },
+
+  getEffectivePlayerForCard(gameState: GameState | null, player: PlayerState | undefined, card?: Card | null) {
+    return getEffectivePlayerForCard(gameState, player, card);
+  },
+
   async advancePhase(gameId: string, action?: any) {
     socket.emit('gameAction', { gameId, action: 'END_PHASE', payload: action });
   },
@@ -238,11 +260,10 @@ export const GameService = {
   checkEffectLimitsAndReqs(gameState: GameState | null, playerUid: string, card: Card, effect: CardEffect, triggerLocation: TriggerLocation, event?: GameEvent): { valid: boolean; reason?: string } {
     if (!gameState || !gameState.players) return { valid: true };
     const player = gameState.players[playerUid];
-    const cardData = (card as any).data || {};
-    const pseudoGoddessActive = cardData.pseudoGoddessTenPlusTurn === gameState.turnCount;
-    const activatedEffectsDisabled = cardData.pseudoGoddessDisableActivatedTurn === gameState.turnCount;
+    const pseudoGoddessActive = isPseudoGoddessActiveForCard(gameState, card);
+    const activatedEffectsDisabled = (card as any).data?.pseudoGoddessDisableActivatedTurn === gameState.turnCount;
     const globalDisableAllActivated = hasGlobalDisableAllActivated(gameState);
-    const effectivePlayer = pseudoGoddessActive && player ? { ...player, isGoddessMode: true } : player;
+    const effectivePlayer = getEffectivePlayerForCard(gameState, player, card);
     if (!player) return { valid: false, reason: 'Player data not found' };
 
     if (effect.triggerLocation && triggerLocation && !effect.triggerLocation.includes(triggerLocation)) {
@@ -281,7 +302,7 @@ export const GameService = {
     if (effect.erosionTotalLimit) {
       const totalCount = player.erosionFront.filter(cardInZone => cardInZone !== null).length +
         player.erosionBack.filter(cardInZone => cardInZone !== null).length;
-      const ignoresTenPlusLimit = pseudoGoddessActive && effect.erosionTotalLimit[0] >= 10;
+      const ignoresTenPlusLimit = pseudoGoddessActive && isTenPlusEffect(effect);
       if (!ignoresTenPlusLimit && (totalCount < effect.erosionTotalLimit[0] || totalCount > effect.erosionTotalLimit[1])) {
         return { valid: false, reason: 'Total erosion count requirement not met' };
       }

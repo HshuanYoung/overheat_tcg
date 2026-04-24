@@ -69,14 +69,15 @@ const effect_105110114_ten_plus: CardEffect = {
     if (!ownerUid) return;
 
     const owner = gameState.players[ownerUid];
-    if (!owner.isGoddessMode) return;
+    const pseudoGoddessActive = (instance as any).data?.pseudoGoddessTenPlusTurn === gameState.turnCount;
+    if (!owner.isGoddessMode && !pseudoGoddessActive) return;
 
     instance.damage = (instance.damage || 0) + 2;
     instance.power = (instance.power || 0) + 1500;
     instance.influencingEffects = instance.influencingEffects || [];
     instance.influencingEffects.push({
       sourceCardName: instance.fullName,
-      description: '女神化：+2伤害 / +1500力量'
+      description: `${pseudoGoddessActive && !owner.isGoddessMode ? '伪神化' : '女神化'}：+2伤害 / +1500力量`
     });
   }
 };

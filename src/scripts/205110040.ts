@@ -1,6 +1,11 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
+const formatHandRevealLog = (cards: Card[]) =>
+  cards.length === 0
+    ? '[]'
+    : cards.map((card, index) => `${index + 1}.[${card.fullName}]`).join(' ');
+
 const effect_205110040_activate: CardEffect = {
   id: '205110040_activate',
   type: 'ACTIVATE',
@@ -16,6 +21,9 @@ const effect_205110040_activate: CardEffect = {
 
     const opponent = gameState.players[opponentUid];
     opponent.isHandPublic = 1;
+    gameState.logs.push(
+      `[${instance.id}] revealed ${opponent.displayName}'s hand: ${formatHandRevealLog(opponent.hand)}`
+    );
 
     const discardableCards = opponent.hand.filter(card => card.type !== 'UNIT');
     if (discardableCards.length === 0) {
@@ -47,10 +55,11 @@ const effect_205110040_activate: CardEffect = {
   },
   onQueryResolve: async (instance, gameState, _playerState, selections, context) => {
     const revealedPlayerUid = context?.revealedPlayerUid;
-    if (!revealedPlayerUid || selections.length === 0) return;
+    if (!revealedPlayerUid) return;
 
     const revealedPlayer = gameState.players[revealedPlayerUid];
     revealedPlayer.isHandPublic = 0;
+    if (selections.length === 0) return;
 
     const targetId = selections[0];
     const targetCard = AtomicEffectExecutor.findCardById(gameState, targetId);

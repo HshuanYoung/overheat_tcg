@@ -1,5 +1,6 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { EventEngine } from '../services/EventEngine';
 
 const effect_205110043_activate: CardEffect = {
   id: '205110043_activate',
@@ -37,6 +38,8 @@ const effect_205110043_activate: CardEffect = {
   onQueryResolve: async (instance, gameState, _playerState, selections) => {
     const target = AtomicEffectExecutor.findCardById(gameState, selections[0]);
     if (!target) return;
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, target.gamecardId);
+    const owner = ownerUid ? gameState.players[ownerUid] : undefined;
 
     if (!(target as any).data) {
       (target as any).data = {};
@@ -44,7 +47,22 @@ const effect_205110043_activate: CardEffect = {
 
     (target as any).data.pseudoGoddessTenPlusTurn = gameState.turnCount;
     (target as any).data.pseudoGoddessDisableActivatedTurn = gameState.turnCount;
+    EventEngine.recalculateContinuousEffects(gameState);
     gameState.logs.push(`[${instance.id}] granted pseudo-goddess mode to [${target.fullName}] for this turn.`);
+
+    if (ownerUid && owner && !owner.isGoddessMode) {
+      EventEngine.dispatchEvent(gameState, {
+        type: 'GODDESS_TRANSFORMATION',
+        playerUid: ownerUid,
+        sourceCard: target,
+        sourceCardId: target.gamecardId,
+        targetCardId: target.gamecardId,
+        data: {
+          pseudoTenPlusTargetCardId: target.gamecardId,
+          sourceCardId: instance.gamecardId
+        }
+      });
+    }
   }
 };
 

@@ -1364,6 +1364,25 @@ export const ServerGameService = {
 
     await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
 
+    const interruptedBattlePhases: GamePhase[] = ['DEFENSE_DECLARATION', 'BATTLE_FREE'];
+    const shouldReturnToMainAfterInterruptedBattle =
+      gameState.phase === 'BATTLE_END' ||
+      (interruptedBattlePhases.includes(gameState.phase) && !gameState.battleState);
+
+    if (
+      shouldReturnToMainAfterInterruptedBattle &&
+      !gameState.pendingQuery &&
+      !gameState.isResolvingStack &&
+      gameState.isCountering === 0
+    ) {
+      gameState.phase = 'MAIN';
+      gameState.previousPhase = undefined;
+      gameState.battleState = undefined;
+      gameState.phaseTimerStart = Date.now();
+      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_INTERRUPTED' } });
+      gameState.logs.push(`[阶段切换] 战斗已中止，返回主要阶段`);
+    }
+
     const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const currentPlayer = gameState.players[currentPlayerId];
     if (

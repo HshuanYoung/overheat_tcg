@@ -48,6 +48,20 @@ export class EventEngine {
               (Array.isArray(effect.triggerEvent) ? effect.triggerEvent.includes(event.type) : effect.triggerEvent === event.type);
 
             if ((effect.type === 'TRIGGERED' || effect.type === 'TRIGGER') && isEventMatch) {
+              const pseudoTenPlusTargetCardId = event.type === 'GODDESS_TRANSFORMATION'
+                ? event.data?.pseudoTenPlusTargetCardId
+                : undefined;
+
+              if (pseudoTenPlusTargetCardId) {
+                const canUsePseudoTenPlusTrigger =
+                  card.gamecardId === pseudoTenPlusTargetCardId &&
+                  GameService.isPseudoGoddessActiveForCard(gameState, card) &&
+                  GameService.isTenPlusEffect(effect);
+
+                if (!canUsePseudoTenPlusTrigger) {
+                  return;
+                }
+              }
 
               // New: Check if the card's current location is in the effect's triggerLocation array
               // If triggerLocation is not specified, default depends on the card type (usually UNIT/ITEM for units)

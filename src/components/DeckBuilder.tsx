@@ -11,6 +11,7 @@ import { CARD_BACKS } from '../data/customization';
 import { TriggerLocation } from '../types/game';
 import { useCardCatalog } from '../hooks/useCardCatalog';
 import { LoadingOverlay } from './LoadingOverlay';
+import { KeywordBadges } from './KeywordBadges';
 
 const INITIAL_VISIBLE_CARD_COUNT = 48;
 
@@ -34,7 +35,7 @@ const matchesCardPackageFilter = (cardPackage: string | undefined, query: string
 
 export const DeckBuilder: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [deck, setDeck] = useState<CardType[]>([]);
   const [deckName, setDeckName] = useState('我的新卡组');
   const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
@@ -87,21 +88,18 @@ export const DeckBuilder: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!cardLibrary.length || myDecks.length === 0) {
+    if (!cardLibrary.length) {
       return;
     }
 
     const deckIdFromUrl = searchParams.get('id');
-    if (deckIdFromUrl) {
-      const targetDeck = myDecks.find(d => d.id === deckIdFromUrl);
-      if (targetDeck) {
-        loadDeckToEditor(targetDeck);
-      }
+    if (!deckIdFromUrl) {
       return;
     }
 
-    if (!selectedDeckId) {
-      loadDeckToEditor(myDecks[0]);
+    const targetDeck = myDecks.find(d => d.id === deckIdFromUrl);
+    if (targetDeck && selectedDeckId !== targetDeck.id) {
+      loadDeckToEditor(targetDeck);
     }
   }, [cardLibrary, myDecks, searchParams, selectedDeckId]);
 
@@ -242,6 +240,7 @@ export const DeckBuilder: React.FC = () => {
         });
         const data = await res.json();
         setSelectedDeckId(data.id);
+        setSearchParams({ id: data.id });
       }
       loadDecks();
     } catch (e) {
@@ -255,6 +254,7 @@ export const DeckBuilder: React.FC = () => {
     setDeck([]);
     setDeckName('新卡组');
     setSelectedDeckId(null);
+    setSearchParams({});
   };
 
   const deleteDeck = async (id: string, e?: React.MouseEvent) => {
@@ -509,7 +509,7 @@ export const DeckBuilder: React.FC = () => {
           {myDecks.map(d => (
             <div
               key={d.id}
-              onClick={() => loadDeckToEditor(d)}
+              onClick={() => setSearchParams({ id: d.id })}
               className={cn(
                 "group p-3 rounded-xl border transition-all cursor-pointer relative",
                 selectedDeckId === d.id ? "bg-red-600/10 border-red-600" : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-600"
@@ -904,6 +904,11 @@ export const DeckBuilder: React.FC = () => {
                   <h2 className="text-3xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-none mb-1">
                     {zoomedCard.fullName}
                   </h2>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">关键词</p>
+                  <KeywordBadges card={zoomedCard} variant="detail" />
                 </div>
 
                 <div className="flex-1 md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar space-y-6">

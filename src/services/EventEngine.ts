@@ -1,4 +1,4 @@
-import { GameState, PlayerState, Card, GameEvent, CardEffect, TriggerLocation } from '../types/game';
+﻿import { GameState, PlayerState, Card, GameEvent, CardEffect, TriggerLocation } from '../types/game';
 import { GameService } from './gameService';
 import { AtomicEffectExecutor } from './AtomicEffectExecutor';
 import { getCardIdentity } from '../lib/utils';
@@ -189,7 +189,7 @@ export class EventEngine {
           }
           if (card.baseGodMark !== undefined) card.godMark = card.baseGodMark;
           if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
-          if (card.baseHeroic !== undefined) card.isHeroic = card.baseHeroic;
+          if (card.baseHeroic !== undefined) card.isHeroic = card.baseHeroic || !!card.temporaryHeroic;
           card.canActivateEffect = card.baseCanActivateEffect !== undefined ? card.baseCanActivateEffect : true;
           if (card.temporaryCanActivateEffect !== undefined) {
             card.canActivateEffect = card.temporaryCanActivateEffect;
@@ -237,6 +237,10 @@ export class EventEngine {
           if (card.temporaryRush) {
             const source = card.temporaryBuffSources?.['rush'] || '效果';
             card.influencingEffects.push({ sourceCardName: source, description: '获得【速攻】' });
+          }
+          if (card.temporaryHeroic) {
+            const source = card.temporaryBuffSources?.['heroic'] || '效果';
+            card.influencingEffects.push({ sourceCardName: source, description: '获得【英勇】' });
           }
           if (card.temporaryCanAttackAny) {
             const source = card.temporaryBuffSources?.['full_attack'] || '效果';

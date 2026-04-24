@@ -309,6 +309,7 @@ export const ServerGameService = {
     card.temporaryPowerBuff = 0;
     card.temporaryDamageBuff = 0;
     card.temporaryRush = false;
+    card.temporaryHeroic = false;
     card.temporaryCanAttackAny = false;
     card.temporaryBuffSources = {};
     card.temporaryBuffDetails = {};
@@ -2676,11 +2677,13 @@ export const ServerGameService = {
             u.temporaryPowerBuff = 0;
             u.temporaryDamageBuff = 0;
             u.temporaryRush = false;
+            u.temporaryHeroic = false;
             u.temporaryCanAttackAny = false;
             u.temporaryBuffSources = {};
             u.temporaryBuffDetails = {};
             u.isrush = u.baseIsrush;
             u.isAnnihilation = u.baseAnnihilation || false;
+            u.isHeroic = u.baseHeroic || false;
             u.power = u.basePower;
             u.damage = u.baseDamage;
           }
@@ -3375,6 +3378,15 @@ export const ServerGameService = {
     if (!skipEvents) {
       gameState.phase = 'END';
       gameState.logs.push(`${player.displayName} 的结束阶段`);
+
+      player.unitZone.forEach(unit => {
+        if (!unit || !unit.isHeroic || !unit.hasAttackedThisTurn || !unit.isExhausted) {
+          return;
+        }
+
+        ServerGameService.readyCard(unit);
+        gameState.logs.push(`【英勇】效果触发，${unit.fullName} 在回合结束时被重置。`);
+      });
 
       // Dispatch TURN_END event to allow end-of-turn triggers to fire while it's still the player's turn
       EventEngine.dispatchEvent(gameState, {

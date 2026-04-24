@@ -8,6 +8,7 @@ import { FACTIONS } from '../data/factions';
 import { Card, Deck } from '../types/game';
 import { CardComponent } from './Card';
 import { useCardCatalog } from '../hooks/useCardCatalog';
+import { KeywordBadges } from './KeywordBadges';
 
 const RARITY_BADGE: Record<string, string> = {
   C: 'bg-zinc-700 text-zinc-300', U: 'bg-emerald-900 text-emerald-300', R: 'bg-blue-900 text-blue-300',
@@ -583,6 +584,11 @@ export const Collection: React.FC = () => {
                     <h2 className="text-3xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-none mb-1">
                       {selectedCard.fullName}
                     </h2>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">关键词</p>
+                    <KeywordBadges card={selectedCard} variant="detail" />
                   </div>
 
                   <div className="flex-1 md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar space-y-6">

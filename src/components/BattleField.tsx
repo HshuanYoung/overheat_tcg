@@ -14,6 +14,7 @@ import { Rulebook } from './Rulebook';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flag, Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers, Sparkles, Flame } from 'lucide-react';
 import { cn, getCardColorLabel, getCardImageUrl, getCardIdentity, getCardTypeLabel, getLocationLabel, getPhaseLabel } from '../lib/utils';
+import { KeywordBadges } from './KeywordBadges';
 
 const EFFECT_TYPE_LABELS: Record<string, string> = {
   ACTIVATE: '主动',
@@ -678,7 +679,10 @@ export const BattleField: React.FC = () => {
     }
 
     if (allianceTargetSelection) {
-      const isPartnerUnit = me.unitZone.some(c => c?.gamecardId === card.gamecardId) && canUnitAttack(card) && card.gamecardId !== allianceTargetSelection;
+      const isPartnerUnit =
+        me.unitZone.some(c => c?.gamecardId === card.gamecardId) &&
+        canUnitAttack(card) &&
+        card.gamecardId !== allianceTargetSelection;
 
       if (zone === 'unit' && isPartnerUnit) {
         const attacker1 = me.unitZone.find(c => c?.gamecardId === allianceTargetSelection);
@@ -2917,6 +2921,14 @@ export const BattleField: React.FC = () => {
                       </div>
                     </div>
                   )}
+
+                  <div className="space-y-4">
+                    <h3 className="text-[11px] font-black text-white/60 uppercase tracking-[0.4em] flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                      关键词
+                    </h3>
+                    <KeywordBadges card={previewCard} variant="detail" />
+                  </div>
 
                   {/* Influencing Effects Section (Renamed and Promoted) */}
                   {previewCard.influencingEffects && previewCard.influencingEffects.length > 0 ? (

@@ -900,6 +900,7 @@ export class AtomicEffectExecutor {
       card.temporaryPowerBuff = 0;
       card.temporaryDamageBuff = 0;
       card.temporaryRush = false;
+      card.temporaryHeroic = false;
       card.temporaryCanAttackAny = false;
       card.temporaryBuffSources = {};
       card.temporaryBuffDetails = {};
@@ -1146,6 +1147,14 @@ export class AtomicEffectExecutor {
         }
         else card.baseIsrush = true;
         card.isrush = true;
+      } else if (keyword === 'HEROIC') {
+        if (duration === 1) {
+          card.temporaryHeroic = true;
+          card.temporaryBuffSources['heroic'] = sourceName;
+        } else {
+          card.baseHeroic = true;
+        }
+        card.isHeroic = true;
       } else if (keyword === 'FULL_ATTACK') {
         if (duration === 1) {
           card.temporaryCanAttackAny = true;

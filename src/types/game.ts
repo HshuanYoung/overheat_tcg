@@ -221,6 +221,7 @@ export interface Card {
   temporaryPowerBuff?: number; // cleared at turn start
   temporaryDamageBuff?: number; // cleared at turn start
   temporaryRush?: boolean; // cleared at turn start
+  temporaryHeroic?: boolean; // cleared at turn start
   temporaryCanAttackAny?: boolean; // cleared at turn start
   effects?: CardEffect[];
   influencingEffects?: { sourceCardName: string; description: string }[];

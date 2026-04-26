@@ -72,7 +72,8 @@ export const BattleField: React.FC = () => {
   const [favoriteBackId, setFavoriteBackId] = useState<string>('default');
   const [showFullLogs, setShowFullLogs] = useState(false);
   const [viewingZone, setViewingZone] = useState<{ title: string, cards: Card[], type: string, erosionBackIds?: string[], isOpponentZone?: boolean } | null>(null);
-
+  const [isHomeMenuOpen, setIsHomeMenuOpen] = useState(false);
+  const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
   const [timer, setTimer] = useState<number>(30);
   // const [combatStrategy, setCombatStrategy] = useState<CombatStrategy>(() => {
   //   const saved = localStorage.getItem('combatStrategy') as CombatStrategy | null;
@@ -182,6 +183,20 @@ export const BattleField: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [lastError]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsHomeMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // useEffect(() => {
+  //   localStorage.setItem('combatStrategy', combatStrategy);
+  // }, [combatStrategy]);
 
   // Fetch User Customization
   useEffect(() => {
@@ -1641,9 +1656,9 @@ export const BattleField: React.FC = () => {
 
 
 
-      </div>
+      </div >
       {/* Rulebook Overlay */}
-      <Rulebook isOpen={isRulebookOpen} onClose={() => setIsRulebookOpen(false)} />
+      < Rulebook isOpen={isRulebookOpen} onClose={() => setIsRulebookOpen(false)} />
 
       {/* Card Action Menu */}
       {/* Unified Card Action Menu */}
@@ -2652,7 +2667,7 @@ export const BattleField: React.FC = () => {
                       ? '对方投降'
                       : game.winReason === 'CARD_EFFECT_SPECIAL_WIN'
                         ? `由于${game.winSourceCardName || '卡牌效果'}的效果`
-                      : (winReasonMap[game.winReason || ''] || game.winReason || '未知原因')}
+                        : (winReasonMap[game.winReason || ''] || game.winReason || '未知原因')}
                   </span>
                 </div>
               </div>
@@ -2936,7 +2951,7 @@ export const BattleField: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </div >
   );
 };
 

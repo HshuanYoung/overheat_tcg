@@ -379,6 +379,18 @@ export const GameService = {
       }
     }
 
+    if (player.negatedNames && player.negatedNames.includes(card.fullName)) {
+      return { valid: false, reason: 'This card name is negated this turn' };
+    }
+
+    if (card.canActivateEffect === false) {
+      return { valid: false, reason: 'This card cannot activate effects' };
+    }
+
+    if (card.silencedEffectIds && card.silencedEffectIds.includes(effect.id)) {
+      return { valid: false, reason: 'This effect is silenced' };
+    }
+
     if (activatedEffectsDisabled && (effect.type === 'ACTIVATE' || effect.type === 'ACTIVATED')) {
       return { valid: false, reason: 'This card loses activated abilities this turn' };
     }
@@ -389,6 +401,10 @@ export const GameService = {
 
     if (globalDisableErosionRequirementEffects && effectHasSubGoddessErosionRequirement(effect)) {
       return { valid: false, reason: 'Sub-goddess erosion-count abilities are currently disabled' };
+    }
+
+    if (player.factionLock && card.faction !== player.factionLock) {
+      return { valid: false, reason: 'Faction locked' };
     }
 
     return { valid: true };

@@ -249,9 +249,9 @@ export const FriendMatch: React.FC = () => {
           <>
             <h2 className="text-sm font-bold text-zinc-500 tracking-widest mb-4">选择你的卡组</h2>
             <div className="grid grid-cols-1 gap-3 mb-8">
-              {myDecks.map(d => (
+              {myDecks.map((d, index) => (
                 <motion.div
-                  key={d.id}
+                  key={d.id || `deck-${index}`}
                   whileHover={{ scale: 1.01 }}
                   onClick={() => setSelectedDeckId(d.id)}
                   className={cn(

@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { LayoutGrid, BookOpen, Coins, Sparkles, X, Menu, LogOut, Info, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { readJsonResponse } from '../lib/http';
 
 export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRulebook }) => {
   const user = getAuthUser();
@@ -21,9 +22,9 @@ export const TopBar: React.FC<{ onOpenRulebook: () => void }> = ({ onOpenRuleboo
         const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
         const token = localStorage.getItem('token');
         const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        setCoins(data.coins ?? 0);
-        setCrystals(data.cardCrystals ?? 0);
+        const data = await readJsonResponse(res);
+        setCoins(data?.coins ?? 0);
+        setCrystals(data?.cardCrystals ?? 0);
       } catch (e) { /* ignore */ }
     };
     loadAssets();

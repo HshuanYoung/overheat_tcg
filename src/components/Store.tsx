@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn, getCardImageUrl } from '../lib/utils';
 import { Card } from '../types/game';
 import { prefetchCardCatalog, useCardCatalog } from '../hooks/useCardCatalog';
+import { readJsonResponse } from '../lib/http';
 
 const RARITY_COLORS: Record<string, string> = {
   C: 'border-zinc-500 shadow-zinc-500/20',
@@ -49,9 +50,9 @@ export const Store: React.FC = () => {
     const loadProfile = async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        setCoins(data.coins || 0);
-        setCardCrystals(data.cardCrystals || 0);
+        const data = await readJsonResponse(res);
+        setCoins(data?.coins || 0);
+        setCardCrystals(data?.cardCrystals || 0);
       } catch (e) { console.error(e); }
       setLoading(false);
     };

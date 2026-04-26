@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Swords, Bot, ShoppingBag, Library, Play, Users, Layout, CreditCard, Image as ImageIcon, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RAY_CARDS } from '../data/customization';
+import { readJsonResponse } from '../lib/http';
 
 export const Home: React.FC = () => {
   const [favoriteCard, setFavoriteCard] = useState<any>(null);
@@ -25,8 +26,8 @@ export const Home: React.FC = () => {
         const res = await fetch(`${BACKEND_URL}/api/user/profile`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
-        const data = await res.json();
-        if (data.favoriteCardId) {
+        const data = await readJsonResponse(res);
+        if (data?.favoriteCardId) {
           const card = RAY_CARDS.find(c => c.id === data.favoriteCardId);
           setFavoriteCard(card || RAY_CARDS[0]);
         } else {

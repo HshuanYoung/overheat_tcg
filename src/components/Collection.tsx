@@ -9,6 +9,7 @@ import { Card, Deck } from '../types/game';
 import { CardComponent } from './Card';
 import { useCardCatalog } from '../hooks/useCardCatalog';
 import { KeywordBadges } from './KeywordBadges';
+import { readJsonResponse } from '../lib/http';
 
 const RARITY_BADGE: Record<string, string> = {
   C: 'bg-zinc-700 text-zinc-300', U: 'bg-emerald-900 text-emerald-300', R: 'bg-blue-900 text-blue-300',
@@ -87,17 +88,17 @@ export const Collection: React.FC = () => {
         fetch(`${BACKEND_URL}/api/user/profile`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
-      const collData = await collRes.json();
-      const deckData = await deckRes.json();
-      const profData = await profRes.json();
+      const collData = await readJsonResponse(collRes);
+      const deckData = await readJsonResponse(deckRes);
+      const profData = await readJsonResponse(profRes);
 
-      setCollection(collData.collection || {});
-      setDecks(deckData.decks || []);
+      setCollection(collData?.collection || {});
+      setDecks(deckData?.decks || []);
       setProfile({
-        favoriteCardId: profData.favoriteCardId,
-        favoriteBackId: profData.favoriteBackId,
-        coins: profData.coins,
-        cardCrystals: profData.cardCrystals
+        favoriteCardId: profData?.favoriteCardId || 'fav_card',
+        favoriteBackId: profData?.favoriteBackId || 'default',
+        coins: profData?.coins || 0,
+        cardCrystals: profData?.cardCrystals || 0
       });
     } catch (e) {
       console.error('Failed to fetch collection data:', e);
@@ -289,9 +290,9 @@ export const Collection: React.FC = () => {
                 </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {decks.map(deck => (
+                {decks.map((deck, index) => (
                   <DeckCard
-                    key={deck.id}
+                    key={deck.id || `deck-${index}`}
                     deck={deck}
                     onClick={() => navigate(`/deck-builder?id=${deck.id}`)}
                     onDelete={() => setConfirmDeleteId(deck.id)}
@@ -409,12 +410,12 @@ export const Collection: React.FC = () => {
 
               {/* Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {visibleCards.map(card => {
+                {visibleCards.map((card, index) => {
                   const qty = collection[card.uniqueId] || collection[card.id] || 0;
                   const isOwned = qty > 0;
                   return (
                     <motion.div
-                      key={card.uniqueId}
+                      key={card.uniqueId || card.id || `card-${index}`}
                       layout
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -457,8 +458,8 @@ export const Collection: React.FC = () => {
           {activeTab === 'BACKS' && (
             <motion.div key="backs" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                {CARD_BACKS.map(back => (
-                  <div key={back.id} className="relative group flex flex-col gap-4">
+                {CARD_BACKS.map((back, index) => (
+                  <div key={back.id || `back-${index}`} className="relative group flex flex-col gap-4">
                     <div className={cn(
                       "aspect-[2.5/3.5] rounded-2xl overflow-hidden border-4 transition-all duration-500 relative bg-zinc-900",
                       profile?.favoriteBackId === back.id ? "border-red-600 scale-[1.02] shadow-[0_0_30px_rgba(220,38,38,0.3)]" : "border-zinc-800 grayscale group-hover:grayscale-0 group-hover:border-zinc-600"
@@ -494,8 +495,8 @@ export const Collection: React.FC = () => {
           {activeTab === 'RAY_CARDS' && (
             <motion.div key="ray" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-                {RAY_CARDS.map(rc => (
-                  <div key={rc.id} className="relative group">
+                {RAY_CARDS.map((rc, index) => (
+                  <div key={rc.id || `ray-${index}`} className="relative group">
                     <div className={cn(
                       "aspect-video rounded-3xl overflow-hidden border-4 transition-all duration-500 relative bg-zinc-900",
                       profile?.favoriteCardId === rc.id ? "border-red-600 scale-[1.02] shadow-[0_0_40px_rgba(220,38,38,0.4)]" : "border-zinc-800 grayscale group-hover:grayscale-0 group-hover:border-zinc-600"

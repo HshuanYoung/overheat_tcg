@@ -445,12 +445,8 @@ export const ServerGameService = {
 
     // 4. Condition Check
     if (effect.condition) {
-      const isStoryResolution = gameState.phase === 'COUNTERING' && triggerLocation === 'PLAY' && card.type === 'STORY';
-      
       if (!effect.condition(gameState, effectivePlayer as PlayerState, card, event)) {
-        if (!isStoryResolution) {
-          return { valid: false, reason: '不满足发动条件' };
-        }
+        return { valid: false, reason: '不满足发动条件' };
       }
     }
 
@@ -2182,18 +2178,15 @@ export const ServerGameService = {
 
     if (!gameState.battleState.defender) {
       // Direct damage to player
-      let totalDamage = attackingUnits.reduce((sum, u) => sum + (u.damage || 0), 0);
-      if (defender.isGoddessMode) {
-        totalDamage *= 2;
-        gameState.logs.push(`${defender.displayName} 处于女神化状态，受到的伤害翻倍！`);
-      }
+      const totalDamage = attackingUnits.reduce((sum, u) => sum + (u.damage || 0), 0);
+      const finalDamage = defender.isGoddessMode ? totalDamage * 2 : totalDamage;
 
-      gameState.logs.push(`${attacker.displayName} 对 ${defender.displayName} 造成了 ${totalDamage} 点战斗伤害`);
+      gameState.logs.push(`${attacker.displayName} 对 ${defender.displayName} 造成了 ${finalDamage} 点战斗伤害`);
 
       EventEngine.dispatchEvent(gameState, {
         type: 'COMBAT_DAMAGE_CAUSED',
         playerUid: defenderId,
-        data: { amount: totalDamage, source: 'BATTLE' }
+        data: { amount: finalDamage, source: 'BATTLE' }
       });
 
       ServerGameService.applyDamageToPlayer(gameState, defenderId, totalDamage, 'BATTLE');

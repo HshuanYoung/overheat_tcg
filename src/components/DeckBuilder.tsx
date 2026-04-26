@@ -12,6 +12,7 @@ import { TriggerLocation } from '../types/game';
 import { useCardCatalog } from '../hooks/useCardCatalog';
 import { LoadingOverlay } from './LoadingOverlay';
 import { KeywordBadges } from './KeywordBadges';
+import { readJsonResponse } from '../lib/http';
 
 const INITIAL_VISIBLE_CARD_COUNT = 48;
 
@@ -122,9 +123,9 @@ export const DeckBuilder: React.FC = () => {
     const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { 'Authorization': `Bearer ${token}` } });
-      const data = await res.json();
-      setCardCrystals(data.cardCrystals || 0);
-      setFavoriteBackId(data.favoriteBackId || 'default');
+      const data = await readJsonResponse(res);
+      setCardCrystals(data?.cardCrystals || 0);
+      setFavoriteBackId(data?.favoriteBackId || 'default');
     } catch (e) { console.error(e); }
   };
 
@@ -506,9 +507,9 @@ export const DeckBuilder: React.FC = () => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {myDecks.map(d => (
+          {myDecks.map((d, index) => (
             <div
-              key={d.id}
+              key={d.id || `deck-${index}`}
               onClick={() => setSearchParams({ id: d.id })}
               className={cn(
                 "group p-3 rounded-xl border transition-all cursor-pointer relative",
@@ -796,11 +797,11 @@ export const DeckBuilder: React.FC = () => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {visibleCards.map(card => {
+          {visibleCards.map((card, index) => {
             const isOwned = (collection[card.uniqueId] || collection[card.id] || 0) > 0;
             return (
               <div
-                key={card.uniqueId}
+                key={card.uniqueId || card.id || `card-${index}`}
                 style={{ contentVisibility: 'auto', containIntrinsicSize: '96px 148px' }}
                 className={cn(
                   "bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 hover:border-zinc-600 transition-all group relative",

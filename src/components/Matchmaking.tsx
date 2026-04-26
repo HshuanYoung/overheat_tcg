@@ -266,9 +266,9 @@ export const Matchmaking: React.FC = () => {
           <>
             <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">选择你的卡组</h2>
             <div className="grid grid-cols-1 gap-3 mb-8">
-              {myDecks.map(deck => (
+              {myDecks.map((deck, index) => (
                 <motion.div
-                  key={deck.id}
+                  key={deck.id || `deck-${index}`}
                   whileHover={{ scale: 1.01 }}
                   onClick={() => setSelectedDeckId(deck.id)}
                   className={cn(

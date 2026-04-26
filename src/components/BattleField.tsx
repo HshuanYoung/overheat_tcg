@@ -7,6 +7,7 @@ import { socket, getAuthUser, onceAuthenticated, isSocketAuthenticated } from '.
 import { GameService } from '../services/gameService';
 import { hydrateGameState } from '../services/cardLoader';
 import { CARD_BACKS } from '../data/customization';
+import { readJsonResponse } from '../lib/http';
 
 import { CardComponent } from './Card';
 import { PlayField } from './PlayField';
@@ -129,22 +130,56 @@ export const BattleField: React.FC = () => {
   }, [me?.confrontationStrategy]);
 
 
+  const canActivateCardEffect = (card: Card | null | undefined, location: TriggerLocation) => {
+    if (!game || !myUid || !card) return false;
+    if (card.type === 'STORY' && location === 'HAND') return false;
+
+    return !!card.effects?.some((effect) =>
+      (effect.type === 'ACTIVATE' || effect.type === 'ACTIVATED') &&
+      GameService.checkEffectLimitsAndReqs(game, myUid, card, effect, location).valid
+    );
+  };
+
   const canConfront = useMemo(() => {
-    if (!me || me.canActivateEffect === false) return false;
-    
-    // Check hand for Story cards
-    const hasStoryInHand = (me.hand || []).some(c => c && c.type === 'STORY');
-    
-    // Check field for activated effects that aren't silenced
-    const fieldCards = [...(me.unitZone || []), ...(me.itemZone || [])];
-    const hasUsableEffect = fieldCards.some(c => {
-      if (!c || !c.effects) return false;
-      const isSilenced = (me.silencedEffectIds || []).length > 0; // Simple check, or check per-id
-      return c.effects.some(e => e && (e.type === 'ACTIVATE' || e.type === 'ACTIVATED'));
+    if (!game || !me || !myUid) return false;
+    if (game.pendingQuery || game.isResolvingStack || game.currentProcessingItem) return false;
+
+    const isCounteringTurn = game.phase === 'COUNTERING' && game.priorityPlayerId === myUid;
+    const isBattleFreeConfrontPrompt =
+      game.phase === 'BATTLE_FREE' &&
+      !!game.battleState?.askConfront &&
+      (
+        (game.battleState.askConfront === 'ASKING_OPPONENT' && !me.isTurn) ||
+        (game.battleState.askConfront === 'ASKING_TURN_PLAYER' && me.isTurn)
+      );
+
+    if (!isCounteringTurn && !isBattleFreeConfrontPrompt) return false;
+
+    const canPlayStory = (me.hand || []).some(card => {
+      const canPlayInPhase =
+        (isCounteringTurn && card.type === 'STORY') ||
+        (me.isTurn && game.phase === 'BATTLE_FREE' && card.type === 'STORY');
+
+      return canPlayInPhase && GameService.canPlayCard(game, me, card).canPlay;
     });
-    
-    return hasStoryInHand || hasUsableEffect;
-  }, [me]);
+    if (canPlayStory) return true;
+
+    const canActivateInPhase =
+      isCounteringTurn ||
+      (me.isTurn && ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'].includes(game.phase));
+    if (!canActivateInPhase) return false;
+
+    const activationZones: { cards: (Card | null)[]; location: TriggerLocation }[] = [
+      { cards: me.unitZone || [], location: 'UNIT' },
+      { cards: me.itemZone || [], location: 'ITEM' },
+      { cards: me.erosionFront || [], location: 'EROSION_FRONT' },
+      { cards: me.hand || [], location: 'HAND' }
+    ];
+
+    return activationZones.some(({ cards, location }) =>
+      cards.some(card => canActivateCardEffect(card, location))
+    );
+  }, [game, me, myUid]);
 
 
 
@@ -206,8 +241,8 @@ export const BattleField: React.FC = () => {
         const res = await fetch(`${BACKEND_URL}/api/user/profile`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
-        const data = await res.json();
-        if (data.favoriteBackId) {
+        const data = await readJsonResponse(res);
+        if (data?.favoriteBackId) {
           setFavoriteBackId(data.favoriteBackId);
         }
       } catch (e) {
@@ -584,12 +619,7 @@ export const BattleField: React.FC = () => {
         if (!card) return;
         if (card.type === 'STORY' && location === 'HAND') return;
 
-        const hasValidActivation = card.effects?.some((effect) =>
-          (effect.type === 'ACTIVATE' || effect.type === 'ACTIVATED') &&
-          GameService.checkEffectLimitsAndReqs(game, myUid, card, effect, location).valid
-        );
-
-        if (hasValidActivation) {
+        if (canActivateCardEffect(card, location)) {
           ids.add(card.gamecardId);
         }
       });
@@ -1551,7 +1581,6 @@ export const BattleField: React.FC = () => {
         </AnimatePresence>
 
         {/* Defense Declaration Prompt Overlay (Replacement for Modal) */}
-        <AnimatePresence>
         <StandardPopup
           isOpen={game.phase === 'DEFENSE_DECLARATION' && !me.isTurn && !isSelectingDefender}
           title="防御宣告"
@@ -1592,8 +1621,15 @@ export const BattleField: React.FC = () => {
           )}
         </AnimatePresence>
 
+        <AnimatePresence>
           {game.phase === 'DEFENSE_DECLARATION' && me.isTurn && (
-            <div className="absolute inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+            <motion.div
+              key="waiting-defense"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center pointer-events-none"
+            >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -1608,7 +1644,7 @@ export const BattleField: React.FC = () => {
                   <p className="text-blue-200/60 font-medium tracking-wide">对手正在选择单位阻挡你的攻击...</p>
                 </div>
               </motion.div>
-            </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -2882,52 +2918,54 @@ export const BattleField: React.FC = () => {
             </button>
           </motion.div>
         )}
-        <AnimatePresence>
-          {showFullLogs && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
-              onClick={() => setShowFullLogs(false)}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showFullLogs && (
+          <motion.div
+            key="battle-logs"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
+            onClick={() => setShowFullLogs(false)}
+          >
+            <div
+              className="max-w-2xl w-full bg-zinc-900 border border-white/10 rounded-[2.5rem] flex flex-col p-8 md:p-12 gap-8 shadow-[0_0_100px_rgba(242,125,38,0.1)] relative"
+              onClick={e => e.stopPropagation()}
             >
-              <div
-                className="max-w-2xl w-full bg-zinc-900 border border-white/10 rounded-[2.5rem] flex flex-col p-8 md:p-12 gap-8 shadow-[0_0_100px_rgba(242,125,38,0.1)] relative"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.4em]">记录</span>
-                    <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter">战斗记录</h2>
-                  </div>
-                  <button
-                    onClick={() => setShowFullLogs(false)}
-                    className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all"
-                  >
-                    <X className="w-6 h-6 text-white" />
-                  </button>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-[0.4em]">记录</span>
+                  <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter">战斗记录</h2>
                 </div>
-
-                <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-4 max-h-[60vh]">
-                  {game.logs.slice().reverse().map((log, i) => (
-                    <div key={i} className="group flex gap-4">
-                      <div className="w-1 h-auto bg-gradient-to-b from-[#f27d26] to-transparent opacity-20 group-hover:opacity-100 transition-opacity rounded-full" />
-                      <div className="flex-1 py-1">
-                        <p className="text-white/60 text-xs md:text-sm font-medium leading-relaxed group-hover:text-white transition-colors">
-                          {log}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex justify-center pt-4 opacity-20">
-                  <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-widest">记录结束</span>
-                </div>
+                <button
+                  onClick={() => setShowFullLogs(false)}
+                  className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all"
+                >
+                  <X className="w-6 h-6 text-white" />
+                </button>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+              <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-4 max-h-[60vh]">
+                {game.logs.slice().reverse().map((log, i) => (
+                  <div key={i} className="group flex gap-4">
+                    <div className="w-1 h-auto bg-gradient-to-b from-[#f27d26] to-transparent opacity-20 group-hover:opacity-100 transition-opacity rounded-full" />
+                    <div className="flex-1 py-1">
+                      <p className="text-white/60 text-xs md:text-sm font-medium leading-relaxed group-hover:text-white transition-colors">
+                        {log}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-center pt-4 opacity-20">
+                <span className="text-[10px] font-black text-[#f27d26] uppercase tracking-widest">记录结束</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Error Toast Notification */}

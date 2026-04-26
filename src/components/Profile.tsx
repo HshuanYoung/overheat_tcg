@@ -6,6 +6,7 @@ import { User, Settings, Image, Layout, Heart, Save, Loader2, X, Search, LogOut,
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { RAY_CARDS, CARD_BACKS } from '../data/customization';
+import { readJsonResponse } from '../lib/http';
 
 export const Profile: React.FC = () => {
   const user = getAuthUser();
@@ -26,9 +27,9 @@ export const Profile: React.FC = () => {
         const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
         const token = localStorage.getItem('token');
         const res = await fetch(`${BACKEND_URL}/api/user/profile`, { headers: { 'Authorization': `Bearer ${token}` }});
-        const data = await res.json();
-        setFavoriteCardId(data.favoriteCardId || 'fav_card');
-        setFavoriteBackId(data.favoriteBackId || 'default');
+        const data = await readJsonResponse(res);
+        setFavoriteCardId(data?.favoriteCardId || 'fav_card');
+        setFavoriteBackId(data?.favoriteBackId || 'default');
       } catch (e) {
         console.error(e);
       }
@@ -201,9 +202,9 @@ export const Profile: React.FC = () => {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                {RAY_CARDS.filter(c => c.name.includes(searchTerm)).map(card => (
+                {RAY_CARDS.filter(c => c.name.includes(searchTerm)).map((card, index) => (
                   <div 
-                    key={card.id} 
+                    key={card.id || `ray-${index}`} 
                     onClick={() => { setFavoriteCardId(card.id); setIsSelectingCard(false); }}
                     className={cn(
                       "cursor-pointer transition-all hover:scale-[1.02] group relative rounded-2xl overflow-hidden border-2",
@@ -257,9 +258,9 @@ export const Profile: React.FC = () => {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                {CARD_BACKS.filter(b => b.name.includes(searchTerm)).map(back => (
+                {CARD_BACKS.filter(b => b.name.includes(searchTerm)).map((back, index) => (
                   <div 
-                    key={back.id} 
+                    key={back.id || `back-${index}`} 
                     onClick={() => { setFavoriteBackId(back.id); setIsSelectingBack(false); }}
                     className={cn(
                       "cursor-pointer transition-all hover:scale-[1.02] group relative rounded-2xl overflow-hidden border-2",

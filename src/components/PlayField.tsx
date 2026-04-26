@@ -77,6 +77,7 @@ const CardSlot: React.FC<{
           (card || isDeck || count > 0) ? "bg-black/40 shadow-lg" : "bg-white/5",
           isSelectedForPayment ? "z-10 shadow-[0_0_20px_rgba(168,85,247,0.8)] ring-1 ring-purple-400" : "",
           isAllianceInitiator ? "z-10 shadow-[0_0_20px_rgba(220,38,38,0.8)] ring-2 ring-red-600" : "",
+          isHighlighted ? "z-20 !border-yellow-400 ring-2 ring-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.95)]" : "",
           (isAttacking || isDefending) ? "z-10" : "",
           className
         )}

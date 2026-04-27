@@ -1,5 +1,5 @@
 import { Card, CardEffect, TriggerLocation } from '../types/game';
-import { addTempDamage, addTempKeyword, addTempPower, allCardsOnField, createSelectCardQuery, destroyByEffect, erosionCost, getOpponentUid, millTop, moveCard } from './BaseUtil';
+import { addInfluence, allCardsOnField, createSelectCardQuery, destroyByEffect, ensureData, erosionCost, getOpponentUid, millTop, moveCard } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
     id: '101140098_start',
@@ -34,7 +34,7 @@ const cardEffects: CardEffect[] = [{
     type: 'ACTIVATE',
     triggerLocation: ['UNIT'],
     limitCount: 1,
-    erosionTotalLimit: [10, 99],
+    erosionTotalLimit: [10, 10],
     description: '10+，侵蚀2：选择战场上1张卡破坏。',
     cost: erosionCost(2),
     execute: async (instance, gameState, playerState) => {
@@ -61,13 +61,52 @@ const cardEffects: CardEffect[] = [{
     type: 'ACTIVATE',
     triggerLocation: ['UNIT'],
     limitCount: 1,
-    erosionTotalLimit: [10, 99],
+    erosionTotalLimit: [10, 10],
     description: '10+，侵蚀2：直到下一次你的回合结束，此单位变为伤害4、力量4000并获得英勇。',
     cost: erosionCost(2),
+    execute: async (instance, gameState, playerState) => {
+      const data = ensureData(instance);
+      data.bt01TenFormActive = true;
+      data.bt01TenFormActivatedTurn = gameState.turnCount;
+      data.bt01TenFormOwnerUid = playerState.uid;
+      instance.damage = 4;
+      instance.power = 4000;
+      instance.isHeroic = true;
+      addInfluence(instance, instance, '伤害变为4');
+      addInfluence(instance, instance, '力量变为4000');
+      addInfluence(instance, instance, '获得【英勇】');
+    }
+  }, {
+    id: '101140098_ten_form_continuous',
+    type: 'CONTINUOUS',
+    triggerLocation: ['UNIT'],
+    description: '愤怒：伤害4、力量4000并获得英勇。',
+    applyContinuous: (_gameState, instance) => {
+      if (!ensureData(instance).bt01TenFormActive) return;
+      instance.damage = 4;
+      instance.power = 4000;
+      instance.isHeroic = true;
+      addInfluence(instance, instance, '伤害变为4');
+      addInfluence(instance, instance, '力量变为4000');
+      addInfluence(instance, instance, '获得【英勇】');
+    }
+  }, {
+    id: '101140098_ten_form_clear',
+    type: 'TRIGGER',
+    triggerEvent: 'TURN_END' as any,
+    triggerLocation: ['UNIT'],
+    isMandatory: true,
+    description: '你的回合结束时，平静。',
+    condition: (gameState, playerState, instance, event) =>
+      event?.playerUid === playerState.uid &&
+      ensureData(instance).bt01TenFormActive &&
+      ensureData(instance).bt01TenFormOwnerUid === playerState.uid &&
+      gameState.turnCount >= ensureData(instance).bt01TenFormActivatedTurn,
     execute: async instance => {
-      addTempDamage(instance, instance, 4 - (instance.damage || 0));
-      addTempPower(instance, instance, 4000 - (instance.power || 0));
-      addTempKeyword(instance, instance, 'heroic');
+      const data = ensureData(instance);
+      delete data.bt01TenFormActive;
+      delete data.bt01TenFormActivatedTurn;
+      delete data.bt01TenFormOwnerUid;
     }
   }];
 

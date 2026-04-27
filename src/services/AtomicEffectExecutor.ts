@@ -1099,7 +1099,13 @@ export class AtomicEffectExecutor {
 
     // Specific Events based on movement
     if (shouldRefreshAsNewInstance) {
-      EventEngine.handleCardEnteredZone(gameState, playerUid, card, toZone, isEffect);
+      EventEngine.handleCardEnteredZone(gameState, playerUid, card, toZone, isEffect, {
+        sourceZone: fromZone,
+        targetZone: toZone,
+        effectSourcePlayerUid: options?.effectSourcePlayerUid,
+        effectSourceCardId: options?.effectSourceCardId,
+        previousSourceCardId
+      });
       EventEngine.dispatchMovementSubEvents(gameState, {
         card,
         cardOwnerUid: playerUid,
@@ -1131,7 +1137,12 @@ export class AtomicEffectExecutor {
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
         effectSourceCardId: options?.effectSourceCardId
       });
-      EventEngine.handleCardEnteredZone(gameState, playerUid, card, to, isEffect);
+      EventEngine.handleCardEnteredZone(gameState, playerUid, card, to, isEffect, {
+        sourceZone: from,
+        targetZone: to,
+        effectSourcePlayerUid: options?.effectSourcePlayerUid,
+        effectSourceCardId: options?.effectSourceCardId
+      });
     }
 
     EventEngine.dispatchMovementSubEvents(gameState, {

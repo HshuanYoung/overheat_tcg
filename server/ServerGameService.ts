@@ -664,7 +664,12 @@ export const ServerGameService = {
       }
     }
 
-    EventEngine.handleCardEnteredZone(gameState, targetPlayerId, card, targetZone, options?.isEffect);
+    EventEngine.handleCardEnteredZone(gameState, targetPlayerId, card, targetZone, options?.isEffect, {
+      sourceZone,
+      targetZone,
+      effectSourcePlayerUid: options?.effectSourcePlayerUid,
+      effectSourceCardId: options?.effectSourceCardId
+    });
     EventEngine.dispatchMovementSubEvents(gameState, {
       card,
       cardOwnerUid: sourcePlayerId,
@@ -1842,7 +1847,9 @@ export const ServerGameService = {
 
       gameState.phase = 'MAIN';
       gameState.phaseTimerStart = Date.now();
-        gameState.logs.push(`${gameState.players[playerUid].displayName} 进入主要阶段`);
+      gameState.logs.push(`${gameState.players[playerUid].displayName} 进入主要阶段`);
+      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'MAIN_PHASE_START' } });
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
       return gameState;
     }
 

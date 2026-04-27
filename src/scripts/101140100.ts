@@ -54,12 +54,12 @@ const cardEffects: CardEffect[] = [{
     description: '下一次你的回合结束时，将此效果放逐的卡放回其持有者的战场。',
     condition: (gameState, playerState, _instance, event) =>
       event?.playerUid === playerState.uid &&
-      ((playerState as any).bt01BlinkReturns || []).some((entry: any) => gameState.turnCount > entry.afterTurn),
+      ((playerState as any).bt01BlinkReturns || []).some((entry: any) => gameState.turnCount >= entry.afterTurn),
     execute: async (instance, gameState, playerState) => {
       const returns = ((playerState as any).bt01BlinkReturns || []) as any[];
       const remaining: any[] = [];
       returns.forEach(entry => {
-        if (gameState.turnCount <= entry.afterTurn) {
+        if (gameState.turnCount < entry.afterTurn) {
           remaining.push(entry);
           return;
         }

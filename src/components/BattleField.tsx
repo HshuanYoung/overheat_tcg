@@ -1242,6 +1242,7 @@ export const BattleField: React.FC = () => {
         description="选择如何处理正面朝上的侵蚀卡"
         mode={erosionChoice === 'B' || erosionChoice === 'C' ? 'card_selection' : 'double_selection'}
         confirmText="确认选择"
+        onConfirm={handleConfirmErosion}
         onSelectionComplete={handleConfirmErosion}
         cards={me.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT').map(c => c!)}
         selectedIds={selectedErosionCardId ? [selectedErosionCardId] : []}

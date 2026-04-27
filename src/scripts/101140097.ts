@@ -11,7 +11,7 @@ const cardEffects: CardEffect[] = [{
     condition: (_gameState, playerState, _instance, event) =>
       event?.playerUid === playerState.uid &&
       event.data?.zone === 'DECK' &&
-      (event.sourceCard as any)?.data?.lastMovedFromZone === 'GRAVE' &&
+      (event.data?.sourceZone === 'GRAVE' || (event.sourceCard as any)?.data?.lastMovedFromZone === 'GRAVE') &&
       ownUnits(playerState).length > 0,
     execute: async (instance, gameState, playerState) => {
       createSelectCardQuery(

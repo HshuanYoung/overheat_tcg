@@ -444,7 +444,20 @@ export class EventEngine {
     });
   }
 
-  static handleCardEnteredZone(gameState: GameState, playerUid: string, card: Card, zone: string, isEffect?: boolean) {
+  static handleCardEnteredZone(
+    gameState: GameState,
+    playerUid: string,
+    card: Card,
+    zone: string,
+    isEffect?: boolean,
+    options?: {
+      sourceZone?: TriggerLocation;
+      targetZone?: TriggerLocation;
+      effectSourcePlayerUid?: string;
+      effectSourceCardId?: string;
+      previousSourceCardId?: string;
+    }
+  ) {
     this.recalculateContinuousEffects(gameState);
 
     this.dispatchEvent(gameState, {
@@ -452,7 +465,15 @@ export class EventEngine {
       sourceCard: card,
       sourceCardId: card.gamecardId,
       playerUid,
-      data: { zone, isEffect: !!isEffect }
+      data: {
+        zone,
+        isEffect: !!isEffect,
+        sourceZone: options?.sourceZone,
+        targetZone: options?.targetZone || zone,
+        effectSourcePlayerUid: options?.effectSourcePlayerUid,
+        effectSourceCardId: options?.effectSourceCardId,
+        previousSourceCardId: options?.previousSourceCardId
+      }
     });
   }
 

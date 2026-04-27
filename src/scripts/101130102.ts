@@ -1,17 +1,37 @@
 import { Card, CardEffect, TriggerLocation } from '../types/game';
-import { createSelectCardQuery, moveCard } from './BaseUtil';
+import { createSelectCardQuery, ensureData, moveCard } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
+    id: '101130102_track_alliance_attack',
+    type: 'TRIGGER',
+    triggerEvent: 'CARD_ATTACK_DECLARED',
+    triggerLocation: ['UNIT'],
+    isGlobal: true,
+    isMandatory: true,
+    description: '记录此单位参与联军攻击。',
+    condition: (_gameState, _playerState, instance, event) =>
+      !!event?.data?.isAlliance &&
+      event.data.attackerIds?.includes(instance.gamecardId),
+    execute: async (instance, gameState, _playerState, event) => {
+      ensureData(instance).bt01AllianceAttackTurn = gameState.turnCount;
+      ensureData(instance).bt01AllianceAttackIds = event?.data?.attackerIds || [];
+    }
+  }, {
     id: '101130102_alliance_bottom',
     type: 'TRIGGER',
     triggerEvent: 'CARD_DESTROYED_BATTLE',
     triggerLocation: ['UNIT'],
     isGlobal: true,
     description: '此单位参与的联军攻击中战斗破坏对手单位时，可以将墓地1张卡放到卡组底。',
-    condition: (_gameState, playerState, instance, event) =>
+    condition: (gameState, playerState, instance, event) =>
       event?.playerUid !== playerState.uid &&
-      event?.data?.isAlliance &&
-      event.data.attackerIds?.includes(instance.gamecardId) &&
+      (
+        (event?.data?.isAlliance && event.data.attackerIds?.includes(instance.gamecardId)) ||
+        (
+          ensureData(instance).bt01AllianceAttackTurn === gameState.turnCount &&
+          ensureData(instance).bt01AllianceAttackIds?.includes(instance.gamecardId)
+        )
+      ) &&
       playerState.grave.length > 0,
     execute: async (instance, gameState, playerState) => {
       createSelectCardQuery(
@@ -29,6 +49,8 @@ const cardEffects: CardEffect[] = [{
     onQueryResolve: async (instance, gameState, playerState, selections) => {
       const target = playerState.grave.find(card => card.gamecardId === selections[0]);
       if (target) moveCard(gameState, playerState.uid, target, 'DECK', instance, { insertAtBottom: true });
+      delete ensureData(instance).bt01AllianceAttackTurn;
+      delete ensureData(instance).bt01AllianceAttackIds;
     }
   }];
 

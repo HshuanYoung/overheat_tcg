@@ -36,7 +36,7 @@ const cardEffects: CardEffect[] = [{
     triggerLocation: ['UNIT'],
     limitCount: 1,
     limitGlobal: true,
-    erosionTotalLimit: [10, 99],
+    erosionTotalLimit: [10, 10],
     description: '10+，1游戏1次，侵蚀2：横置对手最多2个非神蚀单位；下次对手回合开始不能重置。',
     cost: erosionCost(2),
     execute: async (instance, gameState, playerState) => {

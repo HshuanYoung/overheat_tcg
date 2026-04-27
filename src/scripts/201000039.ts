@@ -4,6 +4,8 @@ import { AtomicEffectExecutor, createSelectCardQuery, ensureData, moveCard, move
 const cardEffects: CardEffect[] = [story('201000039_sync', '创痕3：卡组顶2张放置到侵蚀区。回合结束时，墓地2张《同步集中》以外白色卡放到卡组底。', async (instance, gameState, playerState) => {
     moveTopDeckTo(gameState, playerState.uid, 2, 'EROSION_FRONT', instance);
     ensureData(instance).bt01SyncEndTurn = gameState.turnCount;
+    (playerState as any).bt01SyncEndBottomTurn = gameState.turnCount;
+    (playerState as any).bt01SyncEndBottomSourceId = instance.gamecardId;
   }, { erosionBackLimit: [3, 10] }), {
     id: '201000039_end_bottom',
     type: 'TRIGGER',
@@ -13,7 +15,13 @@ const cardEffects: CardEffect[] = [story('201000039_sync', '创痕3：卡组顶2
     description: '回合结束时，选择墓地最多2张《同步集中》以外白色卡放到卡组底。',
     condition: (_gameState, playerState, instance, event) =>
       event?.playerUid === playerState.uid &&
-      ensureData(instance).bt01SyncEndTurn === _gameState.turnCount &&
+      (
+        ensureData(instance).bt01SyncEndTurn === _gameState.turnCount ||
+        (
+          (playerState as any).bt01SyncEndBottomTurn === _gameState.turnCount &&
+          (playerState as any).bt01SyncEndBottomSourceId === instance.gamecardId
+        )
+      ) &&
       playerState.grave.some(card => card.id !== '201000039' && AtomicEffectExecutor.matchesColor(card, 'WHITE')),
     execute: async (instance, gameState, playerState) => {
       const candidates = playerState.grave.filter(card => card.id !== '201000039' && AtomicEffectExecutor.matchesColor(card, 'WHITE'));
@@ -36,6 +44,8 @@ const cardEffects: CardEffect[] = [story('201000039_sync', '创痕3：卡组顶2
         .filter((card): card is Card => !!card)
         .forEach(card => moveCard(gameState, playerState.uid, card, 'DECK', instance, { insertAtBottom: true }));
       delete ensureData(instance).bt01SyncEndTurn;
+      delete (playerState as any).bt01SyncEndBottomTurn;
+      delete (playerState as any).bt01SyncEndBottomSourceId;
     }
   }];
 

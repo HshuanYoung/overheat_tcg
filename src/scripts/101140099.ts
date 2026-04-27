@@ -1,7 +1,39 @@
 import { Card, CardEffect, TriggerLocation } from '../types/game';
-import { addInfluence } from './BaseUtil';
+import { addInfluence, ensureData } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
+    id: '101140099_track_damage',
+    type: 'TRIGGER',
+    triggerEvent: 'COMBAT_DAMAGE_CAUSED',
+    triggerLocation: ['UNIT'],
+    isMandatory: true,
+    description: '记录此单位本回合给予过对手战斗伤害。',
+    condition: (gameState, playerState, instance, event) =>
+      event?.playerUid !== playerState.uid &&
+      gameState.battleState?.attackers?.includes(instance.gamecardId),
+    execute: async (instance, gameState) => {
+      ensureData(instance).bt01DealtCombatDamageTurn = gameState.turnCount;
+    }
+  }, {
+    id: '101140099_end_reset_others',
+    type: 'TRIGGER',
+    triggerEvent: 'TURN_END' as any,
+    triggerLocation: ['UNIT'],
+    isMandatory: true,
+    description: '回合结束时，若此单位本回合给予过对手战斗伤害，将你的其他所有单位重置。',
+    condition: (gameState, playerState, instance, event) =>
+      event?.playerUid === playerState.uid &&
+      ensureData(instance).bt01DealtCombatDamageTurn === gameState.turnCount,
+    execute: async (instance, _gameState, playerState) => {
+      playerState.unitZone
+        .filter((unit): unit is Card => !!unit && unit.gamecardId !== instance.gamecardId)
+        .forEach(unit => {
+          unit.isExhausted = false;
+          addInfluence(unit, instance, '因效果重置');
+        });
+      delete ensureData(instance).bt01DealtCombatDamageTurn;
+    }
+  }, {
     id: '101140099_low_erosion_protect',
     type: 'CONTINUOUS',
     erosionTotalLimit: [0, 3],

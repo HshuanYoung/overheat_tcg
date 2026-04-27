@@ -314,6 +314,13 @@ export class EventEngine {
             description: '获得效果: 【永续】不会被战斗破坏'
           });
         }
+        if (card && (card as any).data?.bt01ReturnAtOwnEndSourceName) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.bt01ReturnAtOwnEndSourceName,
+            description: '在回合结束时回归战场'
+          });
+        }
       });
     });
 

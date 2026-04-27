@@ -21,7 +21,7 @@ const cardEffects: CardEffect[] = [{
   }, {
     id: '103000082_ten_plus',
     type: 'CONTINUOUS',
-    erosionTotalLimit: [10, 99],
+    erosionTotalLimit: [10, 10],
     description: '10+：伤害+3、力量+3500，获得速攻、歼灭。',
     applyContinuous: (_gameState, instance) => {
       addContinuousDamage(instance, instance, 3);

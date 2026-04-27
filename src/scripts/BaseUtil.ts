@@ -503,10 +503,23 @@ export const exhaustCost: CardEffect['cost'] = async (_gameState, _playerState, 
 };
 
 export const erosionCost = (amount: number): CardEffect['cost'] => async (gameState, playerState, instance) => {
-  const targets = faceUpErosion(playerState).slice(0, amount);
+  const targets = faceUpErosion(playerState);
   if (targets.length < amount) return false;
-  targets.forEach(card => moveCard(gameState, playerState.uid, card, 'EROSION_BACK', instance, { faceDown: true }));
-  gameState.logs.push(`[${instance.fullName}] 支付侵蚀${amount}：将 ${amount} 张正面侵蚀卡转为背面。`);
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    targets,
+    `支付侵蚀${amount}`,
+    `选择侵蚀区中的${amount}张正面卡，转为背面以支付 [${instance.fullName}] 的费用。`,
+    amount,
+    amount,
+    {
+      sourceCardId: instance.gamecardId,
+      costType: 'EROSION_COST',
+      erosionCostAmount: amount
+    },
+    () => 'EROSION_FRONT'
+  );
   return true;
 };
 

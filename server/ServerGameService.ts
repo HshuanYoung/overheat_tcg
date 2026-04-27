@@ -1563,6 +1563,15 @@ export const ServerGameService = {
       // Queue is empty, settlement is truly complete
       ServerGameService.checkBattleInterruption(gameState);
 
+      if (gameState.phase === 'START') {
+        const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+        const currentPlayer = gameState.players[currentPlayerId];
+        if (currentPlayer) {
+          await ServerGameService.executeStartPhase(gameState, currentPlayer);
+        }
+        return;
+      }
+
       // If we were in the middle of ending a turn, resume the transition
       if (gameState.phase === 'END') {
         const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
@@ -1723,7 +1732,28 @@ export const ServerGameService = {
       const effect = sourceCard.effects?.[effectIndex];
       const activationPlayerUid = query.context?.activationPlayerUid || playerUid;
 
-      if (effect && effect.onQueryResolve) {
+      if (query.context?.costType === 'EROSION_COST') {
+        const amount = query.context?.erosionCostAmount || selections.length;
+        const player = gameState.players[playerUid];
+        const selectedCards = selections
+          .map(id => player.erosionFront.find(card => card?.gamecardId === id))
+          .filter((card): card is Card => !!card && card.displayState === 'FRONT_UPRIGHT');
+
+        if (selectedCards.length !== amount) {
+          gameState.pendingQuery = query;
+          throw new Error(`请选择 ${amount} 张正面侵蚀卡支付费用`);
+        }
+
+        selectedCards.forEach(card => {
+          ServerGameService.moveCard(gameState, playerUid, 'EROSION_FRONT', playerUid, 'EROSION_BACK', card.gamecardId, {
+            faceDown: true,
+            isEffect: true,
+            effectSourcePlayerUid: activationPlayerUid,
+            effectSourceCardId: sourceCard.gamecardId
+          });
+        });
+        gameState.logs.push(`[${sourceCard.fullName}] 支付侵蚀${amount}：将 ${amount} 张正面侵蚀卡转为背面。`);
+      } else if (effect && effect.onQueryResolve) {
         await (effect.onQueryResolve as any)(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
       }
 
@@ -2394,6 +2424,7 @@ export const ServerGameService = {
     if (gameState.phase !== 'SHENYI_CHOICE') {
       gameState.phase = 'MAIN';
       gameState.phaseTimerStart = Date.now();
+      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_END' } });
       gameState.logs.push(`${attacker.displayName} 进入主要阶段 (战斗结算后)`);
     }
 
@@ -2868,6 +2899,9 @@ export const ServerGameService = {
       EventEngine.recalculateContinuousEffects(gameState);
 
       // 4. Start the next phase
+      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', playerUid: nextPlayerId, data: { phase: 'START' } });
+      await ServerGameService.checkTriggeredEffects(gameState);
+      if (gameState.pendingQuery || gameState.phase !== 'START') return;
       await ServerGameService.executeStartPhase(gameState, nextPlayer);
 
     } catch (err: any) {
@@ -2998,6 +3032,7 @@ export const ServerGameService = {
 
       if (gameState.pendingQuery) {
         // If query triggered by cost, we must wait
+        gameState.pendingQuery.callbackKey = 'ACTIVATE_COST_RESOLVE';
         gameState.pendingQuery.context = {
           ...gameState.pendingQuery.context,
           sourceCardId: card.gamecardId,
@@ -3120,6 +3155,8 @@ export const ServerGameService = {
         gameState.turnCount = 1;
         gameState.logs.push(`[阶段切换] 进入开始阶段`);
         EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } });
+        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+        if (gameState.pendingQuery || gameState.phase !== 'START') return gameState;
         await ServerGameService.executeStartPhase(gameState, turnPlayer);
         break;
       case 'START':

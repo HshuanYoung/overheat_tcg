@@ -47,6 +47,7 @@ const cardEffects: CardEffect[] = [{
     triggerLocation: ['UNIT'],
     description: '记录此单位参与的攻击，用于攻击结束重置。',
     isMandatory: true,
+    isGlobal: true,
     condition: (_gameState, _playerState, instance, event) => !!event?.data?.attackerIds?.includes(instance.gamecardId),
     execute: async (instance, gameState, _playerState, event) => {
       ensureData(instance).bt01LastAllianceAttackIds = event?.data?.attackerIds || [];
@@ -58,7 +59,7 @@ const cardEffects: CardEffect[] = [{
     triggerLocation: ['UNIT'],
     limitCount: 1,
     limitGlobal: true,
-    erosionTotalLimit: [10, 99],
+    erosionTotalLimit: [10, 10],
     description: '10+，1游戏1次，侵蚀1：选择墓地6张卡放到卡组底。',
     cost: erosionCost(1),
     execute: async (instance, gameState, playerState) => {

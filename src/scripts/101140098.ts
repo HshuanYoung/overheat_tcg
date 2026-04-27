@@ -104,7 +104,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,
-  isHeroic: true,
+  isHeroic: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,

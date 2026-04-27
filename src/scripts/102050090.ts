@@ -37,7 +37,7 @@ const cardEffects: CardEffect[] = [{
     type: 'TRIGGER',
     triggerEvent: 'GODDESS_TRANSFORMATION',
     triggerLocation: ['HAND'],
-    erosionTotalLimit: [10, 99],
+    erosionTotalLimit: [10, 10],
     description: '10+：进入女神化时，可以从手牌放置到战场，选择最多2个单位伤害+1、力量+1000。',
     cost: erosionCost(1),
     execute: async (instance, gameState, playerState) => {

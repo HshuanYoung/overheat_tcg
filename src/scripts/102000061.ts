@@ -6,7 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'ACTIVATE',
   triggerLocation: ['UNIT'],
   limitCount: 1,
-  erosionTotalLimit: [10, 99],
+  erosionTotalLimit: [10, 10],
   description: '10+，1回合1次，侵蚀2：选择1张卡，将其破坏。',
   condition: (gameState, playerState) =>
     playerState.isTurn &&

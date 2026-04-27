@@ -2849,7 +2849,7 @@ export const BattleField: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-md flex flex-col md:flex-row items-center justify-center p-4 md:p-12 cursor-pointer"
+            className="fixed inset-0 z-[2600] bg-black/95 backdrop-blur-md flex flex-col md:flex-row items-center justify-center p-4 md:p-12 cursor-pointer"
             onClick={() => setPreviewCard(null)}
           >
             <div
@@ -2991,7 +2991,7 @@ export const BattleField: React.FC = () => {
                 e.stopPropagation();
                 setPreviewCard(null);
               }}
-              className="fixed top-4 right-4 md:top-10 md:right-10 z-[1100] p-3 md:p-4 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl text-white shadow-2xl hover:bg-white/10 transition-all group"
+              className="fixed top-4 right-4 md:top-10 md:right-10 z-[2700] p-3 md:p-4 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl text-white shadow-2xl hover:bg-white/10 transition-all group"
             >
               <X className="w-6 h-6 md:w-10 md:h-10 group-hover:scale-110 transition-transform" />
               <span className="sr-only">关闭详情</span>

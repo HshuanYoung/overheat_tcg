@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】〖1回合1次〗:[〖0:红红〗]你的主要阶段中才可以发动。给予所有玩家1点伤害。
+ * 【启】〖1回合1次〗:[〖支付0费，我方单位区有两个或者以上的红色单位〗]你的主要阶段中才可以发动。给予所有玩家1点伤害。
  * 〖9~9〗【诱】:这个单位进入战场时，给予你1点伤害。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
@@ -38,7 +38,7 @@ const card: Card = {
   effects: [],
   rarity: 'U',
   availableRarities: ['U'],
-  cardPackage: 'ST01,BT01',
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

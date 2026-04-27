@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【创痕2】（你的侵蚀区中的背面卡有3张以上时才有效）选择1张神蚀卡，将其破坏。之后，给予你1点伤害。你处于女神化状态时，手牌中的这张卡的ACCESS值变为〖0:红红〗。
+ * 【创痕2】（你的侵蚀区中的背面卡有3张以上时才有效）选择1张神蚀卡，将其破坏。之后，给予你1点伤害。你处于女神化状态时，手牌中的这张卡的ACCESS值变为〖0〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

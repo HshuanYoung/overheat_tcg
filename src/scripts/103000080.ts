@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】:[〖0:绿绿〗，将这个单位放逐]将你的卡组顶的3张卡送入墓地。之后，从那3张卡中选择1个〖力量2500〗以下的非神蚀单位，放置到战场上。
+ * 【启】:[〖支付0费，我方单位区有两个或者以上的绿色单位〗，将这个单位放逐]将你的卡组顶的3张卡送入墓地。之后，从那3张卡中选择1个〖力量2500〗以下的非神蚀单位，放置到战场上。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

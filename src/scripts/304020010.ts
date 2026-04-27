@@ -104,7 +104,7 @@ const card: Card = {
   ],
   rarity: 'C',
   availableRarities: ['C'],
-  cardPackage: 'BT01,ST03',
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

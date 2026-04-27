@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】〖1回合1次〗:[〖+2〗]这个单位〖力量+1000〗。
+ * 【启】〖1回合1次〗:[〖支付2费〗]这个单位〖力量+1000〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

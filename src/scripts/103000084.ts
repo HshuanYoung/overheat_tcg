@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】:[〖绿绿〗，将你的战场上的3个非神蚀单位送入墓地]这个能力只能在你的主要阶段中从墓地发动，且不能用于对抗。将这张卡放置到战场上，本回合中，这个单位获得【速攻】【歼灭】。 
+ * 【启】:[〖我方单位区有两个或者以上的绿色单位〗，将你的战场上的3个非神蚀单位送入墓地]这个能力只能在你的主要阶段中从墓地发动，且不能用于对抗。将这张卡放置到战场上，本回合中，这个单位获得【速攻】【歼灭】。 
  * 〖10+〗 【启】〖1游戏1次〗:[〖侵蚀2〗]选择对手的2个非神蚀单位，将其横置。下次对手的回合开始阶段中，那些单位不能重置。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
@@ -38,7 +38,7 @@ const card: Card = {
   canResetCount: 0,
   effects: [],
   rarity: 'SR',
-  availableRarities: ['SR', 'SER', 'UR'],
+  availableRarities: ['SR', 'SER'],
   cardPackage: 'BT01',
   uniqueId: null as any,
 };

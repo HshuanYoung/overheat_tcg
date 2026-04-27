@@ -11,7 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 【永】:你的战场上的<瑟诺布>单位有2个以上时，这个单位才能宣言攻击和防御。
- * 【启】〖同名1回合1次〗:[〖+1〗，〖横置〗]这个能力只能在你的主要阶段中发动。选择对手的1个力量值在这个单位以下的非神蚀单位，回合结束时，将那个单位破坏。
+ * 【启】〖同名1回合1次〗:[〖支付1费〗，〖横置〗]这个能力只能在你的主要阶段中发动。选择对手的1个力量值在这个单位以下的非神蚀单位，回合结束时，将那个单位破坏。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

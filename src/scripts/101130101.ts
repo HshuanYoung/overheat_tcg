@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】:[〖0:白白〗，将这个单位放逐]选择你的墓地中的1张卡，放置到卡组底。
+ * 【启】:[〖支付0费，我方场上有两个或以上的白色单位〗，将这个单位放逐]选择你的墓地中的1张卡，放置到卡组底。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

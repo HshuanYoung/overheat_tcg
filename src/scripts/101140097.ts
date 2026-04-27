@@ -11,6 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 【诱】:你的卡从墓地进入卡组时，选择你的1个单位，本回合中〖伤害+1〗〖力量+500〗。 
+ * 
  * 愿菲之女神的保佑与你同在。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
@@ -38,7 +39,7 @@ const card: Card = {
   effects: [],
   rarity: 'U',
   availableRarities: ['U', 'C'],
-  cardPackage: 'ST01,BT01',
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

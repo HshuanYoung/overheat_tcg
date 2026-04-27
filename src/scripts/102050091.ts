@@ -12,7 +12,7 @@ import { Card } from '../types/game';
  * Card Detail:
  * 【永】:你的所有红色神蚀单位获得【速攻】。
  * 【永】:这个单位可以攻击对手的横置单位。
- * 【诱】:[〖+3:红红〗]你的1个单位将要被战斗破坏时，你可以将这张卡从手牌放置到战场上。之后，防止那次破坏。
+ * 【诱】:[〖支付三费，我方场上有两个或以上的红色单位〗]你的1个单位将要被战斗破坏时，你可以将这张卡从手牌放置到战场上。之后，防止那次破坏。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

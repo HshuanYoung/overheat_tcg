@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】〖1回合1次〗:[〖0:绿绿〗]选择1名对手，将那名对手和你的卡组顶的1张卡分别送入墓地。
+ * 【启】〖1回合1次〗:[〖支付0费，我方单位区有两个或者以上的绿色单位〗]将对手和你的卡组顶的1张卡分别送入墓地。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

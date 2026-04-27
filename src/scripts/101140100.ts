@@ -36,8 +36,8 @@ const card: Card = {
   canResetCount: 0,
   effects: [],
   rarity: 'U',
-  availableRarities: ['U', 'C'],
-  cardPackage: 'ST01,BT01',
+  availableRarities: ['U'],
+  cardPackage: 'BT01',
   uniqueId: null as any,
 };
 

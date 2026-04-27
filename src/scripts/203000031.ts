@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 〖同名1回合1次〗选择对手的侵蚀区中的1张正面卡，将其〖翻面〗。
+ * 〖同名1回合1次〗选择对手的侵蚀区中的1张正面卡，将其转为背面。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

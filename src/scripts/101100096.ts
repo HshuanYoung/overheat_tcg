@@ -11,7 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 【永】:这个单位参与的联军攻击中，你的白色联军单位不会被破坏。
- * 【诱】〖1回合1次〗:[〖+1〗]这个单位参与的攻击结束时，你可以将你的所有参战单位重置。
+ * 【诱】〖1回合1次〗:[〖支付一费〗]这个单位参与的攻击结束时，你可以将你的所有参战单位重置。
  * 〖10+〗【启】〖1游戏1次〗:[〖侵蚀1〗]选择你的墓地中的6张卡，放置到卡组底。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */

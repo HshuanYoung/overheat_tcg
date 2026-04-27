@@ -579,6 +579,10 @@ export const BattleField: React.FC = () => {
 
   const getEffectiveCardCost = (card: Card, player: PlayerState | null = me) => {
     const baseCost = card.baseAcValue ?? card.acValue ?? 0;
+    if (card.id === '101140062' && player) {
+      const unitCount = player.unitZone.filter(Boolean).length;
+      return Math.max(0, baseCost - unitCount);
+    }
     if (card.id === '205110063' && player) {
       const itemCount = player.itemZone.filter(Boolean).length;
       return Math.max(0, baseCost - itemCount);

@@ -13,6 +13,10 @@ export const ServerGameService = {
 
   getEffectivePlayCost(player: PlayerState, card: Card) {
     const baseCost = card.baseAcValue ?? card.acValue ?? 0;
+    if (card.id === '101140062') {
+      const unitCount = player.unitZone.filter(c => c !== null).length;
+      return Math.max(0, baseCost - unitCount);
+    }
     if (card.id === '205110063') {
       const itemCount = player.itemZone.filter(c => c !== null).length;
       return Math.max(0, baseCost - itemCount);
@@ -1415,6 +1419,7 @@ export const ServerGameService = {
               if (effect.execute) {
                 await (effect.execute as any)(card, gameState, owner);
               }
+              EventEngine.recalculateContinuousEffects(gameState);
 
               const identity = getCardIdentity(gameState, stackItem.ownerUid, card);
               gameState.logs.push(`[效果结算] ${identity} ${card.fullName} 的效果已结算。`);
@@ -2255,7 +2260,12 @@ export const ServerGameService = {
       EventEngine.dispatchEvent(gameState, {
         type: 'COMBAT_DAMAGE_CAUSED',
         playerUid: defenderId,
-        data: { amount: finalDamage, source: 'BATTLE' }
+        data: {
+          amount: finalDamage,
+          source: 'BATTLE',
+          attackerIds: gameState.battleState.attackers || [],
+          isAlliance: !!gameState.battleState.isAlliance
+        }
       });
 
       ServerGameService.applyDamageToPlayer(gameState, defenderId, totalDamage, 'BATTLE');
@@ -2288,6 +2298,16 @@ export const ServerGameService = {
               // Annihilation Effect
               if (attackingUnit.isAnnihilation) {
                 gameState.logs.push(`【歼灭】效果触发！${attackingUnit.fullName} 对对手造成额外伤害`);
+                EventEngine.dispatchEvent(gameState, {
+                  type: 'COMBAT_DAMAGE_CAUSED',
+                  playerUid: defenderId,
+                  data: {
+                    amount: attackingUnit.damage || 0,
+                    source: 'BATTLE',
+                    attackerIds: [attackingUnit.gamecardId],
+                    isAlliance: !!gameState.battleState?.isAlliance
+                  }
+                });
                 ServerGameService.applyDamageToPlayer(gameState, defenderId, attackingUnit.damage || 0, 'BATTLE');
               }
             }
@@ -2589,6 +2609,16 @@ export const ServerGameService = {
 
     const totalAnnihilationDamage = annihilators.reduce((sum, u) => sum + (u.damage || 0), 0);
     gameState.logs.push(`【歼灭】效果触发！幸存的联军单位造成额外伤害 (${totalAnnihilationDamage})`);
+    EventEngine.dispatchEvent(gameState, {
+      type: 'COMBAT_DAMAGE_CAUSED',
+      playerUid: defenderPlayerId,
+      data: {
+        amount: totalAnnihilationDamage,
+        source: 'BATTLE',
+        attackerIds: annihilators.map(unit => unit.gamecardId),
+        isAlliance: true
+      }
+    });
     ServerGameService.applyDamageToPlayer(gameState, defenderPlayerId, totalAnnihilationDamage, 'BATTLE');
   },
 

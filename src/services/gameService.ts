@@ -59,6 +59,10 @@ const canUse205000136AsPaymentSubstitute = (paymentCard: Card | undefined, cardC
 
 const getEffectivePlayCost = (player: PlayerState, card: Card) => {
   const baseCost = card.baseAcValue ?? card.acValue ?? 0;
+  if (card.id === '101140062') {
+    const unitCount = player.unitZone.filter(c => c !== null).length;
+    return Math.max(0, baseCost - unitCount);
+  }
   if (card.id === '205110063') {
     const itemCount = player.itemZone.filter(c => c !== null).length;
     return Math.max(0, baseCost - itemCount);

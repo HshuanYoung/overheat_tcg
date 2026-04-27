@@ -9,8 +9,6 @@ const cardEffects: CardEffect[] = [{
   erosionTotalLimit: [10, 10],
   description: '10+，1回合1次，侵蚀2：选择2个非神蚀单位，将其重置。',
   condition: (gameState, playerState) =>
-    playerState.isTurn &&
-    gameState.phase === 'MAIN' &&
     allUnitsOnField(gameState).filter(unit => !unit.godMark).length >= 2,
   cost: erosionCost(2),
   execute: async (instance, gameState, playerState) => {

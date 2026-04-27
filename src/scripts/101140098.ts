@@ -101,12 +101,13 @@ const cardEffects: CardEffect[] = [{
       event?.playerUid === playerState.uid &&
       ensureData(instance).bt01TenFormActive &&
       ensureData(instance).bt01TenFormOwnerUid === playerState.uid &&
-      gameState.turnCount >= ensureData(instance).bt01TenFormActivatedTurn,
+      gameState.turnCount > ensureData(instance).bt01TenFormActivatedTurn,
     execute: async instance => {
       const data = ensureData(instance);
       delete data.bt01TenFormActive;
       delete data.bt01TenFormActivatedTurn;
       delete data.bt01TenFormOwnerUid;
+      instance.isHeroic = instance.baseHeroic ?? false;
     }
   }];
 

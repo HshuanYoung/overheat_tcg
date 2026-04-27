@@ -9,6 +9,17 @@ export class EventEngine {
   }
 
   static dispatchEvent(gameState: GameState, event: GameEvent) {
+    if (event.type === 'REVEAL_DECK' && Array.isArray(event.data?.cards) && event.data.cards.length > 0 && event.playerUid) {
+      const revealingPlayer = gameState.players[event.playerUid];
+      gameState.publicReveal = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        playerUid: event.playerUid,
+        playerName: revealingPlayer?.displayName || '玩家',
+        cards: event.data.cards,
+        createdAt: Date.now()
+      };
+    }
+
     // 1. Find all active effects that listen to this event
     const triggeredEffects: { card: Card, effect: CardEffect, effectIndex: number, playerUid: string }[] = [];
     const findCardByGamecardId = (gamecardId?: string) => {

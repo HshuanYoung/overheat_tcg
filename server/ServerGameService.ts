@@ -12,7 +12,7 @@ export const ServerGameService = {
   },
 
   getEffectivePlayCost(player: PlayerState, card: Card) {
-    const baseCost = card.acValue || 0;
+    const baseCost = card.baseAcValue ?? card.acValue ?? 0;
     if (card.id === '205110063') {
       const itemCount = player.itemZone.filter(c => c !== null).length;
       return Math.max(0, baseCost - itemCount);

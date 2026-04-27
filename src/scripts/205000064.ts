@@ -10,6 +10,15 @@ const effect_205000064_activate: CardEffect = {
   description: 'Reveal the top 3 cards of your deck. Choose a non-god unit from among them, put it onto the battlefield, and it gains Rush. At end of turn, if it is not an alchemy unit, banish it.',
   execute: async (instance, gameState, playerState) => {
     const revealed = getTopDeckCards(playerState, 3);
+    if (revealed.length > 0) {
+      gameState.logs.push(`[${instance.fullName}] 公开了卡组顶的 ${revealed.length} 张卡: ${revealed.map(card => card.fullName).join(', ')}。`);
+      EventEngine.dispatchEvent(gameState, {
+        type: 'REVEAL_DECK',
+        playerUid: playerState.uid,
+        data: { cards: revealed, sourceCardId: instance.gamecardId, sourceCardName: instance.fullName }
+      });
+    }
+
     const candidates = revealed.filter(card =>
       card.type === 'UNIT' &&
       !card.godMark &&

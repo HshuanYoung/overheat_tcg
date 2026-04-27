@@ -6,20 +6,46 @@ const effect_205110061_activate: CardEffect = {
   id: '205110061_activate',
   type: 'ACTIVATE',
   triggerLocation: ['PLAY'],
-  description: 'Randomly discard up to 3 cards from your hand. If exactly 3 were discarded, choose up to 3 cards with matching names from your deck and add them to your hand.',
+  description: 'Choose up to 3 cards from your hand and discard them. If exactly 3 were discarded, choose up to 4 cards with matching names from your deck and add them to your hand.',
   execute: async (instance, gameState, playerState) => {
-    const discardCount = Math.min(3, playerState.hand.length);
-    if (discardCount === 0) return;
+    if (playerState.hand.length === 0) return;
 
-    const shuffled = [...playerState.hand].sort(() => Math.random() - 0.5);
-    const discarded = shuffled.slice(0, discardCount);
-    const discardedNames = discarded.map(card => card.fullName);
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      [...playerState.hand],
+      'Discard Cards',
+      'Choose up to 3 cards from your hand to discard.',
+      0,
+      Math.min(3, playerState.hand.length),
+      { sourceCardId: instance.gamecardId, effectId: '205110061_activate', step: 'DISCARD' },
+      () => 'HAND'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'SEARCH') {
+      for (const selectedId of selections) {
+        await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+          type: 'MOVE_FROM_DECK',
+          targetFilter: { gamecardId: selectedId },
+          destinationZone: 'HAND'
+        }, instance);
+      }
+      await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+        type: 'SHUFFLE_DECK'
+      }, instance);
+      return;
+    }
+
+    const discarded = selections
+      .map(id => playerState.hand.find(card => card.gamecardId === id))
+      .filter((card): card is Card => !!card);
 
     discarded.forEach(card => moveCard(gameState, playerState.uid, card, 'GRAVE', instance));
-
     if (discarded.length !== 3) return;
 
-    const candidates = playerState.deck.filter(card => discardedNames.includes(card.fullName));
+    const discardedNames = new Set(discarded.map(card => card.fullName));
+    const candidates = playerState.deck.filter(card => discardedNames.has(card.fullName));
     if (candidates.length === 0) return;
 
     createSelectCardQuery(
@@ -27,22 +53,12 @@ const effect_205110061_activate: CardEffect = {
       playerState.uid,
       candidates,
       'Choose Cards',
-      'Choose up to 3 cards with matching names from your deck.',
+      'Choose up to 4 cards with the same names as the discarded cards from your deck.',
       0,
-      Math.min(3, candidates.length),
-      { sourceCardId: instance.gamecardId, effectId: '205110061_activate' },
+      Math.min(4, candidates.length),
+      { sourceCardId: instance.gamecardId, effectId: '205110061_activate', step: 'SEARCH' },
       () => 'DECK'
     );
-  },
-  onQueryResolve: async (instance, gameState, playerState, selections) => {
-    for (const selectedId of selections) {
-      await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-        type: 'MOVE_FROM_DECK',
-        targetFilter: { gamecardId: selectedId },
-        destinationZone: 'HAND'
-      }, instance);
-    }
-    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
   }
 };
 

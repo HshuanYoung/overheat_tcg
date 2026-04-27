@@ -392,6 +392,13 @@ export interface GameState {
   pendingQuery?: EffectQuery;
   pendingShenyi?: PendingShenyi;
   turnTimerLimit?: number; // Total seconds for turn timer (180-999)
+  publicReveal?: {
+    id: string;
+    playerUid: string;
+    playerName: string;
+    cards: Card[];
+    createdAt: number;
+  };
 }
 
 export interface Deck {

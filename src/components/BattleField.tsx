@@ -112,6 +112,7 @@ export const BattleField: React.FC = () => {
   const [interruptionNotice, setInterruptionNotice] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [isPopupHidden, setIsPopupHidden] = useState(false);
+  const [dismissedPublicRevealId, setDismissedPublicRevealId] = useState<string | null>(null);
   const lastStrategyUpdateRef = useRef<number>(0);
 
 
@@ -218,6 +219,16 @@ export const BattleField: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [lastError]);
+
+  useEffect(() => {
+    const revealId = game?.publicReveal?.id;
+    if (!revealId || dismissedPublicRevealId === revealId) return;
+
+    const timer = setTimeout(() => {
+      setDismissedPublicRevealId(revealId);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [game?.publicReveal?.id, dismissedPublicRevealId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -564,6 +575,15 @@ export const BattleField: React.FC = () => {
       const card = me.hand.find(c => c.gamecardId === gamecardId);
       return total + (card ? getHandPaymentValue(card, paymentColor, paymentCost, excludeCardId) : 0);
     }, 0);
+  };
+
+  const getEffectiveCardCost = (card: Card, player: PlayerState | null = me) => {
+    const baseCost = card.baseAcValue ?? card.acValue ?? 0;
+    if (card.id === '205110063' && player) {
+      const itemCount = player.itemZone.filter(Boolean).length;
+      return Math.max(0, baseCost - itemCount);
+    }
+    return baseCost;
   };
 
   const pendingQuery = game?.pendingQuery;
@@ -929,7 +949,7 @@ export const BattleField: React.FC = () => {
     if (isCounteringTurn && card.type !== 'STORY') return;
 
     const playEffect = card.effects?.find(e => e.type === 'ACTIVATE' || e.type === 'TRIGGER' || e.type === 'ALWAYS');
-    const cost = card.acValue;
+    const cost = getEffectiveCardCost(card);
 
     if (cost === 0) {
       try {
@@ -1040,7 +1060,7 @@ export const BattleField: React.FC = () => {
     setPaymentSelection(prev => {
       const isExhausted = prev.exhaustIds.includes(gamecardId);
       if (!isExhausted) {
-        const required = pendingPlayCard ? pendingPlayCard.acValue : (game.pendingQuery?.paymentCost || 0);
+        const required = pendingPlayCard ? getEffectiveCardCost(pendingPlayCard) : (game.pendingQuery?.paymentCost || 0);
         const paymentColor = pendingPlayCard ? pendingPlayCard.color : game.pendingQuery?.paymentColor;
         const excludeCardId = pendingPlayCard?.gamecardId;
         const currentHandValue = prev.useFeijing.reduce((total, selectedId) => {
@@ -1077,7 +1097,7 @@ export const BattleField: React.FC = () => {
     setPaymentSelection(prev => {
       const isUsed = prev.erosionFrontIds.includes(gamecardId);
       if (!isUsed) {
-        const required = pendingPlayCard ? Math.abs(pendingPlayCard.acValue) : Math.abs(game.pendingQuery?.paymentCost || 0);
+        const required = pendingPlayCard ? Math.abs(getEffectiveCardCost(pendingPlayCard)) : Math.abs(game.pendingQuery?.paymentCost || 0);
         if (prev.erosionFrontIds.length >= required) return prev;
       }
       return {
@@ -1163,11 +1183,58 @@ export const BattleField: React.FC = () => {
     );
   }
 
+  const activePublicReveal = game.publicReveal && dismissedPublicRevealId !== game.publicReveal.id
+    ? game.publicReveal
+    : null;
+
   return (
     <div
       className="h-screen pt-16 bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative safe-area-inset"
       onClick={() => setCardMenu(null)}
     >
+      <AnimatePresence>
+        {activePublicReveal && (
+          <motion.div
+            key={activePublicReveal.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2500] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 md:p-10 pointer-events-none"
+          >
+            <motion.div
+              initial={{ scale: 0.94, y: 24 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.98, y: -12 }}
+              className="w-full max-w-6xl flex flex-col items-center gap-6"
+            >
+              <div className="text-center space-y-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#f27d26]/30 bg-[#f27d26]/10 px-4 py-2 text-[10px] font-black tracking-widest text-[#f27d26]">
+                  <Sparkles className="h-4 w-4" />
+                  公开卡牌
+                </div>
+                <h3 className="text-2xl md:text-5xl font-black italic tracking-tight text-white">
+                  {activePublicReveal.playerName} 公开了 {activePublicReveal.cards.length} 张卡
+                </h3>
+              </div>
+
+              <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 md:gap-5 place-items-center">
+                {activePublicReveal.cards.map((card, index) => (
+                  <motion.div
+                    key={`${activePublicReveal.id}-${card.gamecardId}-${index}`}
+                    initial={{ opacity: 0, y: 18, rotate: -2 }}
+                    animate={{ opacity: 1, y: 0, rotate: 0 }}
+                    transition={{ delay: index * 0.04 }}
+                    className="w-full max-w-[9.5rem] overflow-hidden rounded-xl border-2 border-white/15 bg-zinc-950 shadow-2xl"
+                  >
+                    <CardComponent card={card} disableZoom cardBackUrl={cardBackUrl} />
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Standardized Erosion Phase Popup */}
       <StandardPopup
         isOpen={game.phase === 'EROSION' && me.isTurn && me.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT')}
@@ -1242,17 +1309,17 @@ export const BattleField: React.FC = () => {
                     <span className="text-zinc-500 text-[10px] font-bold tracking-widest">需求</span>
                     <span className={cn(
                       "text-3xl font-black px-4 py-1 rounded-xl",
-                      pendingPlayCard.acValue > 0 ? "bg-red-600/20 text-red-500" : "bg-green-600/20 text-green-500"
+                      getEffectiveCardCost(pendingPlayCard) > 0 ? "bg-red-600/20 text-red-500" : "bg-green-600/20 text-green-500"
                     )}>
-                      {pendingPlayCard.acValue}
+                      {getEffectiveCardCost(pendingPlayCard)}
                     </span>
                   </div>
                   <div className="h-8 w-px bg-white/10" />
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 text-[8px] font-bold tracking-widest">已选</span>
                     <span className="text-xl md:text-2xl font-black text-white">
-                      {pendingPlayCard.acValue > 0
-                        ? getSelectedHandPaymentValue(pendingPlayCard.color, pendingPlayCard.acValue, pendingPlayCard.gamecardId) + paymentSelection.exhaustIds.length
+                      {getEffectiveCardCost(pendingPlayCard) > 0
+                        ? getSelectedHandPaymentValue(pendingPlayCard.color, getEffectiveCardCost(pendingPlayCard), pendingPlayCard.gamecardId) + paymentSelection.exhaustIds.length
                         : paymentSelection.erosionFrontIds.length}
                     </span>
                   </div>
@@ -1273,17 +1340,17 @@ export const BattleField: React.FC = () => {
 
                 {/* Right: Selection Area */}
                 <div className="flex flex-col gap-8">
-                  {pendingPlayCard.acValue > 0 ? (
+                  {getEffectiveCardCost(pendingPlayCard) > 0 ? (
                     <>
                       {/* Hand Replacement Section */}
-                      {getHandPaymentOptions(pendingPlayCard.color, pendingPlayCard.acValue, pendingPlayCard.gamecardId).length > 0 && (
+                      {getHandPaymentOptions(pendingPlayCard.color, getEffectiveCardCost(pendingPlayCard), pendingPlayCard.gamecardId).length > 0 && (
                         <div className="flex flex-col gap-3">
                           <div className="flex items-center gap-2 text-blue-400 font-black uppercase italic tracking-widest text-sm">
                             <Zap className="w-4 h-4" />
                             手牌代替支付
                           </div>
                           <div className="grid grid-cols-2 gap-3 pb-2 justify-items-center">
-                            {getHandPaymentOptions(pendingPlayCard.color, pendingPlayCard.acValue, pendingPlayCard.gamecardId).map((card, i) => {
+                            {getHandPaymentOptions(pendingPlayCard.color, getEffectiveCardCost(pendingPlayCard), pendingPlayCard.gamecardId).map((card, i) => {
                               const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
                               return (
                                 <motion.div
@@ -1348,7 +1415,7 @@ export const BattleField: React.FC = () => {
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2 text-red-500 font-black uppercase italic tracking-widest text-sm">
                         <Trash2 className="w-4 h-4" />
-                        侵蚀区支付 (Erosion Payment - Select {Math.abs(pendingPlayCard.acValue)} cards)
+                        侵蚀区支付 (Erosion Payment - Select {Math.abs(getEffectiveCardCost(pendingPlayCard))} cards)
                       </div>
                       <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
                         {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map((card, i) => {

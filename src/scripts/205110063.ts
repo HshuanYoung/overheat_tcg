@@ -2,6 +2,21 @@ import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 import { createSelectCardQuery, isValkyrieUnit } from './_bt02YellowUtils';
 
+const effect_205110063_item_discount: CardEffect = {
+  id: '205110063_item_discount',
+  type: 'CONTINUOUS',
+  content: 'SELF_HAND_COST',
+  description: 'Your item zone reduces this card AC by 1 for each item, to a minimum of 0.',
+  applyContinuous: (gameState, instance) => {
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId);
+    if (!ownerUid) return;
+
+    const baseCost = instance.baseAcValue ?? instance.acValue ?? 0;
+    const itemCount = gameState.players[ownerUid].itemZone.filter(Boolean).length;
+    instance.acValue = Math.max(0, baseCost - itemCount);
+  }
+};
+
 const effect_205110063_activate: CardEffect = {
   id: '205110063_activate',
   type: 'ACTIVATE',
@@ -50,7 +65,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [effect_205110063_activate],
+  effects: [effect_205110063_activate, effect_205110063_item_discount],
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

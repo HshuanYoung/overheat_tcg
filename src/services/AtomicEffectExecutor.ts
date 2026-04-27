@@ -993,6 +993,15 @@ export class AtomicEffectExecutor {
       }
     }
 
+    if (
+      isEffect &&
+      toZone === 'GRAVE' &&
+      (fromZone === 'UNIT' || fromZone === 'ITEM')
+    ) {
+      (card as any).data.sentToGraveFromFieldByEffectTurn = gameState.turnCount;
+      (card as any).data.sentToGraveFromFieldByEffectSourceCardId = options?.effectSourceCardId;
+    }
+
     card.cardlocation = toZone;
     let toArray: (Card | null)[] = [];
     const findToZone = (zone: (Card | null)[], loc: TriggerLocation) => {

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">神蚀创痕</string>
+    <string name="title_activity_main">神蚀创痕</string>
+    <string name="package_name">com.hsyoung.overheat</string>
+    <string name="custom_url_scheme">com.hsyoung.overheat</string>
+</resources>

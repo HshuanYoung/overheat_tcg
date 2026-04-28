@@ -4,6 +4,7 @@ build/
 dist/
 *.log
 .env*
+!.env.android.example
 pics/*
 !pics/命名规则.txt
 admin/

@@ -1,4 +1,40 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempPower, allUnitsOnField, createChoiceQuery, createSelectCardQuery, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('203000050_power_draw', '选择战场上1个单位，本回合力量+1000。之后若背面侵蚀5张以上，你可以抽1张卡。', async (instance, gameState, playerState) => {
+  const targets = allUnitsOnField(gameState);
+  if (targets.length === 0) return;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    targets,
+    '选择单位',
+    '选择战场上的1个单位，本回合中力量+1000。',
+    1,
+    1,
+    { sourceCardId: instance.gamecardId, effectId: '203000050_power_draw', step: 'TARGET' },
+    () => 'UNIT'
+  );
+}, {
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'DRAW_CHOICE') {
+      if (selections[0] === 'YES') await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 1 }, instance);
+      return;
+    }
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') addTempPower(target, instance, 1000);
+    if (playerState.erosionBack.filter(Boolean).length >= 5) {
+      createChoiceQuery(
+        gameState,
+        playerState.uid,
+        '是否抽卡',
+        '你的侵蚀区的背面卡有5张以上。是否抽1张卡？',
+        [{ id: 'YES', label: '抽1张卡' }, { id: 'NO', label: '不抽' }],
+        { sourceCardId: instance.gamecardId, effectId: '203000050_power_draw', step: 'DRAW_CHOICE' }
+      );
+    }
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +63,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

@@ -1,4 +1,37 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempKeyword, canPayAccessCost, createSelectCardQuery, exhaustCost, isNonGodUnit, ownUnits, paymentCost } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '303090020_give_annihilation',
+  type: 'ACTIVATE',
+  triggerLocation: ['ITEM'],
+  description: '支付1费并横置：选择你的1个非神蚀单位，本回合获得歼灭。',
+  condition: (gameState, playerState, instance) =>
+    !instance.isExhausted &&
+    canPayAccessCost(gameState, playerState, 1, 'GREEN', instance) &&
+    ownUnits(playerState).some(isNonGodUnit),
+  cost: async (gameState, playerState, instance) => {
+    const paid = await paymentCost(1, 'GREEN')!(gameState, playerState, instance);
+    if (paid) await exhaustCost(gameState, playerState, instance);
+    return paid;
+  },
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState).filter(isNonGodUnit),
+      '选择获得歼灭的单位',
+      '选择你的1个非神蚀单位，本回合获得【歼灭】。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '303090020_give_annihilation' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') addTempKeyword(target, instance, 'annihilation');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +60,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

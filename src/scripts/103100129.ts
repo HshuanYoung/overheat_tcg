@@ -1,4 +1,40 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, moveCard } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103100129_return_witch',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['GRAVE'],
+  description: '从战场送入墓地时，选择墓地中1张《魔女的仆从》以外卡名含《魔女》的单位卡加入手牌。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'GRAVE' &&
+    event.data?.sourceZone === 'UNIT' &&
+    playerState.grave.some(card => card.gamecardId !== instance.gamecardId && card.type === 'UNIT' && card.fullName.includes('魔女')),
+  execute: async (instance, gameState, playerState) => {
+    const candidates = playerState.grave.filter(card =>
+      card.gamecardId !== instance.gamecardId &&
+      card.type === 'UNIT' &&
+      card.fullName.includes('魔女')
+    );
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      candidates,
+      '选择加入手牌的魔女',
+      '选择你的墓地中的1张《魔女的仆从》以外的卡名含有《魔女》的单位卡，将其加入手牌。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103100129_return_witch' },
+      () => 'GRAVE'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'GRAVE') moveCard(gameState, playerState.uid, target, 'HAND', instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +70,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

@@ -1,4 +1,52 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, faceUpErosion, getOpponentUid, markDeclarationTax, moveCard, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101150157_combat_exile_draw',
+  type: 'TRIGGER',
+  triggerEvent: ['CARD_ATTACK_DECLARED', 'CARD_DEFENSE_DECLARED'],
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '宣言攻击或防御时，若背面侵蚀1张以下，选择2张正面侵蚀放逐，抽1张卡。',
+  condition: (_gameState, playerState, instance, event) => {
+    const isAttacker = event?.type === 'CARD_ATTACK_DECLARED' && (event.data?.attackerIds || []).includes(instance.gamecardId);
+    const isDefender = event?.type === 'CARD_DEFENSE_DECLARED' && event.sourceCardId === instance.gamecardId;
+    return (isAttacker || isDefender) &&
+      playerState.erosionBack.filter(Boolean).length <= 1 &&
+      faceUpErosion(playerState).length >= 2;
+  },
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      faceUpErosion(playerState),
+      '选择放逐的侵蚀卡',
+      '选择你的侵蚀区中的2张正面卡，将其放逐。之后抽1张卡。',
+      2,
+      2,
+      { sourceCardId: instance.gamecardId, effectId: '101150157_combat_exile_draw' },
+      () => 'EROSION_FRONT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    selections.forEach(id => {
+      const card = playerState.erosionFront.find(candidate => candidate?.gamecardId === id);
+      if (card) moveCard(gameState, playerState.uid, card, 'EXILE', instance);
+    });
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 1 }, instance);
+  }
+}, {
+  id: '101150157_declare_tax',
+  type: 'CONTINUOUS',
+  erosionBackLimit: [0, 3],
+  description: '0~3：对手宣言攻击或防御自己的单位时需要支付1费。',
+  applyContinuous: (gameState, instance) => {
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId);
+    if (!ownerUid) return;
+    const opponent = gameState.players[getOpponentUid(gameState, ownerUid)];
+    ownUnits(opponent).forEach(unit => markDeclarationTax(unit, instance, 1));
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +83,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER'],
   cardPackage: 'BT02',

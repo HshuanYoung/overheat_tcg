@@ -1,4 +1,34 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempDamage, addTempPower, canPayAccessCost, createSelectCardQuery, ownUnits, paymentCost } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000137_boost',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  erosionBackLimit: [6, 8],
+  description: '6~8：支付2费，选择你的1个单位，本回合伤害+1、力量+2000。',
+  condition: (gameState, playerState, instance) =>
+    canPayAccessCost(gameState, playerState, 2, 'GREEN', instance) && ownUnits(playerState).length > 0,
+  cost: paymentCost(2, 'GREEN'),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState),
+      '选择强化单位',
+      '选择你的1个单位，本回合中伤害+1、力量+2000。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103000137_boost' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target || target.cardlocation !== 'UNIT') return;
+    addTempDamage(target, instance, 1);
+    addTempPower(target, instance, 2000);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +64,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

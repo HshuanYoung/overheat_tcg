@@ -1,4 +1,13 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { allUnitsOnField, destroyByEffect, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('202000055_destroy_small', '创痕2：将战场上力量2000以下的所有单位破坏。', async (instance, gameState) => {
+  allUnitsOnField(gameState)
+    .filter(unit => (unit.power || 0) <= 2000)
+    .forEach(unit => destroyByEffect(gameState, unit, instance));
+}, {
+  erosionBackLimit: [2, 10]
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +36,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

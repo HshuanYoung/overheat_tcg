@@ -1,4 +1,67 @@
-import { Card } from '../types/game';
+import { Card, CardEffect, GameEvent } from '../types/game';
+import { allCardsOnField, createSelectCardQuery, ensureData, getOpponentUid, moveCard, ownerUidOf } from './BaseUtil';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+
+const cardEffects: CardEffect[] = [{
+  id: '101140151_enter_exile',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  limitCount: 1,
+  limitNameType: true,
+  description: '进入战场时，放逐战场上1张其他卡，对手回合结束时横置回场。',
+  condition: (gameState, _playerState, instance, event?: GameEvent) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    allCardsOnField(gameState).some(card => card.gamecardId !== instance.gamecardId && card.id !== instance.id),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(gameState, playerState.uid, allCardsOnField(gameState).filter(card => card.gamecardId !== instance.gamecardId && card.id !== instance.id), '选择放逐目标', '选择战场上的1张《教会的押送人》以外的卡。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '101140151_enter_exile' }, card => card.cardlocation as any);
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target) return;
+    const ownerUid = ownerUidOf(gameState, target);
+    if (!ownerUid) return;
+    const originalZone = target.cardlocation;
+    moveCard(gameState, ownerUid, target, 'EXILE', instance);
+    ensureData(target).escortReturn = {
+      ownerUid,
+      zone: originalZone,
+      returnOnOpponentEndAfterTurn: gameState.turnCount,
+      sourceName: instance.fullName
+    };
+    const returns = ((playerState as any).escortReturns || []) as any[];
+    returns.push({ cardId: target.gamecardId, ownerUid, zone: originalZone, afterTurn: gameState.turnCount });
+    (playerState as any).escortReturns = returns;
+  }
+}, {
+  id: '101140151_return_at_opponent_end',
+  type: 'TRIGGER',
+  triggerEvent: 'TURN_END' as any,
+  triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK'],
+  isMandatory: true,
+  description: '对手回合结束时，将押送放逐的卡横置放回其持有者战场。',
+  condition: (gameState, playerState, _instance, event) =>
+    event?.playerUid === getOpponentUid(gameState, playerState.uid) &&
+    ((playerState as any).escortReturns || []).some((entry: any) => gameState.turnCount >= entry.afterTurn),
+  execute: async (instance, gameState, playerState) => {
+    const returns = ((playerState as any).escortReturns || []) as any[];
+    if (returns.length === 0) return;
+    const remaining: any[] = [];
+    for (const entry of returns) {
+      if (gameState.turnCount < entry.afterTurn) {
+        remaining.push(entry);
+        continue;
+      }
+      const card = AtomicEffectExecutor.findCardById(gameState, entry.cardId);
+      if (!card || card.cardlocation !== 'EXILE') continue;
+      moveCard(gameState, entry.ownerUid, card, entry.zone, instance);
+      card.isExhausted = true;
+      card.displayState = 'FRONT_UPRIGHT';
+    }
+    (playerState as any).escortReturns = remaining;
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +97,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

@@ -1,4 +1,21 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { getBattlefieldUnits, markAccessTapValue } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '303090021_all_access_plus_two',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  description: '你的战场上所有单位获得横置支付ACCESS时可当作+2。',
+  applyContinuous: (gameState, instance) => {
+    const ownerUid = Object.entries(gameState.players).find(([, player]) =>
+      player.itemZone.some(item => item?.gamecardId === instance.gamecardId)
+    )?.[0];
+    if (!ownerUid) return;
+    getBattlefieldUnits(gameState)
+      .filter(unit => gameState.players[ownerUid].unitZone.some(own => own?.gamecardId === unit.gamecardId))
+      .forEach(unit => markAccessTapValue(unit, instance, 2));
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +44,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

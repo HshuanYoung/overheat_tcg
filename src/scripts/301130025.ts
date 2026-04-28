@@ -1,4 +1,22 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addInfluence, ensureData, universalEquipEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [universalEquipEffect, {
+  id: '301130025_reset_equipped',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  description: '非神蚀单位装备这张卡时，将装备单位重置。',
+  applyContinuous: (gameState, instance) => {
+    if (!instance.equipTargetId) return;
+    const target = AtomicEffectExecutor.findCardById(gameState, instance.equipTargetId);
+    if (!target || target.godMark) return;
+    const data = ensureData(instance);
+    if (data.resetEquipTargetId === target.gamecardId) return;
+    target.isExhausted = false;
+    data.resetEquipTargetId = target.gamecardId;
+    addInfluence(target, instance, '装备时重置');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -29,7 +47,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

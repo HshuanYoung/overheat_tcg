@@ -1,4 +1,21 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addInfluence, attackingUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050143_alliance_boost',
+  type: 'CONTINUOUS',
+  description: '与<伊列宇王国>单位组成联军攻击中，所有参战单位伤害+1并获得歼灭。',
+  applyContinuous: (gameState, instance) => {
+    const attackers = attackingUnits(gameState);
+    if (!gameState.battleState?.isAlliance || !attackers.some(unit => unit.gamecardId === instance.gamecardId)) return;
+    if (!attackers.some(unit => unit.gamecardId !== instance.gamecardId && unit.faction === '伊列宇王国')) return;
+    attackers.forEach(unit => {
+      addContinuousDamage(unit, instance, 1);
+      unit.isAnnihilation = true;
+      addInfluence(unit, instance, '获得效果: 【歼灭】');
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +53,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

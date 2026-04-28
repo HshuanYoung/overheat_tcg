@@ -1,4 +1,25 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130153_first_holy_discount',
+  type: 'CONTINUOUS',
+  description: '每回合第1张<圣王国>单位卡ACCESS值-1，最低0。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    const used = (owner as any).holyKingdomUnitDiscountUsedTurn === gameState.turnCount;
+    owner.hand.forEach(card => {
+      if (card.type !== 'UNIT' || card.faction !== '圣王国' || used) return;
+      const base = card.baseAcValue ?? card.acValue ?? 0;
+      const next = Math.max(0, base - 1);
+      if (card.acValue !== next) {
+        card.acValue = next;
+        addInfluence(card, instance, 'ACCESS值-1');
+      }
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +55,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

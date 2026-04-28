@@ -1,4 +1,15 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050140_cannot_attack',
+  type: 'CONTINUOUS',
+  description: '这个单位不能宣言攻击。',
+  applyContinuous: (_gameState, instance) => {
+    instance.canAttack = false;
+    addInfluence(instance, instance, '不能宣言攻击');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +45,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

@@ -1,4 +1,33 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, ensureData, getOpponentUid, moveCard, ownUnits, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('203100049_control_witch', '创痕3：选择对手1个单位，你得到其控制权。只要你控制着那个单位，那个单位也视为卡名含有《魔女》。', async (instance, gameState, playerState) => {
+  const opponentUid = getOpponentUid(gameState, playerState.uid);
+  const targets = ownUnits(gameState.players[opponentUid]);
+  if (targets.length === 0 || !playerState.unitZone.some(slot => slot === null)) return;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    targets,
+    '选择取得控制权的单位',
+    '选择对手的1个单位，你得到其控制权。',
+    1,
+    1,
+    { sourceCardId: instance.gamecardId, effectId: '203100049_control_witch' }
+  );
+}, {
+  erosionBackLimit: [3, 10],
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const opponentUid = getOpponentUid(gameState, playerState.uid);
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target || target.cardlocation !== 'UNIT') return;
+    const data = ensureData(target);
+    data.controlChangedBy = instance.fullName;
+    data.extraNameContainsWitchBy = instance.fullName;
+    data.originalControllerUid = opponentUid;
+    moveCard(gameState, opponentUid, target, 'UNIT', instance, { toPlayerUid: playerState.uid });
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +56,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER'],
   cardPackage: 'BT02',

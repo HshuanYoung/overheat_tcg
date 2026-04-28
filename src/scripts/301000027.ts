@@ -1,4 +1,16 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { getBattlefieldUnits, markDeclarationTax } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '301000027_rush_tax',
+  type: 'CONTINUOUS',
+  description: '具有速攻的单位宣言攻击或防御需要其控制者支付1费。',
+  applyContinuous: (gameState, instance) => {
+    getBattlefieldUnits(gameState)
+      .filter(unit => unit.isrush)
+      .forEach(unit => markDeclarationTax(unit, instance, 1));
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +39,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

@@ -57,7 +57,7 @@ const canUse205000136AsPaymentSubstitute = (paymentCard: Card | undefined, cardC
   cost > 0 &&
   cost <= 3;
 
-const getEffectivePlayCost = (player: PlayerState, card: Card) => {
+const getEffectivePlayCost = (gameState: GameState | null, player: PlayerState, card: Card) => {
   const baseCost = card.baseAcValue ?? card.acValue ?? 0;
   if (card.id === '101140062') {
     const unitCount = player.unitZone.filter(c => c !== null).length;
@@ -74,6 +74,14 @@ const getEffectivePlayCost = (player: PlayerState, card: Card) => {
   if (card.id === '205110063') {
     const itemCount = player.itemZone.filter(c => c !== null).length;
     return Math.max(0, baseCost - itemCount);
+  }
+  if (
+    card.type === 'UNIT' &&
+    card.faction === '圣王国' &&
+    (player as any).holyKingdomUnitDiscountUsedTurn !== gameState?.turnCount &&
+    player.unitZone.some(unit => unit?.id === '101130153')
+  ) {
+    return Math.max(0, baseCost - 1);
   }
   return baseCost;
 };
@@ -272,7 +280,7 @@ export const GameService = {
       return { canPlay: false, reason: `Color requirement not met (missing ${totalDeficit})` };
     }
 
-    const cost = getEffectivePlayCost(player, card);
+    const cost = getEffectivePlayCost(gameState, player, card);
     if (cost < 0) {
       const absCost = Math.abs(cost);
       const faceUpFrontCount = player.erosionFront.filter(cardInZone => cardInZone !== null && cardInZone.displayState === 'FRONT_UPRIGHT').length;

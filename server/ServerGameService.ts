@@ -11,7 +11,7 @@ export const ServerGameService = {
     return (card as any).data?.fullEffectSilencedTurn === gameState.turnCount;
   },
 
-  getEffectivePlayCost(player: PlayerState, card: Card) {
+  getEffectivePlayCost(player: PlayerState, card: Card, gameState?: GameState) {
     const baseCost = card.baseAcValue ?? card.acValue ?? 0;
     if (card.id === '101140062') {
       const unitCount = player.unitZone.filter(c => c !== null).length;
@@ -28,6 +28,14 @@ export const ServerGameService = {
     if (card.id === '205110063') {
       const itemCount = player.itemZone.filter(c => c !== null).length;
       return Math.max(0, baseCost - itemCount);
+    }
+    if (
+      card.type === 'UNIT' &&
+      card.faction === '圣王国' &&
+      (player as any).holyKingdomUnitDiscountUsedTurn !== gameState?.turnCount &&
+      player.unitZone.some(unit => unit?.id === '101130153')
+    ) {
+      return Math.max(0, baseCost - 1);
     }
     return baseCost;
   },
@@ -797,7 +805,7 @@ export const ServerGameService = {
 
 
     // 4. Cost Check (AC Value)
-    const cost = ServerGameService.getEffectivePlayCost(player, card);
+    const cost = ServerGameService.getEffectivePlayCost(player, card, gameState);
     if (cost < 0) {
       const absCost = Math.abs(cost);
       const faceUpFrontCount = player.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT').length;
@@ -998,10 +1006,10 @@ export const ServerGameService = {
       if (paymentSelection.exhaustUnitIds) {
         for (const uid of paymentSelection.exhaustUnitIds) {
           if (remainingCost <= 0) break;
-          const card = [...player.unitZone].find(c => c?.gamecardId === uid && !c.isExhausted);
+          const card = [...player.unitZone].find(c => c?.gamecardId === uid && !c.isExhausted && !(c as any).data?.cannotExhaustByEffect);
           if (card) {
             cardsToExhaust.push(card);
-            remainingCost -= 1;
+            remainingCost -= Math.max(1, Number((card as any).data?.accessTapValue || 1));
           }
         }
       }
@@ -1143,11 +1151,19 @@ export const ServerGameService = {
       throw new Error('对抗阶段只能打出故事卡');
     }
 
-    const cost = ServerGameService.getEffectivePlayCost(player, card);
+    const cost = ServerGameService.getEffectivePlayCost(player, card, gameState);
+    const usesHolyKingdomUnitDiscount =
+      card.type === 'UNIT' &&
+      card.faction === '圣王国' &&
+      (player as any).holyKingdomUnitDiscountUsedTurn !== gameState.turnCount &&
+      player.unitZone.some(unit => unit?.id === '101130153');
     const paymentResult = ServerGameService.payCost(gameState, playerId, cost, paymentSelection, card.color, cardId);
     if (!paymentResult.success) throw new Error(paymentResult.reason);
 
     ServerGameService.moveCard(gameState, playerId, sourceZone, playerId, 'PLAY', cardId);
+    if (usesHolyKingdomUnitDiscount) {
+      (player as any).holyKingdomUnitDiscountUsedTurn = gameState.turnCount;
+    }
 
     // Record faction used
     if (card.faction) {
@@ -1739,6 +1755,18 @@ export const ServerGameService = {
       return gameState;
     }
 
+    if (query.callbackKey === 'DECLARE_ATTACK_TAX_PAYMENT') {
+      const { attackerIds, isAlliance, targetId, skipDefense } = query.context;
+      await ServerGameService.declareAttack(gameState, playerUid, attackerIds, isAlliance, targetId, skipDefense, onUpdate, true);
+      return gameState;
+    }
+
+    if (query.callbackKey === 'DECLARE_DEFENSE_TAX_PAYMENT') {
+      const { defenderId } = query.context;
+      await ServerGameService.declareDefense(gameState, playerUid, defenderId, true);
+      return gameState;
+    }
+
     if (query.callbackKey === 'DIKAI_BATTLE_SAVE_CHOICE') {
       const { cardId, targetUnitId, isEffect, sourcePlayerId } = query.context;
       if (currentSelections[0] !== 'YES') {
@@ -1928,6 +1956,26 @@ export const ServerGameService = {
           });
         });
         gameState.logs.push(`[${sourceCard.fullName}] 支付侵蚀${amount}：将 ${amount} 张正面侵蚀卡转为背面。`);
+      } else if (query.context?.costType === 'DISCARD_HAND_COST') {
+        const amount = query.context?.discardCostAmount || selections.length;
+        const player = gameState.players[playerUid];
+        const selectedCards = selections
+          .map(id => player.hand.find(card => card.gamecardId === id))
+          .filter((card): card is Card => !!card);
+
+        if (selectedCards.length !== amount) {
+          gameState.pendingQuery = query;
+          throw new Error(`请选择 ${amount} 张手牌支付费用`);
+        }
+
+        selectedCards.forEach(card => {
+          ServerGameService.moveCard(gameState, playerUid, 'HAND', playerUid, 'GRAVE', card.gamecardId, {
+            isEffect: true,
+            effectSourcePlayerUid: activationPlayerUid,
+            effectSourceCardId: sourceCard.gamecardId
+          });
+        });
+        gameState.logs.push(`[${sourceCard.fullName}] 舍弃 ${amount} 张手牌作为费用。`);
       } else if (effect && effect.onQueryResolve) {
         await (effect.onQueryResolve as any)(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
       }
@@ -2176,7 +2224,7 @@ export const ServerGameService = {
     return undefined;
   },
 
-  async declareAttack(gameState: GameState, playerId: string, attackerIds: string[], isAlliance: boolean, targetId?: string, skipDefense?: boolean, onUpdate?: (state: GameState) => Promise<void>) {
+  async declareAttack(gameState: GameState, playerId: string, attackerIds: string[], isAlliance: boolean, targetId?: string, skipDefense?: boolean, onUpdate?: (state: GameState) => Promise<void>, declarationTaxPaid = false) {
     if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
       throw new Error('当前有未结算步骤，请等待处理完毕。');
     }
@@ -2265,6 +2313,9 @@ export const ServerGameService = {
       if (!unit) throw new Error('Attacker not found in unit zone');
       if (unit.isExhausted) throw new Error('Attacker is already exhausted');
       if (unit.canAttack === false) throw new Error(`单位 [${unit.fullName}] 无法攻击`);
+      if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) {
+        throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotAttackOrDefendSourceName || '卡牌效果'}] 不能宣言攻击`);
+      }
       if (isAlliance && (unit as any).data?.cannotAllianceByEffect) {
         throw new Error(`单位 [${unit.fullName}] 由于效果不能组成联军`);
       }
@@ -2308,6 +2359,30 @@ export const ServerGameService = {
       attackers.push(unit);
     }
 
+    const attackTaxAmount = declarationTaxPaid
+      ? 0
+      : Math.max(0, ...attackers.map(unit => Number((unit as any).data?.declareAttackDefenseTax || 0)));
+    if (attackTaxAmount > 0) {
+      const sourceNames = Array.from(new Set(attackers
+        .map(unit => (unit as any).data?.declareAttackDefenseTaxSourceName)
+        .filter(Boolean))).join('、') || '卡牌效果';
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_PAYMENT',
+        playerUid: playerId,
+        options: [],
+        title: '支付宣言费用',
+        description: `由于 [${sourceNames}]，宣言攻击需要支付 ${attackTaxAmount} 费。若不支付，不能进行这次宣言。`,
+        minSelections: 1,
+        maxSelections: 1,
+        callbackKey: 'DECLARE_ATTACK_TAX_PAYMENT',
+        paymentCost: attackTaxAmount,
+        paymentColor: attackers[0]?.color,
+        context: { attackerIds, isAlliance, targetId, skipDefense }
+      };
+      return gameState;
+    }
+
     // Exhaust attackers
     for (const unit of attackers) {
       ServerGameService.exhaustCard(unit);
@@ -2348,7 +2423,7 @@ export const ServerGameService = {
     return gameState;
   },
 
-  async declareDefense(gameState: GameState, playerId: string, defenderId?: string) {
+  async declareDefense(gameState: GameState, playerId: string, defenderId?: string, declarationTaxPaid = false) {
     if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
       throw new Error('当前有未结算步骤，请等待处理完毕。');
     }
@@ -2364,6 +2439,9 @@ export const ServerGameService = {
       if ((unit as any).battleForbiddenByEffect) throw new Error(`单位 [${unit.fullName}] 由于效果不能参与战斗`);
       if ((unit as any).data?.cannotDefendTurn === gameState.turnCount) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotDefendSourceName || '卡牌效果'}] 不能宣言防御`);
+      }
+      if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) {
+        throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotAttackOrDefendSourceName || '卡牌效果'}] 不能宣言防御`);
       }
 
       const lockedTargetId = gameState.battleState.defenseLockedToTargetId;
@@ -2385,6 +2463,26 @@ export const ServerGameService = {
       const minExclusive = Math.max(0, ...attackers.map(attacker => (attacker as any).data?.defenseMinPower || 0));
       if (minExclusive > 0 && (unit.power || 0) <= minExclusive) {
         throw new Error(`无法防御：攻击单位的效果使力量值 ${minExclusive} 以下的单位不能防御`);
+      }
+
+      const defenseTaxAmount = declarationTaxPaid ? 0 : Number((unit as any).data?.declareAttackDefenseTax || 0);
+      if (defenseTaxAmount > 0) {
+        const sourceName = (unit as any).data?.declareAttackDefenseTaxSourceName || '卡牌效果';
+        gameState.pendingQuery = {
+          id: Math.random().toString(36).substring(7),
+          type: 'SELECT_PAYMENT',
+          playerUid: playerId,
+          options: [],
+          title: '支付宣言费用',
+          description: `由于 [${sourceName}]，宣言防御需要支付 ${defenseTaxAmount} 费。若不支付，不能进行这次宣言。`,
+          minSelections: 1,
+          maxSelections: 1,
+          callbackKey: 'DECLARE_DEFENSE_TAX_PAYMENT',
+          paymentCost: defenseTaxAmount,
+          paymentColor: unit.color,
+          context: { defenderId }
+        };
+        return gameState;
       }
 
       ServerGameService.exhaustCard(unit);
@@ -2499,6 +2597,12 @@ export const ServerGameService = {
             if (destroyed === undefined) return gameState; // Wait for substitution choice
             if (destroyed !== false) {
               gameState.logs.push(`${attackingUnit.fullName} 破坏了 ${defendingUnit.fullName}`);
+              if ((attackingUnit as any).data?.resetAfterNextBattleDestroyTurn === gameState.turnCount) {
+                attackingUnit.isExhausted = false;
+                gameState.logs.push(`[${(attackingUnit as any).data.resetAfterNextBattleDestroySourceName || '效果'}] 将 [${attackingUnit.fullName}] 重置。`);
+                delete (attackingUnit as any).data.resetAfterNextBattleDestroyTurn;
+                delete (attackingUnit as any).data.resetAfterNextBattleDestroySourceName;
+              }
               gameState.battleState.resolvedUnitIds.push(defendingUnit.gamecardId);
 
               // Annihilation Effect
@@ -2882,6 +2986,14 @@ export const ServerGameService = {
       return false;
     }
 
+    if ((unit as any).data?.preventNextDestroy) {
+      const sourceName = (unit as any).data?.preventNextDestroySourceName || '破坏防止';
+      delete (unit as any).data.preventNextDestroy;
+      delete (unit as any).data.preventNextDestroySourceName;
+      gameState.logs.push(`[${sourceName}] 防止了 [${unit.fullName}] 将要被破坏。`);
+      return false;
+    }
+
     const opponentUid = gameState.playerIds.find(id => id !== playerId);
     if (
       (unit as any).data?.indestructibleIfOpponentGoddess &&
@@ -3171,6 +3283,10 @@ export const ServerGameService = {
           if ((card as any).data?.forcedAttackTurn !== undefined && (card as any).data.forcedAttackTurn < gameState.turnCount) {
             delete (card as any).data.forcedAttackTurn;
             delete (card as any).data.forcedAttackSourceName;
+          }
+          if ((card as any).data?.cannotAttackOrDefendUntilTurn !== undefined && (card as any).data.cannotAttackOrDefendUntilTurn < gameState.turnCount) {
+            delete (card as any).data.cannotAttackOrDefendUntilTurn;
+            delete (card as any).data.cannotAttackOrDefendSourceName;
           }
           if ((card as any).data?.forbiddenAlchemyBanishTurn !== undefined && (card as any).data.forbiddenAlchemyBanishTurn < gameState.turnCount) {
             delete (card as any).data.forbiddenAlchemyBanishTurn;

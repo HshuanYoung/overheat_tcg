@@ -1,4 +1,29 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addInfluence, createSelectCardQuery, ensureData, ownUnits, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('202000053_reset_after_destroy', '只能在你的回合中使用。选择你的1个单位，本回合中下一次战斗破坏对手单位时可以重置。', async (instance, gameState, playerState) => {
+  if (ownUnits(playerState).length === 0) return;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    ownUnits(playerState),
+    '选择单位',
+    '选择你的1个单位。本回合中，那个单位下一次战斗破坏对手单位时可以重置。',
+    1,
+    1,
+    { sourceCardId: instance.gamecardId, effectId: '202000053_reset_after_destroy' }
+  );
+}, {
+  condition: (_gameState, playerState) => playerState.isTurn,
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target || target.cardlocation !== 'UNIT') return;
+    const data = ensureData(target);
+    data.resetAfterNextBattleDestroyTurn = gameState.turnCount;
+    data.resetAfterNextBattleDestroySourceName = instance.fullName;
+    addInfluence(target, instance, '战斗破坏对手单位后可以重置');
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +52,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

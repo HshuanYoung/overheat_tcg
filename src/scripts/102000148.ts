@@ -1,4 +1,36 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, destroyByEffect, getBattlefieldCards, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000148_enter_destroy_item',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  erosionBackLimit: [5, 7],
+  description: '5~7：入场时，若我方有2个以上红色单位，选择战场上1张道具卡破坏。',
+  condition: (gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    ownUnits(playerState).filter(unit => AtomicEffectExecutor.matchesColor(unit, 'RED')).length >= 2 &&
+    getBattlefieldCards(gameState).some(card => card.type === 'ITEM'),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      getBattlefieldCards(gameState).filter(card => card.type === 'ITEM'),
+      '选择破坏的道具',
+      '选择战场上的1张道具卡，将其破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102000148_enter_destroy_item' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'ITEM') destroyByEffect(gameState, target, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +66,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

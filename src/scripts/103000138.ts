@@ -1,4 +1,15 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000138_annihilation',
+  type: 'CONTINUOUS',
+  description: '获得歼灭。',
+  applyContinuous: (_gameState, instance) => {
+    instance.isAnnihilation = true;
+    addInfluence(instance, instance, '获得效果: 【歼灭】');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +46,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

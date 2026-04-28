@@ -1,4 +1,39 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, destroyByEffect, erosionCost, getOpponentUid, isNonGodUnit, moveCard, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000146_exile_destroy',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  description: '将这个单位放逐并侵蚀1：选择对手1个非神蚀单位破坏。',
+  condition: (gameState, playerState, instance) => {
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    return instance.cardlocation === 'UNIT' && ownUnits(opponent).some(isNonGodUnit);
+  },
+  cost: erosionCost(1),
+  execute: async (instance, gameState, playerState) => {
+    if (instance.cardlocation === 'UNIT') {
+      moveCard(gameState, playerState.uid, instance, 'EXILE', instance);
+    }
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(opponent).filter(isNonGodUnit),
+      '选择破坏对象',
+      '选择对手的1个非神蚀单位，将其破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102000146_exile_destroy' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && target.cardlocation === 'UNIT' && !target.godMark) destroyByEffect(gameState, target, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +69,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

@@ -1,4 +1,18 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addContinuousPower, addInfluence } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000147_ten_plus',
+  type: 'CONTINUOUS',
+  erosionTotalLimit: [10, 10],
+  description: '10+：伤害+1，力量+1000，获得速攻。',
+  applyContinuous: (_gameState, instance) => {
+    addContinuousDamage(instance, instance, 1);
+    addContinuousPower(instance, instance, 1000);
+    instance.isrush = true;
+    addInfluence(instance, instance, '获得效果: 【速攻】');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +48,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

@@ -1,4 +1,40 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, canPutUnitOntoBattlefield, createSelectCardQuery, moveCard } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103090134_goddess_revive',
+  type: 'TRIGGER',
+  triggerEvent: 'GODDESS_TRANSFORMATION',
+  triggerLocation: ['UNIT'],
+  erosionTotalLimit: [10, 10],
+  description: '10+：进入女神化时，选择墓地1张<瑟诺布>非神蚀单位放置到战场。',
+  condition: (_gameState, playerState) =>
+    playerState.unitZone.some(slot => slot === null) &&
+    playerState.grave.some(card => card.type === 'UNIT' && card.faction === '瑟诺布' && !card.godMark && canPutUnitOntoBattlefield(playerState, card)),
+  execute: async (instance, gameState, playerState) => {
+    const candidates = playerState.grave.filter(card =>
+      card.type === 'UNIT' &&
+      card.faction === '瑟诺布' &&
+      !card.godMark &&
+      canPutUnitOntoBattlefield(playerState, card)
+    );
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      candidates,
+      '选择复活单位',
+      '选择你的墓地中的1张<瑟诺布>非神蚀单位卡，将其放置到战场上。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103090134_goddess_revive' },
+      () => 'GRAVE'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'GRAVE') moveCard(gameState, playerState.uid, target, 'UNIT', instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +70,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

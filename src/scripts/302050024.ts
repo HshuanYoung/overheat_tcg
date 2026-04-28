@@ -1,4 +1,21 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, ownUnits, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '302050024_ten_rush',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  erosionTotalLimit: [10, 10],
+  description: '10+：你的所有单位获得速攻。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    ownUnits(owner).forEach(unit => {
+      unit.isrush = true;
+      addInfluence(unit, instance, '获得效果: 【速攻】');
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +44,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

@@ -1,4 +1,50 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, appendEndResolution, createSelectCardQuery, ensureData, getOpponentUid, moveCard, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050142_goddess_control',
+  type: 'TRIGGER',
+  triggerEvent: 'GODDESS_TRANSFORMATION',
+  triggerLocation: ['UNIT'],
+  description: '进入女神化时，选择对手1个AC2以下非神蚀单位重置，本回合得到其控制权。',
+  condition: (gameState, playerState) => {
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    return playerState.unitZone.some(slot => slot === null) &&
+      ownUnits(opponent).some(unit => !unit.godMark && (unit.acValue || 0) <= 2);
+  },
+  execute: async (instance, gameState, playerState) => {
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(opponent).filter(unit => !unit.godMark && (unit.acValue || 0) <= 2),
+      '选择取得控制权的单位',
+      '选择对手的1个ACCESS值2以下的非神蚀单位，将其重置并在本回合得到控制权。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102050142_goddess_control' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const opponentUid = getOpponentUid(gameState, playerState.uid);
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target || target.cardlocation !== 'UNIT' || target.godMark || (target.acValue || 0) > 2) return;
+    const data = ensureData(target);
+    data.controlChangedBy = instance.fullName;
+    data.originalControllerUid = opponentUid;
+    target.isExhausted = false;
+    moveCard(gameState, opponentUid, target, 'UNIT', instance, { toPlayerUid: playerState.uid });
+    appendEndResolution(gameState, playerState.uid, instance, '102050142_return_control', (_source, state) => {
+      const live = AtomicEffectExecutor.findCardById(state, target.gamecardId);
+      if (!live || live.cardlocation !== 'UNIT') return;
+      const currentUid = AtomicEffectExecutor.findCardOwnerKey(state, live.gamecardId);
+      if (!currentUid || currentUid === opponentUid) return;
+      delete ensureData(live).controlChangedBy;
+      delete ensureData(live).originalControllerUid;
+      moveCard(state, currentUid, live, 'UNIT', instance, { toPlayerUid: opponentUid });
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +80,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

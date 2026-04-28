@@ -1,4 +1,33 @@
-import { Card } from '../types/game';
+import { Card, CardEffect, GameEvent } from '../types/game';
+import { createSelectCardQuery, ownUnits } from './BaseUtil';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130155_enter_reset',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  limitCount: 1,
+  limitNameType: true,
+  erosionTotalLimit: [0, 3],
+  isMandatory: false,
+  description: '0~3：进入战场时，你可以选择你的1个非神蚀单位重置。',
+  condition: (_gameState, playerState, instance, event?: GameEvent) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    ownUnits(playerState).some(unit => !unit.godMark && unit.isExhausted),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(gameState, playerState.uid, ownUnits(playerState).filter(unit => !unit.godMark && unit.isExhausted), '选择重置单位', '选择你的1个非神蚀单位重置。', 0, 1, { sourceCardId: instance.gamecardId, effectId: '101130155_enter_reset' }, () => 'UNIT');
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target) return;
+    target.isExhausted = false;
+    target.displayState = 'FRONT_UPRIGHT';
+    target.influencingEffects = target.influencingEffects || [];
+    target.influencingEffects.push({ sourceCardName: instance.fullName, description: '因效果重置' });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +63,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

@@ -150,6 +150,59 @@ export const createChoiceQuery = (
   };
 };
 
+export const createPlayerSelectQuery = (
+  gameState: GameState,
+  playerUid: string,
+  title: string,
+  description: string,
+  context: any,
+  options?: { includeSelf?: boolean; includeOpponent?: boolean }
+) => {
+  const includeSelf = options?.includeSelf !== false;
+  const includeOpponent = options?.includeOpponent !== false;
+  const playerOptions: { card: Card; source: TriggerLocation }[] = [];
+
+  if (includeSelf) {
+    playerOptions.push({
+      card: {
+        gamecardId: 'PLAYER_SELF',
+        id: 'PLAYER_SELF',
+        fullName: gameState.players[playerUid]?.displayName || '我方玩家',
+        type: 'UNIT',
+        color: 'NONE'
+      } as Card,
+      source: 'UNIT'
+    });
+  }
+
+  if (includeOpponent) {
+    const opponentUid = getOpponentUid(gameState, playerUid);
+    playerOptions.push({
+      card: {
+        gamecardId: 'PLAYER_OPPONENT',
+        id: 'PLAYER_OPPONENT',
+        fullName: gameState.players[opponentUid]?.displayName || '对手玩家',
+        type: 'UNIT',
+        color: 'NONE'
+      } as Card,
+      source: 'UNIT'
+    });
+  }
+
+  gameState.pendingQuery = {
+    id: Math.random().toString(36).substring(7),
+    type: 'SELECT_CARD',
+    playerUid,
+    options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerUid, playerOptions),
+    title,
+    description,
+    minSelections: 1,
+    maxSelections: 1,
+    callbackKey: 'EFFECT_RESOLVE',
+    context
+  };
+};
+
 export const moveCard = (
   gameState: GameState,
   ownerUid: string,
@@ -183,6 +236,25 @@ export const moveCardsToBottom = (
   sourceCard?: Card
 ) => {
   cards.forEach(card => moveCard(gameState, ownerUid, card, 'DECK', sourceCard, { insertAtBottom: true }));
+};
+
+export const moveCardsToTop = (
+  gameState: GameState,
+  ownerUid: string,
+  cardsTopToBottom: Card[],
+  sourceCard?: Card
+) => {
+  const player = gameState.players[ownerUid];
+  const ids = new Set(cardsTopToBottom.map(card => card.gamecardId));
+  player.deck = player.deck.filter(card => !ids.has(card.gamecardId));
+  for (let i = cardsTopToBottom.length - 1; i >= 0; i -= 1) {
+    const card = cardsTopToBottom[i];
+    card.cardlocation = 'DECK';
+    player.deck.push(card);
+  }
+  if (cardsTopToBottom.length > 0 && sourceCard) {
+    gameState.logs.push(`[${sourceCard.fullName}] 将 ${cardsTopToBottom.length} 张卡按选择顺序放回卡组顶。`);
+  }
 };
 
 export const getBattlefieldUnits = (gameState: GameState) =>
@@ -375,6 +447,24 @@ export const allCardsOnField = (gameState: GameState) =>
 export const allUnitsOnField = (gameState: GameState) =>
   Object.values(gameState.players).flatMap(player => player.unitZone.filter((card): card is Card => !!card));
 
+export const battlingUnits = (gameState: GameState) => {
+  const ids = [
+    ...(gameState.battleState?.attackers || []),
+    ...(gameState.battleState?.defender ? [gameState.battleState.defender] : [])
+  ];
+  return ids
+    .map(id => AtomicEffectExecutor.findCardById(gameState, id))
+    .filter((card): card is Card => !!card && card.cardlocation === 'UNIT');
+};
+
+export const attackingUnits = (gameState: GameState) =>
+  (gameState.battleState?.attackers || [])
+    .map(id => AtomicEffectExecutor.findCardById(gameState, id))
+    .filter((card): card is Card => !!card && card.cardlocation === 'UNIT');
+
+export const defendingUnit = (gameState: GameState) =>
+  gameState.battleState?.defender ? AtomicEffectExecutor.findCardById(gameState, gameState.battleState.defender) : undefined;
+
 export const ownUnits = (player: PlayerState) => player.unitZone.filter((card): card is Card => !!card);
 export const ownItems = (player: PlayerState) => player.itemZone.filter((card): card is Card => !!card);
 export const faceUpErosion = (player: PlayerState) =>
@@ -395,6 +485,38 @@ export const addInfluence = (card: Card, source: Card, description: string) => {
   if (!card.influencingEffects.some(effect => effect.sourceCardName === source.fullName && effect.description === description)) {
     card.influencingEffects.push({ sourceCardName: source.fullName, description });
   }
+};
+
+export const markAccessTapValue = (target: Card, source: Card, value: number) => {
+  const data = ensureData(target);
+  data.accessTapValue = value;
+  data.accessTapValueSourceName = source.fullName;
+  addInfluence(target, source, `横置支付ACCESS时可当作+${value}`);
+};
+
+export const markDeclarationTax = (target: Card, source: Card, amount: number) => {
+  const data = ensureData(target);
+  data.declareAttackDefenseTax = amount;
+  data.declareAttackDefenseTaxSourceName = source.fullName;
+  addInfluence(target, source, `宣言攻击或防御需要支付${amount}费`);
+};
+
+export const putUnitOntoField = (
+  gameState: GameState,
+  ownerUid: string,
+  card: Card,
+  source: Card,
+  options?: { exhausted?: boolean; toPlayerUid?: string }
+) => {
+  const toPlayerUid = options?.toPlayerUid || ownerUid;
+  if (!canPutUnitOntoBattlefield(gameState.players[toPlayerUid], card)) return false;
+  moveCard(gameState, ownerUid, card, 'UNIT', source, { toPlayerUid });
+  const moved = AtomicEffectExecutor.findCardById(gameState, card.gamecardId);
+  if (moved) {
+    moved.isExhausted = !!options?.exhausted;
+    moved.displayState = 'FRONT_UPRIGHT';
+  }
+  return true;
 };
 
 export const addContinuousPower = (target: Card, source: Card, amount: number) => {
@@ -438,6 +560,48 @@ export const addTempKeyword = (target: Card, source: Card, keyword: 'rush' | 'he
     target.temporaryBuffSources.annihilation = source.fullName;
     addInfluence(target, source, '获得效果: 【歼灭】');
   }
+};
+
+export const preventNextDestroy = (target: Card, source: Card) => {
+  const data = ensureData(target);
+  data.preventNextDestroy = true;
+  data.preventNextDestroySourceName = source.fullName;
+  addInfluence(target, source, '下一次将被破坏时防止');
+};
+
+export const silenceAllEffectsUntil = (target: Card, source: Card, untilTurn: number) => {
+  const data = ensureData(target);
+  data.fullEffectSilencedTurn = untilTurn;
+  data.fullEffectSilenceSource = source.fullName;
+  addInfluence(target, source, '失去所有效果');
+};
+
+export const forbidAttackAndDefenseUntil = (target: Card, source: Card, untilTurn: number) => {
+  const data = ensureData(target);
+  data.cannotAttackOrDefendUntilTurn = untilTurn;
+  data.cannotAttackOrDefendSourceName = source.fullName;
+  addInfluence(target, source, '不能宣言攻击和防御');
+};
+
+export const discardHandCost = (count: number, predicate?: (card: Card) => boolean): CardEffect['cost'] => async (gameState, playerState, instance) => {
+  const candidates = playerState.hand.filter(card => card.gamecardId !== instance.gamecardId && (!predicate || predicate(card)));
+  if (candidates.length < count) return false;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    candidates,
+    '支付舍弃费用',
+    `选择${count}张手牌舍弃以发动 [${instance.fullName}]。`,
+    count,
+    count,
+    {
+      sourceCardId: instance.gamecardId,
+      costType: 'DISCARD_HAND_COST',
+      discardCostAmount: count
+    },
+    () => 'HAND'
+  );
+  return true;
 };
 
 export const moveByEffect = (

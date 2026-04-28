@@ -1,4 +1,19 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addContinuousDamage, addContinuousPower, battlingUnits, universalEquipEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [universalEquipEffect, {
+  id: '302050023_equip_battle_boost',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  description: '装备单位参与攻击的战斗中，装备单位伤害+1、力量+1000。',
+  applyContinuous: (gameState, instance) => {
+    if (!instance.equipTargetId) return;
+    const target = AtomicEffectExecutor.findCardById(gameState, instance.equipTargetId);
+    if (!target || !battlingUnits(gameState).some(unit => unit.gamecardId === target.gamecardId)) return;
+    addContinuousDamage(target, instance, 1);
+    addContinuousPower(target, instance, 1000);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -28,7 +43,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

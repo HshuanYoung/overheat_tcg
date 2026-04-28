@@ -1,4 +1,23 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addTempDamage, addTempPower, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000139_enter_team_boost',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  description: '从手牌进入战场时，本回合你的所有单位伤害+1、力量+1000。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    event.data?.sourceZone === 'HAND',
+  execute: async (instance, _gameState, playerState) => {
+    ownUnits(playerState).forEach(unit => {
+      addTempDamage(unit, instance, 1);
+      addTempPower(unit, instance, 1000);
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +55,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

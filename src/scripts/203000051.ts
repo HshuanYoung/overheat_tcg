@@ -1,4 +1,16 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { allUnitsOnField, destroyByEffect, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('203000051_destroy_except_highest', '创痕3：将战场上除了力量值最高的单位以外的所有单位破坏。', async (instance, gameState) => {
+  const units = allUnitsOnField(gameState);
+  if (units.length === 0) return;
+  const highest = Math.max(...units.map(unit => unit.power || 0));
+  units
+    .filter(unit => (unit.power || 0) < highest)
+    .forEach(unit => destroyByEffect(gameState, unit, instance));
+}, {
+  erosionBackLimit: [3, 10]
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +39,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

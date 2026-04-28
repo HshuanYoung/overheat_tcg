@@ -1,4 +1,39 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, getOpponentUid, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000150_enter_exhaust',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  description: '从手牌进入战场时，选择对手最多2个单位横置。',
+  condition: (gameState, playerState, instance, event) => {
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    return event?.sourceCardId === instance.gamecardId &&
+      event.data?.zone === 'UNIT' &&
+      event.data?.sourceZone === 'HAND' &&
+      ownUnits(opponent).length > 0;
+  },
+  execute: async (instance, gameState, playerState) => {
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(opponent),
+      '选择横置对象',
+      '选择对手最多2个单位，将其横置。',
+      0,
+      2,
+      { sourceCardId: instance.gamecardId, effectId: '102000150_enter_exhaust' }
+    );
+  },
+  onQueryResolve: async (_instance, gameState, _playerState, selections) => {
+    selections.forEach(id => {
+      const target = AtomicEffectExecutor.findCardById(gameState, id);
+      if (target?.cardlocation === 'UNIT') target.isExhausted = true;
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +71,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR'],
   cardPackage: 'BT02',

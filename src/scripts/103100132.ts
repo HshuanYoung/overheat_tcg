@@ -1,4 +1,15 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, ensureData } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103100132_indestructible_effect',
+  type: 'CONTINUOUS',
+  description: '不会被效果破坏。',
+  applyContinuous: (_gameState, instance) => {
+    ensureData(instance).indestructibleByEffect = true;
+    addInfluence(instance, instance, '不会被效果破坏');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +45,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

@@ -1,4 +1,14 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { markAccessTapValue } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103100130_access_plus_two',
+  type: 'CONTINUOUS',
+  description: '通过横置这个单位支付的ACCESS值可以当作+2。',
+  applyContinuous: (_gameState, instance) => {
+    markAccessTapValue(instance, instance, 2);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +44,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

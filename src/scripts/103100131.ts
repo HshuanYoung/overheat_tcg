@@ -1,4 +1,45 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, discardHandCost, getOpponentUid, ownUnits } from './BaseUtil';
+
+const isWitchUnit = (card: Card) => card.type === 'UNIT' && card.fullName.includes('魔女');
+
+const cardEffects: CardEffect[] = [{
+  id: '103100131_redirect_attack',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ATTACK_DECLARED',
+  triggerLocation: ['UNIT'],
+  isGlobal: true,
+  limitCount: 1,
+  limitNameType: true,
+  description: '对手单位宣言攻击时，舍弃1张手牌，可以将攻击对象变为你的1个卡名含《魔女》的单位。',
+  condition: (gameState, playerState, _instance, event) =>
+    event?.playerUid === getOpponentUid(gameState, playerState.uid) &&
+    playerState.hand.length > 0 &&
+    ownUnits(playerState).some(isWitchUnit),
+  cost: discardHandCost(1),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState).filter(isWitchUnit),
+      '选择新的攻击对象',
+      '你可以选择你的战场上的1个卡名含有《魔女》的单位，将这次战斗的攻击对象变为它。',
+      0,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103100131_redirect_attack' }
+    );
+  },
+  onQueryResolve: async (_instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target || target.cardlocation !== 'UNIT') return;
+    if (gameState.battleState) {
+      gameState.battleState.unitTargetId = target.gamecardId;
+      gameState.battleState.defenseLockedToTargetId = target.gamecardId;
+      gameState.battleState.skipAttackerExhaust = true;
+      gameState.logs.push(`[魔女的领路人] 将这次战斗的攻击对象变为 [${target.fullName}]。`);
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +75,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

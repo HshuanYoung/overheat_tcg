@@ -1,4 +1,33 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, exhaustCost, ownUnits, preventNextDestroy } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101000159_protect',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  description: '横置：选择你的1个其他力量2000以下单位，本回合下一次将被破坏时防止。',
+  condition: (_gameState, playerState, instance) =>
+    !instance.isExhausted &&
+    ownUnits(playerState).some(unit => unit.gamecardId !== instance.gamecardId && (unit.power || 0) <= 2000),
+  cost: exhaustCost,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState).filter(unit => unit.gamecardId !== instance.gamecardId && (unit.power || 0) <= 2000),
+      '选择防止破坏的单位',
+      '选择你的1个其他力量2000以下单位。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '101000159_protect' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target) preventNextDestroy(target, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +63,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

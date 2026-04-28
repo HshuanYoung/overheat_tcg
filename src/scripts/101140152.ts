@@ -1,4 +1,52 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, erosionCost, forbidAttackAndDefenseUntil, moveCard } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101140152_silence_god',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  description: '横置：选择对手1个神蚀单位，直到对手回合结束不能发动能力、不能攻击防御。',
+  condition: (gameState, playerState, instance) => {
+    const opponentUid = gameState.playerIds.find(uid => uid !== playerState.uid)!;
+    return !instance.isExhausted && gameState.players[opponentUid].unitZone.some(unit => unit?.godMark);
+  },
+  cost: async (_gameState, _playerState, instance) => {
+    if (instance.isExhausted) return false;
+    instance.isExhausted = true;
+    return true;
+  },
+  execute: async (instance, gameState, playerState) => {
+    const opponentUid = gameState.playerIds.find(uid => uid !== playerState.uid)!;
+    const targets = gameState.players[opponentUid].unitZone.filter((unit): unit is Card => !!unit && unit.godMark);
+    createSelectCardQuery(gameState, playerState.uid, targets, '选择神蚀单位', '选择对手的1个神蚀单位。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '101140152_silence_god' }, () => 'UNIT');
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target) return;
+    target.temporaryCanActivateEffect = false;
+    const opponentUid = gameState.playerIds.find(uid => uid !== playerState.uid)!;
+    forbidAttackAndDefenseUntil(target, instance, gameState.players[opponentUid].isTurn ? gameState.turnCount : gameState.turnCount + 1);
+  }
+}, {
+  id: '101140152_bottom_attacker',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  erosionTotalLimit: [10, 10],
+  limitCount: 1,
+  description: '10+：侵蚀2，选择正在攻击的神蚀单位放到卡组底。',
+  condition: gameState => gameState.phase === 'BATTLE_FREE' && !!gameState.battleState?.attackers?.some(id => AtomicEffectExecutor.findCardById(gameState, id)?.godMark),
+  cost: erosionCost(2),
+  execute: async (instance, gameState, playerState) => {
+    const targets = (gameState.battleState?.attackers || []).map(id => AtomicEffectExecutor.findCardById(gameState, id)).filter((card): card is Card => !!card && card.godMark);
+    createSelectCardQuery(gameState, playerState.uid, targets, '选择攻击单位', '选择战场上的1个正在进行攻击的神蚀单位放到卡组底。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '101140152_bottom_attacker' }, () => 'UNIT');
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target) return;
+    const uid = AtomicEffectExecutor.findCardOwnerKey(gameState, target.gamecardId);
+    if (uid) moveCard(gameState, uid, target, 'DECK', instance, { insertAtBottom: true });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +83,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER'],
   cardPackage: 'BT02',

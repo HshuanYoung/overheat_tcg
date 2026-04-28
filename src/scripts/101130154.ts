@@ -1,4 +1,19 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addInfluence, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130154_heroic_damage',
+  type: 'CONTINUOUS',
+  erosionTotalLimit: [0, 3],
+  description: '0~3：伤害+1，并具有英勇。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner || instance.cardlocation !== 'UNIT') return;
+    instance.isHeroic = true;
+    addInfluence(instance, instance, '获得效果: 【英勇】');
+    addContinuousDamage(instance, instance, 1);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +51,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

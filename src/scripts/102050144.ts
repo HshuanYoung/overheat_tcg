@@ -1,4 +1,19 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { damagePlayerByEffect, getOpponentUid } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050144_enter_damage',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  erosionBackLimit: [5, 7],
+  description: '5~7：进入战场时，给对手造成1点效果伤害。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId && event.data?.zone === 'UNIT',
+  execute: async (instance, gameState, playerState) => {
+    await damagePlayerByEffect(gameState, playerState.uid, getOpponentUid(gameState, playerState.uid), 1, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +50,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

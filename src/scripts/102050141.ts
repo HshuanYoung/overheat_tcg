@@ -1,4 +1,21 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addContinuousPower, getOpponentUid, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050141_weaken_if_opponent_god',
+  type: 'CONTINUOUS',
+  description: '若对手战场上有神蚀单位，伤害-1，力量-1500。',
+  applyContinuous: (gameState, instance) => {
+    const ownerUid = Object.entries(gameState.players).find(([, player]) =>
+      player.unitZone.some(unit => unit?.gamecardId === instance.gamecardId)
+    )?.[0];
+    if (!ownerUid) return;
+    const opponent = gameState.players[getOpponentUid(gameState, ownerUid)];
+    if (!ownUnits(opponent).some(unit => unit.godMark)) return;
+    addContinuousDamage(instance, instance, -1);
+    addContinuousPower(instance, instance, -1500);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +51,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

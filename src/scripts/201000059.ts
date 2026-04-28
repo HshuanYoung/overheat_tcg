@@ -1,4 +1,24 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, ownUnits, preventNextDestroy, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('201000059_prevent_destroy', '选择你的1个单位，本回合中那个单位下一次将被破坏时防止那次破坏。', async (instance, gameState, playerState) => {
+  if (ownUnits(playerState).length === 0) return;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    ownUnits(playerState),
+    '选择保护单位',
+    '选择你的1个单位，本回合中那个单位下一次将要被破坏时，防止那次破坏。',
+    1,
+    1,
+    { sourceCardId: instance.gamecardId, effectId: '201000059_prevent_destroy' }
+  );
+}, {
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') preventNextDestroy(target, instance);
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +47,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

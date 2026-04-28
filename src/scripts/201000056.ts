@@ -1,4 +1,30 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, moveCard, moveTopDeckTo, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('201000056_search', '同名1回合1次：选择卡组中1张<圣王国>非神蚀单位加入手牌。之后卡组顶1张放置到侵蚀区。', async (instance, gameState, playerState) => {
+  const candidates = playerState.deck.filter(card => card.type === 'UNIT' && card.faction === '圣王国' && !card.godMark);
+  if (candidates.length === 0) return;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    candidates,
+    '选择征募单位',
+    '选择你的卡组中的1张<圣王国>非神蚀单位卡，将其加入手牌。',
+    1,
+    1,
+    { sourceCardId: instance.gamecardId, effectId: '201000056_search' },
+    () => 'DECK'
+  );
+}, {
+  limitCount: 1,
+  limitNameType: true,
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'DECK') moveCard(gameState, playerState.uid, target, 'HAND', instance);
+    moveTopDeckTo(gameState, playerState.uid, 1, 'EROSION_FRONT', instance);
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +53,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT02',

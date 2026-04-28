@@ -234,6 +234,28 @@ export class EventEngine {
             card.isImmuneToUnitEffects = card.temporaryImmuneToUnitEffects;
           }
           if (card.baseShenyi !== undefined) card.isShenyi = card.baseShenyi;
+          if ((card as any).data) {
+            delete (card as any).data.accessTapValue;
+            delete (card as any).data.accessTapValueSourceName;
+            delete (card as any).data.declareAttackDefenseTax;
+            delete (card as any).data.declareAttackDefenseTaxSourceName;
+            delete (card as any).data.cannotAllianceByEffect;
+            delete (card as any).data.canAttackExhausted;
+            delete (card as any).data.cannotExhaustByEffect;
+            if ((card as any).data.soulBindItemId) {
+              const sourceStillActive = Object.values(gameState.players).some(player =>
+                player.itemZone.some(item => item?.gamecardId === (card as any).data.soulBindItemId)
+              );
+              if (!sourceStillActive) {
+                if ((card as any).data.cannotAttackOrDefendSourceName === (card as any).data.soulBoundBy) {
+                  delete (card as any).data.cannotAttackOrDefendUntilTurn;
+                  delete (card as any).data.cannotAttackOrDefendSourceName;
+                }
+                delete (card as any).data.soulBoundBy;
+                delete (card as any).data.soulBindItemId;
+              }
+            }
+          }
           card.influencingEffects = [];
           if (card.cardlocation === 'ITEM' && card.isExhausted) {
             card.influencingEffects.push({ sourceCardName: '系统状态', description: '已横置' });
@@ -337,6 +359,55 @@ export class EventEngine {
           card.influencingEffects.push({
             sourceCardName: (card as any).data.destroyAtEndBy,
             description: '回合结束时破坏'
+          });
+        }
+        if (card && (card as any).data?.preventNextDestroy) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.preventNextDestroySourceName || '效果',
+            description: '下一次将被破坏时防止'
+          });
+        }
+        if (card && (card as any).data?.cannotAttackOrDefendSourceName) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.cannotAttackOrDefendSourceName,
+            description: '不能宣言攻击和防御'
+          });
+        }
+        if (card && (card as any).data?.accessTapValue) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.accessTapValueSourceName || '效果',
+            description: `横置支付ACCESS时可当作+${(card as any).data.accessTapValue}`
+          });
+        }
+        if (card && (card as any).data?.declareAttackDefenseTax) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.declareAttackDefenseTaxSourceName || '效果',
+            description: `宣言攻击或防御需要支付${(card as any).data.declareAttackDefenseTax}费`
+          });
+        }
+        if (card && (card as any).data?.controlChangedBy) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.controlChangedBy,
+            description: '控制权已变更'
+          });
+        }
+        if (card && (card as any).data?.extraNameContainsWitchBy) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.extraNameContainsWitchBy,
+            description: '视为卡名含有《魔女》'
+          });
+        }
+        if (card && (card as any).data?.resetAfterNextBattleDestroyTurn === gameState.turnCount) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.resetAfterNextBattleDestroySourceName || '效果',
+            description: '战斗破坏对手单位后可以重置'
           });
         }
       });

@@ -1,4 +1,78 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempDamage, addTempKeyword, addTempPower, canPutUnitOntoBattlefield, createSelectCardQuery, erosionCost, isNonGodUnit, moveCard, ownUnits } from './BaseUtil';
+
+const isWitchUnit = (card: Card) => card.type === 'UNIT' && card.fullName.includes('魔女');
+
+const cardEffects: CardEffect[] = [{
+  id: '103100133_sac_boost',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '将X个自己的非神蚀单位送入墓地：本回合伤害+X、力量+X000。X大于2时获得英勇、歼灭。',
+  condition: (_gameState, playerState) => ownUnits(playerState).some(isNonGodUnit),
+  execute: async (instance, gameState, playerState) => {
+    const candidates = ownUnits(playerState).filter(isNonGodUnit);
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      candidates,
+      '选择送入墓地的单位',
+      '选择你的战场上的X个非神蚀单位送入墓地。',
+      1,
+      candidates.length,
+      { sourceCardId: instance.gamecardId, effectId: '103100133_sac_boost' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const targets = ownUnits(playerState).filter(unit => selections.includes(unit.gamecardId) && !unit.godMark);
+    targets.forEach(unit => moveCard(gameState, playerState.uid, unit, 'GRAVE', instance));
+    const x = targets.length;
+    if (x <= 0) return;
+    addTempDamage(instance, instance, x);
+    addTempPower(instance, instance, x * 1000);
+    if (x > 2) {
+      addTempKeyword(instance, instance, 'heroic');
+      addTempKeyword(instance, instance, 'annihilation');
+    }
+  }
+}, {
+  id: '103100133_ten_revive_witches',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  erosionTotalLimit: [10, 10],
+  description: '10+：侵蚀3，将墓地中卡名含《魔女》的非神蚀单位尽可能多地放置到战场。',
+  condition: (_gameState, playerState) =>
+    playerState.unitZone.some(slot => slot === null) &&
+    playerState.grave.some(card => isWitchUnit(card) && !card.godMark && canPutUnitOntoBattlefield(playerState, card)),
+  cost: erosionCost(3),
+  execute: async (instance, gameState, playerState) => {
+    const slots = playerState.unitZone.filter(slot => slot === null).length;
+    const candidates = playerState.grave.filter(card =>
+      isWitchUnit(card) &&
+      !card.godMark &&
+      canPutUnitOntoBattlefield(playerState, card)
+    );
+    const count = Math.min(slots, candidates.length);
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      candidates,
+      '选择复活的魔女',
+      `选择${count}张卡名含有《魔女》的非神蚀单位卡，放置到战场上。`,
+      count,
+      count,
+      { sourceCardId: instance.gamecardId, effectId: '103100133_ten_revive_witches' },
+      () => 'GRAVE'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    selections
+      .map(id => AtomicEffectExecutor.findCardById(gameState, id))
+      .filter((card): card is Card => !!card && card.cardlocation === 'GRAVE')
+      .forEach(card => moveCard(gameState, playerState.uid, card, 'UNIT', instance));
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -37,7 +111,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER'],
   cardPackage: 'BT02',

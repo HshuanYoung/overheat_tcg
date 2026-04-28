@@ -1,4 +1,19 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, ensureData } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000149_forced_attack',
+  type: 'CONTINUOUS',
+  description: '不能组成联军；可以攻击时，必须进入战斗阶段并由这个单位攻击。',
+  applyContinuous: (gameState, instance) => {
+    const data = ensureData(instance);
+    data.cannotAllianceByEffect = true;
+    data.forcedAttackTurn = gameState.turnCount;
+    data.forcedAttackSourceName = instance.fullName;
+    addInfluence(instance, instance, '不能组成联军');
+    addInfluence(instance, instance, '本回合必须攻击（若可以）');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +49,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

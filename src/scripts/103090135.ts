@@ -1,4 +1,33 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempPower, canPayAccessCost, createSelectCardQuery, ownUnits, paymentCost } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103090135_boost_other',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '支付1费，选择这个单位以外你的1个<瑟诺布>单位，本回合力量+1000。',
+  condition: (gameState, playerState, instance) =>
+    canPayAccessCost(gameState, playerState, 1, 'GREEN', instance) &&
+    ownUnits(playerState).some(unit => unit.gamecardId !== instance.gamecardId && unit.faction === '瑟诺布'),
+  cost: paymentCost(1, 'GREEN'),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState).filter(unit => unit.gamecardId !== instance.gamecardId && unit.faction === '瑟诺布'),
+      '选择强化单位',
+      '选择这个单位以外的你的1个<瑟诺布>单位，本回合力量+1000。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103090135_boost_other' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') addTempPower(target, instance, 1000);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +63,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT02',

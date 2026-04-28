@@ -1,4 +1,27 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, attackingUnits, ownUnits, paymentCost } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101000158_battle_debuff',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '战斗中支付1费，参与攻击的所有单位本回合力量-500。',
+  condition: (gameState, playerState) =>
+    gameState.phase === 'BATTLE_FREE' &&
+    ownUnits(playerState).filter(unit => AtomicEffectExecutor.matchesColor(unit, 'WHITE')).length >= 2 &&
+    attackingUnits(gameState).length > 0,
+  cost: paymentCost(1),
+  execute: async (instance, gameState) => {
+    attackingUnits(gameState).forEach(unit => {
+      unit.temporaryPowerBuff = (unit.temporaryPowerBuff || 0) - 500;
+      unit.power = (unit.power || 0) - 500;
+      const details = unit.temporaryBuffDetails?.power || [];
+      details.push({ sourceCardName: instance.fullName, value: -500 });
+      unit.temporaryBuffDetails = { ...(unit.temporaryBuffDetails || {}), power: details };
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +57,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT02',

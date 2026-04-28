@@ -116,7 +116,7 @@ const card: Card = {
   effects: [trigger_104020462_exhaust_targets],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'ST03',
+  cardPackage: 'BT03',
   uniqueId: null,
 };
 

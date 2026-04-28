@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 本回合中，所有玩家在选择单位宣言攻击或防御时，那名玩家可以支付〖+1〗。若不支付，那次战斗中，那名玩家的所有参与战斗的单位〖伤害-1〗〖力量-1000〗。
+ * 本回合中，所有玩家在选择单位宣言攻击或防御时，那名玩家可以支付〖1费〗。若不支付，那次战斗中，那名玩家的所有参与战斗的单位〖伤害-1〗〖力量-1000〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

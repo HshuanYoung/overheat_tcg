@@ -117,7 +117,7 @@ const card: Card = {
   effects: [activate_104020252_search],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'ST03',
+  cardPackage: 'BT03',
   uniqueId: null,
 };
 

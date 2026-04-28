@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【永】:选择这个单位为效果对象的卡名含有《降灵》的卡的ACCESS值变为〖0:绿〗。
+ * 【永】:选择这个单位为效果对象的卡名含有《降灵》的卡的ACCESS值变为〖0费，颜色需求1绿〗。
  * 【诱】:这个单位被卡名含有《降灵》的卡选择为效果对象时，本回合中，你的所有单位〖力量+500〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */

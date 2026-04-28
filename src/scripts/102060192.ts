@@ -11,7 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 【永】:〖力量3500〗以上的这个单位〖伤害+1〗并获得【速攻】。
- * 【诱】:[〖+2〗]这个单位进入战场时，你可以使你的所有单位本回合中〖力量+1000〗。
+ * 【诱】:[〖支付2费〗]这个单位进入战场时，你可以使你的所有单位本回合中〖力量+1000〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

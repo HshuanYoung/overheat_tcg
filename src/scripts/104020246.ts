@@ -163,7 +163,7 @@ const card: Card = {
   ],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'ST03',
+  cardPackage: 'BT03',
   uniqueId: null,
 };
 

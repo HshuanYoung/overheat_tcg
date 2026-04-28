@@ -11,7 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 〖同名1回合1次〗选择你的墓地中的8张卡，将其放置到卡组底。
- * 若你的放逐区有《解放之光》，这张卡的ACCESS值变为〖0:白〗。
+ * 若你的放逐区有《解放之光》，这张卡的ACCESS值变为〖0费，颜色需求1白〗。
  * 这张卡将要被送入墓地时，将这张卡放逐作为代替。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */

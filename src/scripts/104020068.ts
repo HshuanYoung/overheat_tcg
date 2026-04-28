@@ -260,7 +260,7 @@ const card: Card = {
   ],
   rarity: 'SR',
   availableRarities: ['SR'],
-  cardPackage: 'BT01,ST03',
+  cardPackage: 'BT01',
   uniqueId: null,
 };
 

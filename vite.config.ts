@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      allowedHosts: ['hsyoung.icu', 'www.hsyoung.icu'],
+      allowedHosts: ['hsyoung.com', 'www.hsyoung.com'],
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       hmr: process.env.DISABLE_HMR !== 'true' ? {
-        host: 'hsyoung.icu',
+        host: 'hsyoung.com',
       } : false,
     },
   };

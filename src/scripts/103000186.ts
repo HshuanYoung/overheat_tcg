@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】:[〖0:绿绿〗，舍弃手牌中的这张卡]这个能力只能在你的主要阶段中从手牌发动。查看你的卡组顶的10张卡。你从中选择1张卡，将其送入墓地。将查看的其余的卡按原样放回，将你的卡组洗切。
+ * 【启】:[〖支付0费，我方单位区有2个或者以上的绿色单位〗，舍弃手牌中的这张卡]这个能力只能在你的主要阶段中从手牌发动。检视你的卡组顶的10张卡。你从中选择1张卡，将其送入墓地。将查看的其余的卡按原样放回，将你的卡组洗切。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

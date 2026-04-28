@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 〖5~7〗选择战场上的1张卡，将其破坏。若你的战场上有具有【神依】的单位，这张卡的ACCESS值减少4。（最低降到〖0:红红〗）
+ * 〖5~7〗选择战场上的1张卡，将其破坏。若你的战场上有具有【神依】的单位，这张卡的ACCESS值减少4。（最低降到〖0费〗）
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

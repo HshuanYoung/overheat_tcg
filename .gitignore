@@ -9,3 +9,5 @@ pics/*
 admin/
 guest*/
 vite.config.ts
+android/
+.idea/

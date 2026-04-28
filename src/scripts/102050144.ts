@@ -11,7 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 【速攻】
- * 〖5~7〗【诱】:这个单位进入战场时，选择1名对手，给予他1点伤害。
+ * 〖5~7〗【诱】:这个单位进入战场时，给对手造成一点效果伤害。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

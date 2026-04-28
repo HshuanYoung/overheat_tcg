@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【诱】〖同名1回合1次〗:你进入女神化状态时，选择对手的1个ACCESS值+2以下的非神蚀单位，将其〖重置〗，本回合中，你得到其控制权。（那个单位离开战场时，将那个单位的控制权返还给对手）
+ * 【诱】〖同名1回合1次〗:你进入女神化状态时，选择对手的1个ACCESS值+2以下的非神蚀单位，将其〖重置〗，本回合中，你得到其控制权。（这个单位离开战场时，将那个单位的控制权返还给对手）
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

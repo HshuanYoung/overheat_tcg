@@ -37,8 +37,8 @@ const card: Card = {
   canResetCount: 0,
   effects: [],
   rarity: 'SR',
-  availableRarities: ['SR', 'SER', 'UR'],
-  cardPackage: 'BT02,BT05',
+  availableRarities: ['SR', 'SER'],
+  cardPackage: 'BT02',
   uniqueId: null as any,
 };
 

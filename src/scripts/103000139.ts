@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【神依】（〖1回合1次〗你进入女神化状态时，将这个单位〖重置〗。）
+ * 【神依】
  * 【诱】:这个单位从手牌进入战场时，本回合中，你的所有单位〖伤害+1〗〖力量+1000〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */

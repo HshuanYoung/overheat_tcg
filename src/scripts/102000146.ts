@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】〖同名1回合1次〗:[将这个单位放逐，将你的侵蚀区中的1张红色正面卡〖翻面〗]选择对手的1个非神蚀单位，将其破坏。
+ * 【启】〖同名1回合1次〗:[将这个单位放逐，侵蚀1]选择对手的1个非神蚀单位，将其破坏。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

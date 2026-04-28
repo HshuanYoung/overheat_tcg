@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【神依】（〖1回合1次〗你进入女神化状态时，将这个单位〖重置〗。）
+ * 【神依】
  * 【诱】:这个单位从手牌进入战场时，选择对手的最多2个单位，将其〖横置〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
@@ -38,7 +38,7 @@ const card: Card = {
   canResetCount: 0,
   effects: [],
   rarity: 'SR',
-  availableRarities: ['SR', 'SER'],
+  availableRarities: ['SR'],
   cardPackage: 'BT02',
   uniqueId: null as any,
 };

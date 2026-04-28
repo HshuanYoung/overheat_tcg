@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【创痕2】（你的侵蚀区中的背面卡有2张以上时才有效）选择战场上的1个参与攻击的单位，将其放置到其持有者的卡组底。之后，若那个单位是神蚀单位，其持有者选择他的墓地中的2张卡，放置到卡组底。
+ * 【创痕2】选择战场上的1个参与攻击的单位，将其放置到其持有者的卡组底。之后，若那个单位是神蚀单位，其持有者选择他的墓地中的2张卡，放置到卡组底。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

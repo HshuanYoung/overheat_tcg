@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】:[〖+1〗，〖横置〗]选择你的1个非神蚀单位，本回合中，获得【歼灭】。
+ * 【启】:[〖支付1费〗，〖横置〗]选择你的1个非神蚀单位，本回合中，获得【歼灭】。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

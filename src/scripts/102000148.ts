@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 〖5~7〗【诱】:[〖0:红红〗]这个单位进入战场时，选择战场上的1张道具卡，将其破坏。
+ * 〖5~7〗【诱】:[〖支付0费，我方场上有两个或以上的红色单位〗]这个单位进入战场时，选择战场上的1张道具卡，将其破坏。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

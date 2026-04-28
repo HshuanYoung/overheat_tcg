@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【永】:具有【速攻】的单位的控制者需要支付〖+1〗才能选择那些单位宣言攻击或防御。（若不支付，则不能进行这次宣言。）
+ * 【永】:具有【速攻】的单位的控制者需要支付〖1费〗才能选择那些单位宣言攻击或防御。（若不支付，则不能进行这次宣言。）
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

@@ -57,7 +57,7 @@ const card: Card = {
   effects: [activate_104020121_power_up],
   rarity: 'C',
   availableRarities: ['C'],
-  cardPackage: 'BT02,ST03',
+  cardPackage: 'BT02',
   uniqueId: null as any,
 };
 

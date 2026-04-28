@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【创痕2】（你的侵蚀区中的背面卡有2张以上时才有效）将战场上的〖力量2000〗以下的所有单位破坏。
+ * 【创痕2】将战场上的〖力量2000〗以下的所有单位破坏。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

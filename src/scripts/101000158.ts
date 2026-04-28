@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】〖1回合1次〗:[〖+1:白白〗]这个能力只能在战斗中发动。参与攻击的所有单位在本回合中〖力量-500〗。
+ * 【启】〖1回合1次〗:[〖支付1费，我方单位区有两个或以上的白色单位〗]这个能力只能在战斗中发动。参与攻击的所有单位在本回合中〖力量-500〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

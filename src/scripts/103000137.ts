@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 〖6~8〗【启】:[〖+2〗]选择你的1个单位，本回合中〖伤害+1〗〖力量+2000〗。
+ * 〖6~8〗【启】:[〖支付2费〗]选择你的1个单位，本回合中〖伤害+1〗〖力量+2000〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

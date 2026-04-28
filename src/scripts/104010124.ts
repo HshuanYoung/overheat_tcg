@@ -239,7 +239,7 @@ const card: Card = {
   ],
   rarity: 'SR',
   availableRarities: ['SR'],
-  cardPackage: 'BT02,BTO4',
+  cardPackage: 'BT02,
   uniqueId: null,
   faction: '百濑之水城',
 };

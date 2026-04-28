@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】〖1回合1次〗:[〖+1〗]选择这个单位以外的你的1个<瑟诺布>单位，本回合中〖力量+1000〗。
+ * 【启】〖1回合1次〗:[〖支付1费〗]选择这个单位以外的你的1个<瑟诺布>单位，本回合中〖力量+1000〗。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

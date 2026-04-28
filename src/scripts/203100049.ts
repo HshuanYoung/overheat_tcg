@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【创痕3】（你的侵蚀区中的背面卡有3张以上时才有效）选择对手的1个单位，你得到其控制权。只要你控制着那个单位，那个单位同时也视为卡名含有《魔女》的单位。
+ * 【创痕3】选择对手的1个单位，你得到其控制权。只要你控制着那个单位，那个单位同时也视为卡名含有《魔女》的单位。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

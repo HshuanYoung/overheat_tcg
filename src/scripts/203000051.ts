@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【创痕3】（你的侵蚀区中的背面卡有3张以上时才有效）将战场上的除了力量值最高的单位以外的所有单位破坏。（若力量值最高的单位有复数个，这些单位都不会破坏）
+ * 【创痕3】将战场上的除了力量值最高的单位以外的所有单位破坏。（若力量值最高的单位有复数个，这些单位都不会破坏）
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

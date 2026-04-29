@@ -11,7 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 【永】财富1（只要这个单位在战场上，你获得1个财富指示物）。
- * 【启】〖同名1回合1次〗{你的财富指示物3个以上，对手宣言使用非神蚀卡时 }（舍弃三张手牌）：反击那张卡。之后，将那张卡加入你的手牌
+ * 【启】〖同名1回合1次〗{你的财富指示物3个以上，对手宣言使用非神蚀卡时 }（舍弃三张手牌）：反击那张卡。之后，将那张卡加入你的手牌。被送去墓地时回到持有者的墓地
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

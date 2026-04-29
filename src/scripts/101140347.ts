@@ -10,8 +10,8 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【永】：由于卡名含有《神仪》的卡的效果进入战场的这个单位获得
- * “【诱】{这个单位从战场上离开时，选择1名对手}：将被选择的玩家的卡组顶的2张卡放逐，恢复2（随机选择你的墓地中的2张卡，将其放置到你的卡组底）。”
+ * 【永】：由于卡名含有《神仪》的卡的效果进入战场的这个单位获得下面的效果
+ * “【诱】{这个单位从战场上离开时，选择1名对手}：将被选择的玩家的卡组顶的2张卡放逐，恢复2（随机将你的墓地中的2张卡，将其放置到你的卡组底）。”
  * 和“【启】〖1回合1次〗{只能在对抗对手使用卡的宣言时发动}[将这个单位放逐]：反击那张卡。”的能力。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
@@ -38,8 +38,8 @@ const card: Card = {
   canResetCount: 0,
   effects: [],
   rarity: 'UR',
-  availableRarities: ['UR', 'PR'],
-  cardPackage: 'BT06，特殊',
+  availableRarities: ['UR'],
+  cardPackage: 'BT06',
   uniqueId: null as any,
 };
 

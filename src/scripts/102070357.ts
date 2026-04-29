@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【诱】{这个单位对对手造成战斗伤害时}：恢复1（随机选择你的墓地中的1张卡，将其放置到你的卡组底）。
+ * 【诱】{这个单位对对手造成战斗伤害时}：恢复1（随机将你的墓地中的1张卡，将其放置到你的卡组底）。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

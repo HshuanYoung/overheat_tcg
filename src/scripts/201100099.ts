@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【创痕2】（你的侵蚀区中的背面卡有2张以上时才有效）[将你的战场上的1个神蚀单位放逐]：本回合中，你的单位不会由于对手的卡的效果从战场上离开，放置你将要受到的所有伤害。放逐这张卡。
+ * 【创痕2】（你的侵蚀区中的背面卡有2张以上时才有效）[将你的战场上的1个神蚀单位放逐]：本回合中，你的单位不会由于对手的卡的效果从战场上离开，防止你将要受到的所有伤害。放逐这张卡。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

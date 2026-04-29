@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * {选择战场上的1张非神蚀道具卡}:将被选择的卡破坏。之后，恢复2（随机选择你的墓地中的2张卡，将其放置到你的卡组底）。
+ * {选择战场上的1张非神蚀道具卡}:将被选择的卡破坏。之后，恢复2（随机将你的墓地中的2张卡，将其放置到你的卡组底）。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

@@ -11,7 +11,7 @@ import { Card } from '../types/game';
  * Keywords: N/A
  * Card Detail:
  * 【诱】｛这个单位进入战场时｝[舍弃1张手牌]：你可以将你的卡组中的1张具有共鸣或【菲晶】的单位卡加入手牌。
- * 【创痕1】（你的侵蚀区中的背面卡有1张以上时才有效）【诱】{共鸣能力将你的墓地中的卡名含有《银乐器》的卡放逐时，选择1名玩家}：将被选择的玩家的卡组顶的2张卡送入墓地。
+ * 【创痕1】【诱】{共鸣能力将你的墓地中的卡名含有《银乐器》的卡放逐时，选择1名玩家}：将被选择的玩家的卡组顶的2张卡送入墓地。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

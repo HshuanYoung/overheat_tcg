@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【启】〖同名1回合1次〗[〖横置〗，〖+1〗]:将你的卡组或你的墓地中的1张具有【菲晶】的卡放置到你的卡组顶。
+ * 【启】〖同名1回合1次〗[〖横置〗，〖支付1费〗]:将你的卡组或你的墓地中的1张具有【菲晶】的卡放置到你的卡组顶。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

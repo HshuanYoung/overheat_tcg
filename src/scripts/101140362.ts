@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【诱】〖同名1回合1次〗{这个单位进入战场时}[0：白白，〖横置〗]：将你卡组中的1张卡名含有《神仪》的故事卡加入手牌。
+ * 【诱】〖同名1回合1次〗{这个单位进入战场时}[支付0费，我方单位区有两个或以上的白色单位，〖横置〗]：将你卡组中的1张卡名含有《神仪》的故事卡加入手牌。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

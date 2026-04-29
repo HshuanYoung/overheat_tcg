@@ -199,6 +199,7 @@ const card: Card = {
   effects: [continuous_101060059_color, trigger_101060059_recover, activate_101060059_search],
   rarity: 'UR',
   availableRarities: ['UR'],
+  cardPackage: 'DIY01',
   uniqueId: null,
 };
 

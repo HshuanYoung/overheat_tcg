@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【诱】〖1回合1次〗{对手的回合结束时，你可以选择你的墓地中的1张具有【菲晶】的卡}[〖+1〗]：将被选择的卡加入手牌。
+ * 【诱】〖1回合1次〗{对手的回合结束时，你可以选择你的墓地中的1张具有【菲晶】的卡}[〖支付1费〗]：将被选择的卡加入手牌。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

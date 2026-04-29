@@ -10,7 +10,7 @@ import { Card } from '../types/game';
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【诱】{你的回合结束时，选择你战场上的2张以上的卡}：你可以将被选择的卡送去墓地。之后，将你卡组中的1张非神蚀卡放置到战场上，那张卡的所有能力知道下一次你的回合开始为止无效（不包括基本能力）。
+ * 【诱】{你的回合结束时，选择你战场上的2张以上的卡}：你可以将被选择的卡送去墓地。之后，将你卡组中的1张非神蚀卡放置到战场上，那张卡的所有效果直到下一次你的回合开始为止无效（不包括关键词效果）。
  * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {

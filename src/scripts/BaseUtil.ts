@@ -607,6 +607,41 @@ export const addTempKeyword = (target: Card, source: Card, keyword: 'rush' | 'he
   }
 };
 
+export const addTempShenyi = (target: Card, source: Card, gameState: GameState) => {
+  const data = ensureData(target);
+  data.tempShenyiUntilTurn = gameState.turnCount;
+  data.tempShenyiSourceName = source.fullName;
+  target.isShenyi = true;
+  addInfluence(target, source, '获得【神依】');
+};
+
+export const markCannotDefendUntilEndOfTurn = (target: Card, source: Card, gameState: GameState) => {
+  const data = ensureData(target);
+  data.cannotDefendTurn = gameState.turnCount;
+  data.cannotDefendSourceName = source.fullName;
+  addInfluence(target, source, '不能宣言防御');
+};
+
+export const markSpiritTargeted = (gameState: GameState, target: Card, source: Card) => {
+  const data = ensureData(target);
+  data.spiritTargetedTurn = gameState.turnCount;
+  data.spiritTargetedSourceName = source.fullName;
+  addInfluence(target, source, '被卡名含有《降灵》的效果选择');
+  EventEngine.dispatchEvent(gameState, {
+    type: 'CARD_SELECTED_TARGET',
+    sourceCard: source,
+    sourceCardId: source.gamecardId,
+    targetCardId: target.gamecardId,
+    playerUid: ownerUidOf(gameState, source),
+    data: {
+      isSpiritEffect: true
+    }
+  });
+};
+
+export const isSpiritEffectEvent = (event: any) =>
+  !!event?.data?.isSpiritEffect || !!event?.sourceCard?.fullName?.includes('降灵');
+
 export const preventNextDestroy = (target: Card, source: Card, untilTurn?: number) => {
   const data = ensureData(target);
   data.preventNextDestroy = true;

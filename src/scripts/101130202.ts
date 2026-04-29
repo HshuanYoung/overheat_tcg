@@ -1,4 +1,51 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { canPutUnitOntoBattlefield, createSelectCardQuery, moveCard } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130202_hand_to_field',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  description: '入场时，可以选择手牌中这张卡以外的AC+3以下<圣王国>非神蚀单位放置到战场。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    playerState.hand.some(card =>
+      card.gamecardId !== instance.gamecardId &&
+      card.id !== '101130202' &&
+      card.type === 'UNIT' &&
+      card.faction === '圣王国' &&
+      !card.godMark &&
+      (card.acValue || 0) <= 3 &&
+      canPutUnitOntoBattlefield(playerState, card)
+    ),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      playerState.hand.filter(card =>
+        card.id !== '101130202' &&
+        card.type === 'UNIT' &&
+        card.faction === '圣王国' &&
+        !card.godMark &&
+        (card.acValue || 0) <= 3 &&
+        canPutUnitOntoBattlefield(playerState, card)
+      ),
+      '选择放置到战场的单位',
+      '选择你的手牌中的1张AC+3以下<圣王国>非神蚀单位卡，将其放置到战场。',
+      0,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '101130202_hand_to_field' },
+      () => 'HAND'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? playerState.hand.find(card => card.gamecardId === selections[0]) : undefined;
+    if (target && canPutUnitOntoBattlefield(playerState, target)) {
+      moveCard(gameState, playerState.uid, target, 'UNIT', instance);
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +81,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

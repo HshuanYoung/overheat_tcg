@@ -225,6 +225,9 @@ export class EventEngine {
             // For now we just keep the property on the object
           }
           if (card.baseGodMark !== undefined) card.godMark = card.baseGodMark;
+          if ((card as any).data?.tempShenyiUntilTurn === gameState.turnCount) {
+            card.isShenyi = true;
+          }
           if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
           if (card.baseHeroic !== undefined) card.isHeroic = card.baseHeroic || !!card.temporaryHeroic;
           card.canActivateEffect = card.baseCanActivateEffect !== undefined ? card.baseCanActivateEffect : true;
@@ -410,6 +413,13 @@ export class EventEngine {
             description: '不能发动能力'
           });
         }
+        if (card && (card as any).data?.tempShenyiUntilTurn === gameState.turnCount) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.tempShenyiSourceName || '效果',
+            description: '获得【神依】'
+          });
+        }
         if (card && (card as any).data?.escortReturn) {
           if (!card.influencingEffects) card.influencingEffects = [];
           card.influencingEffects.push({
@@ -455,6 +465,13 @@ export class EventEngine {
           card.influencingEffects.push({
             sourceCardName: (card as any).data.resetAfterNextBattleDestroySourceName || '效果',
             description: '战斗破坏对手单位后可以重置'
+          });
+        }
+        if (card && (card as any).data?.mustBeDefendedTurn === gameState.turnCount) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.mustBeDefendedSourceName || '效果',
+            description: '攻击时对手必须宣言防御'
           });
         }
       });

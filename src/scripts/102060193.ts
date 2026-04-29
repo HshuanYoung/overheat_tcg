@@ -1,4 +1,31 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addInfluence, addTempPower, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102060193_high_power',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '力量3500以上时，伤害+1并获得【速攻】。',
+  condition: (_gameState, _playerState, instance) => (instance.power || 0) >= 3500,
+  applyContinuous: (_gameState, instance) => {
+    addContinuousDamage(instance, instance, 1);
+    instance.isrush = true;
+    addInfluence(instance, instance, '获得【速攻】');
+  }
+}, {
+  id: '102060193_attack_power',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ATTACK_DECLARED',
+  triggerLocation: ['UNIT'],
+  isGlobal: true,
+  description: '你的单位攻击时，本回合这个单位力量+1000。',
+  condition: (_gameState, playerState, _instance, event) =>
+    event?.playerUid === playerState.uid &&
+    (event.data?.attackerIds || []).some((id: string) => ownUnits(playerState).some(unit => unit.gamecardId === id)),
+  execute: async (instance) => {
+    addTempPower(instance, instance, 1000);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +62,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT03',

@@ -1,4 +1,66 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addContinuousDamage, addContinuousPower, addInfluence, createSelectCardQuery, faceUpErosion, moveCard, ownUnits, preventNextDestroy } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101150208_exile_boost',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '放逐区15张以上：你的所有单位伤害+1、力量+500并获得【神依】。',
+  condition: (_gameState, playerState) => playerState.exile.length >= 15,
+  applyContinuous: (gameState, instance) => {
+    const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId);
+    if (!ownerUid) return;
+    ownUnits(gameState.players[ownerUid]).forEach(unit => {
+      addContinuousDamage(unit, instance, 1);
+      addContinuousPower(unit, instance, 500);
+      unit.isShenyi = true;
+      addInfluence(unit, instance, '获得【神依】');
+    });
+  }
+}, {
+  id: '101150208_prevent_battle_destroy',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  erosionTotalLimit: [4, 9],
+  description: '4~9，1回合1次，对手回合：选择3张正面侵蚀放逐。之后选择你的1个单位，本回合下一次将被战斗破坏时防止。',
+  condition: (_gameState, playerState) => !playerState.isTurn && faceUpErosion(playerState).length >= 3 && ownUnits(playerState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      faceUpErosion(playerState),
+      '选择放逐的侵蚀卡',
+      '选择你的侵蚀区的3张正面卡，将其放逐。',
+      3,
+      3,
+      { sourceCardId: instance.gamecardId, effectId: '101150208_prevent_battle_destroy', step: 'EXILE' },
+      () => 'EROSION_FRONT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'TARGET') {
+      const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+      if (target?.cardlocation === 'UNIT') preventNextDestroy(target, instance, gameState.turnCount);
+      return;
+    }
+    selections.forEach(id => {
+      const card = playerState.erosionFront.find(candidate => candidate?.gamecardId === id);
+      if (card) moveCard(gameState, playerState.uid, card, 'EXILE', instance);
+    });
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState),
+      '选择防止破坏的单位',
+      '选择你的1个单位，本回合中下一次将要被战斗破坏时防止那次破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '101150208_prevent_battle_destroy', step: 'TARGET' },
+      () => 'UNIT'
+    );
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +98,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER'],
   cardPackage: 'BT03',

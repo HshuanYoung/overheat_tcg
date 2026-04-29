@@ -29,6 +29,12 @@ export const ServerGameService = {
       const itemCount = player.itemZone.filter(c => c !== null).length;
       return Math.max(0, baseCost - itemCount);
     }
+    if (card.id === '201000140' && player.exile.some(c => c.id === '201000140')) {
+      return 0;
+    }
+    if (card.id === '202000080' && player.unitZone.some(unit => unit?.isShenyi)) {
+      return Math.max(0, baseCost - 4);
+    }
     if (
       card.type === 'UNIT' &&
       card.faction === '圣王国' &&
@@ -641,6 +647,23 @@ export const ServerGameService = {
     if (options?.isEffect) {
       (card as any).data.lastMovedByEffectTurn = gameState.turnCount;
       (card as any).data.lastMoveEffectSourceCardId = options.effectSourceCardId;
+    }
+
+    if (
+      options?.isEffect &&
+      (sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') &&
+      targetZone === 'EXILE'
+    ) {
+      sourcePlayer.exiledFromErosionTurn = gameState.turnCount;
+    }
+
+    if (
+      options?.isEffect &&
+      sourceZone === 'GRAVE' &&
+      targetZone === 'UNIT' &&
+      card.type === 'UNIT'
+    ) {
+      targetPlayer.unitFromGraveToFieldTurn = gameState.turnCount;
     }
 
     if ((targetZone === 'HAND' || targetZone === 'DECK') && sourceZone !== 'HAND' && sourceZone !== 'DECK') {
@@ -1461,7 +1484,24 @@ export const ServerGameService = {
         if (stackItem.type === 'PLAY' && card) {
           const isInPlayZone = owner.playZone.some(c => c && c.gamecardId === card.gamecardId);
           if (isInPlayZone) {
-            ServerGameService.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'GRAVE', card.gamecardId);
+            const liveStory = owner.playZone.find(c => c?.gamecardId === card.gamecardId);
+            const replaceToExile = liveStory?.effects?.some(effect =>
+              effect.type === 'CONTINUOUS' &&
+              effect.content === 'EXILE_WHEN_LEAVES_PLAY_TO_GRAVE'
+            );
+            ServerGameService.moveCard(
+              gameState,
+              stackItem.ownerUid,
+              'PLAY',
+              stackItem.ownerUid,
+              replaceToExile ? 'EXILE' : 'GRAVE',
+              card.gamecardId,
+              replaceToExile ? {
+                isEffect: true,
+                effectSourcePlayerUid: stackItem.ownerUid,
+                effectSourceCardId: card.gamecardId
+              } : undefined
+            );
           }
         }
         continue;
@@ -1910,6 +1950,59 @@ export const ServerGameService = {
       return gameState;
     }
 
+    if (query.callbackKey === 'DRAW_REPLACEMENT_CHOICE') {
+      if (currentSelections[0] !== 'YES' || !sourceCard) {
+        gameState.logs.push(`[抽牌阶段] ${gameState.players[playerUid].displayName} 选择通常抽卡。`);
+        (gameState.players[playerUid] as any).skipDrawReplacementOnce = gameState.turnCount;
+        await ServerGameService.executeDrawPhase(gameState, gameState.players[playerUid]);
+        return gameState;
+      }
+
+      const player = gameState.players[playerUid];
+      const candidates = player.grave.filter(Boolean) as Card[];
+      if (candidates.length < 2) {
+        await ServerGameService.executeDrawPhase(gameState, player);
+        return gameState;
+      }
+
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_CARD',
+        playerUid,
+        options: AtomicEffectExecutor.enrichQueryOptions(
+          gameState,
+          playerUid,
+          candidates.map(card => ({ card, source: 'GRAVE' as TriggerLocation }))
+        ),
+        title: '选择放回卡组底的卡',
+        description: `选择墓地中的2张卡，放置到卡组底，代替通常抽卡。`,
+        minSelections: 2,
+        maxSelections: 2,
+        callbackKey: 'DRAW_REPLACEMENT_SELECT',
+        context: { sourceCardId: sourceCard.gamecardId }
+      };
+      return gameState;
+    }
+
+    if (query.callbackKey === 'DRAW_REPLACEMENT_SELECT') {
+      const player = gameState.players[playerUid];
+      currentSelections.forEach(id => {
+        const card = player.grave.find(c => c.gamecardId === id);
+        if (card && sourceCard) {
+          ServerGameService.moveCard(gameState, playerUid, 'GRAVE', playerUid, 'DECK', id, {
+            insertAtBottom: true,
+            isEffect: true,
+            effectSourcePlayerUid: playerUid,
+            effectSourceCardId: sourceCard.gamecardId
+          });
+        }
+      });
+      gameState.logs.push(`[${sourceCard?.fullName || '替代抽卡'}] 代替通常抽卡，将2张墓地卡放置到卡组底。`);
+      gameState.phase = 'EROSION';
+      await ServerGameService.executeErosionPhase(gameState, player);
+      return gameState;
+    }
+
     // 2. Trigger Option Processing
     if (query.callbackKey === 'TRIGGER_CHOICE') {
       if (currentSelections[0] === 'YES') {
@@ -2096,10 +2189,16 @@ export const ServerGameService = {
       if (currentSelections[0] === 'YES') {
         // Find equipment
         const player = gameState.players[playerUid];
-        const subCardIdx = player.itemZone.findIndex(c => c?.gamecardId === subCardId);
-        const subCard = player.itemZone[subCardIdx];
+        let subZone: TriggerLocation = 'ITEM';
+        let subCardIdx = player.itemZone.findIndex(c => c?.gamecardId === subCardId);
+        let subCard = player.itemZone[subCardIdx];
+        if (subCardIdx === -1) {
+          subZone = 'UNIT';
+          subCardIdx = player.unitZone.findIndex(c => c?.gamecardId === subCardId);
+          subCard = player.unitZone[subCardIdx] || undefined;
+        }
         if (subCardIdx !== -1 && subCard) {
-          ServerGameService.moveCard(gameState, playerUid, 'ITEM', playerUid, 'GRAVE', subCardId);
+          ServerGameService.moveCard(gameState, playerUid, subZone, playerUid, 'GRAVE', subCardId);
           gameState.logs.push(`[系统] ${subCard.fullName} 代替了承受破坏。`);
 
           // Mark the unit as resolved (it survived)
@@ -2464,6 +2563,13 @@ export const ServerGameService = {
     // Exhaust attackers
     for (const unit of attackers) {
       ServerGameService.exhaustCard(unit);
+      if ((player as any).snowstormTurn === gameState.turnCount) {
+        unit.temporaryDamageBuff = (unit.temporaryDamageBuff || 0) - 1;
+        unit.temporaryPowerBuff = (unit.temporaryPowerBuff || 0) - 1000;
+        unit.damage = (unit.damage || 0) - 1;
+        unit.power = (unit.power || 0) - 1000;
+        unit.temporaryBuffSources = { ...(unit.temporaryBuffSources || {}), damage: (player as any).snowstormSourceName || '暴风雪', power: (player as any).snowstormSourceName || '暴风雪' };
+      }
     }
 
     gameState.battleState = {
@@ -2565,6 +2671,13 @@ export const ServerGameService = {
       }
 
       ServerGameService.exhaustCard(unit);
+      if ((player as any).snowstormTurn === gameState.turnCount) {
+        unit.temporaryDamageBuff = (unit.temporaryDamageBuff || 0) - 1;
+        unit.temporaryPowerBuff = (unit.temporaryPowerBuff || 0) - 1000;
+        unit.damage = (unit.damage || 0) - 1;
+        unit.power = (unit.power || 0) - 1000;
+        unit.temporaryBuffSources = { ...(unit.temporaryBuffSources || {}), damage: (player as any).snowstormSourceName || '暴风雪', power: (player as any).snowstormSourceName || '暴风雪' };
+      }
       gameState.battleState.defender = defenderId;
       EventEngine.dispatchEvent(gameState, {
         type: 'CARD_DEFENSE_DECLARED',
@@ -2575,6 +2688,21 @@ export const ServerGameService = {
       });
       gameState.logs.push(`${player.displayName} 宣告了防御 ${unit.fullName}`);
     } else {
+      const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      const attackingUnits = (gameState.battleState.attackers || [])
+        .map(id => gameState.players[turnPlayerId].unitZone.find(unit => unit?.gamecardId === id))
+        .filter((unit): unit is Card => !!unit);
+      const mustDefend = attackingUnits.some(unit => (unit as any).data?.mustBeDefendedTurn === gameState.turnCount);
+      const hasAvailableDefender = player.unitZone.some(unit =>
+        unit &&
+        !unit.isExhausted &&
+        !(unit as any).battleForbiddenByEffect &&
+        !((unit as any).data?.cannotDefendTurn === gameState.turnCount) &&
+        !((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount)
+      );
+      if (mustDefend && hasAvailableDefender) {
+        throw new Error('由于效果限制，必须选择1个单位宣言防御');
+      }
       gameState.logs.push(`${player.displayName} 选择不防御`);
     }
 
@@ -3174,8 +3302,9 @@ export const ServerGameService = {
 
     // Check for Substitution effects
     if (!skipSubstitution) {
-      const substitutionCards = player.itemZone.filter(c =>
+      const substitutionCards = [...player.itemZone, ...player.unitZone].filter(c =>
         c !== null &&
+        c.gamecardId !== gamecardId &&
         c.effects &&
         c.effects.some(e => e.substitutionFilter && AtomicEffectExecutor.matchesFilter(unit, e.substitutionFilter, c))
       ) as Card[];
@@ -4006,6 +4135,37 @@ export const ServerGameService = {
       gameState.logs.push('先手玩家第一回合不抽牌');
       gameState.phase = 'EROSION';
       await ServerGameService.executeErosionPhase(gameState, player);
+      return;
+    }
+
+    const skipDrawReplacementOnce = (player as any).skipDrawReplacementOnce === gameState.turnCount;
+    if (skipDrawReplacementOnce) {
+      delete (player as any).skipDrawReplacementOnce;
+    }
+
+    const drawReplacementCard = skipDrawReplacementOnce ? undefined : player.unitZone.find(card =>
+      card?.effects?.some(effect =>
+        effect.type === 'CONTINUOUS' &&
+        effect.content === 'DRAW_REPLACEMENT_GRAVE_BOTTOM' &&
+        (!effect.condition || effect.condition(gameState, player, card))
+      )
+    );
+    if (drawReplacementCard && player.grave.length >= 2) {
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_CHOICE',
+        playerUid: player.uid,
+        options: [
+          { id: 'YES', label: '发动(YES)' },
+          { id: 'NO', label: '通常抽卡(NO)' }
+        ],
+        title: '通常抽卡替代',
+        description: `是否发动 [${drawReplacementCard.fullName}] 的效果，选择墓地中的2张卡放置到卡组底，代替通常抽卡？`,
+        minSelections: 1,
+        maxSelections: 1,
+        callbackKey: 'DRAW_REPLACEMENT_CHOICE',
+        context: { sourceCardId: drawReplacementCard.gamecardId }
+      };
       return;
     }
 

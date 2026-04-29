@@ -1,4 +1,31 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addTempPower, damagePlayerByEffect, getOpponentUid, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102060195_opponent_destroy_boost',
+  type: 'TRIGGER',
+  triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  triggerLocation: ['UNIT'],
+  isGlobal: true,
+  description: '对手的单位被破坏时，本回合你的所有单位力量+500。',
+  condition: (_gameState, playerState, _instance, event) =>
+    event?.playerUid === getOpponentUid(_gameState, playerState.uid),
+  execute: async (instance, _gameState, playerState) => {
+    ownUnits(playerState).forEach(unit => addTempPower(unit, instance, 500));
+  }
+}, {
+  id: '102060195_ten_damage',
+  type: 'TRIGGER',
+  triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  triggerLocation: ['UNIT'],
+  isGlobal: true,
+  erosionTotalLimit: [10, 10],
+  description: '10+：战场上的单位被破坏时，给予对手1点伤害。',
+  condition: () => true,
+  execute: async (instance, gameState, playerState) => {
+    await damagePlayerByEffect(gameState, playerState.uid, getOpponentUid(gameState, playerState.uid), 1, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +62,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER'],
   cardPackage: 'BT03',

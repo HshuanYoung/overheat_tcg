@@ -1,4 +1,20 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '303000032_end_draw',
+  type: 'TRIGGER',
+  triggerEvent: 'TURN_END' as any,
+  triggerLocation: ['ITEM'],
+  isMandatory: true,
+  description: '你的回合结束时，若这个回合中你有单位卡从墓地放置到过战场上，抽1张卡。',
+  condition: (_gameState, playerState, _instance, event) =>
+    event?.playerUid === playerState.uid &&
+    playerState.unitFromGraveToFieldTurn === _gameState.turnCount,
+  execute: async (instance, gameState, playerState) => {
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 1 }, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +43,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

@@ -1,4 +1,34 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, allCardsOnField, createSelectCardQuery, destroyByEffect, ensureData } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103080183_destroy',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '1回合1次：你的回合中，若这个单位本回合被《降灵》效果选择过，选择战场1张非神蚀卡破坏。',
+  condition: (gameState, playerState, instance) =>
+    playerState.isTurn &&
+    ensureData(instance).spiritTargetedTurn === gameState.turnCount &&
+    allCardsOnField(gameState).some(card => !card.godMark),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      allCardsOnField(gameState).filter(card => !card.godMark),
+      '选择破坏对象',
+      '选择战场上的1张非神蚀卡，将其破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103080183_destroy' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && !target.godMark) destroyByEffect(gameState, target, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +64,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

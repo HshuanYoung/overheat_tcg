@@ -1,4 +1,29 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, getOpponentUid, markCannotDefendUntilEndOfTurn, ownUnits, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('202000077_cannot_defend', '若你的战场上有力量4500以上单位，选择对手2个单位，本回合不能宣言防御。', async (instance, gameState, playerState) => {
+  const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+  const targets = ownUnits(opponent);
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    targets,
+    '选择不能防御的单位',
+    '选择对手的2个单位，本回合中不能宣言防御。',
+    Math.min(2, targets.length),
+    Math.min(2, targets.length),
+    { sourceCardId: instance.gamecardId, effectId: '202000077_cannot_defend' },
+    () => 'UNIT'
+  );
+}, {
+  condition: (_gameState, playerState) => ownUnits(playerState).some(unit => (unit.power || 0) >= 4500),
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    selections.forEach(id => {
+      const target = AtomicEffectExecutor.findCardById(gameState, id);
+      if (target?.cardlocation === 'UNIT') markCannotDefendUntilEndOfTurn(target, instance, gameState);
+    });
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +52,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

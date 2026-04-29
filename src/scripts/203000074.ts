@@ -1,4 +1,16 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, moveCard, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('203000074_return_god', '选择墓地中1张力量2000以下神蚀单位卡加入手牌。', async (instance, gameState, playerState) => {
+  const targets = playerState.grave.filter(card => card.type === 'UNIT' && card.godMark && (card.power || card.basePower || 0) <= 2000);
+  if (targets.length === 0) return;
+  createSelectCardQuery(gameState, playerState.uid, targets, '选择加入手牌的单位', '选择你的墓地中的1张力量2000以下神蚀单位卡，将其加入手牌。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '203000074_return_god' }, () => 'GRAVE');
+}, {
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'GRAVE') moveCard(gameState, playerState.uid, target, 'HAND', instance);
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +39,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

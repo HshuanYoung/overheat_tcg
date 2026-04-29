@@ -1,4 +1,34 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addInfluence, addTempPower, canPayAccessCost, ownUnits, paymentCost } from './BaseUtil';
+
+const highPowerRush: CardEffect = {
+  id: '102060192_high_power',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '力量3500以上时，伤害+1并获得【速攻】。',
+  condition: (_gameState, _playerState, instance) => (instance.power || 0) >= 3500,
+  applyContinuous: (_gameState, instance) => {
+    addContinuousDamage(instance, instance, 1);
+    instance.isrush = true;
+    addInfluence(instance, instance, '获得【速攻】');
+  }
+};
+
+const cardEffects: CardEffect[] = [highPowerRush, {
+  id: '102060192_enter_boost',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  description: '入场时，可以支付2费，使你的所有单位本回合力量+1000。',
+  condition: (gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    canPayAccessCost(gameState, playerState, 2, instance.color, instance),
+  cost: paymentCost(2),
+  execute: async (instance, gameState, playerState) => {
+    ownUnits(playerState).forEach(unit => addTempPower(unit, instance, 1000));
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +65,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

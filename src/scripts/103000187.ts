@@ -1,4 +1,36 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, moveCard, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000187_grave_to_hand',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  isMandatory: true,
+  description: '入场时，若你的战场上有【神依】单位，选择墓地1张非神蚀单位卡加入手牌。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    ownUnits(playerState).some(unit => unit.isShenyi) &&
+    playerState.grave.some(card => card.type === 'UNIT' && !card.godMark),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      playerState.grave.filter(card => card.type === 'UNIT' && !card.godMark),
+      '选择加入手牌的单位',
+      '选择你的墓地中的1张非神蚀单位卡，将其加入手牌。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103000187_grave_to_hand' },
+      () => 'GRAVE'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'GRAVE') moveCard(gameState, playerState.uid, target, 'HAND', instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +67,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

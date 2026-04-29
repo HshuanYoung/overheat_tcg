@@ -1,4 +1,33 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousPower, addInfluence, attackingUnits, ensureData, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000199_enter_exhausted',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '只能以横置状态进入战场，且你的回合开始阶段不能重置。',
+  applyContinuous: (_gameState, instance) => {
+    if (instance.playedTurn === _gameState.turnCount) {
+      instance.isExhausted = true;
+    }
+    instance.canResetCount = Math.max(instance.canResetCount || 0, 1);
+    ensureData(instance).cannotResetSourceName = instance.fullName;
+    addInfluence(instance, instance, '下个重置阶段不能重置');
+  }
+}, {
+  id: '102000199_attack_power',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '这个单位以外的你的所有参与攻击的单位力量上升与这个单位力量相同的数值。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner || !gameState.battleState) return;
+    attackingUnits(gameState)
+      .filter(unit => owner.unitZone.some(own => own?.gamecardId === unit.gamecardId))
+      .filter(unit => unit.gamecardId !== instance.gamecardId)
+      .forEach(unit => addContinuousPower(unit, instance, instance.power || 0));
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +64,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT03',

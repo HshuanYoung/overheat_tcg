@@ -1,4 +1,13 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('201000139_snowstorm', '本回合中，所有玩家宣言攻击或防御时可以支付1费；若不支付，参与战斗单位伤害-1、力量-1000。', async (instance, gameState) => {
+  Object.values(gameState.players).forEach(player => {
+    (player as any).snowstormTurn = gameState.turnCount;
+    (player as any).snowstormSourceName = instance.fullName;
+  });
+  gameState.logs.push(`[${instance.fullName}] 本回合宣言攻击或防御适用暴风雪。`);
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +36,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

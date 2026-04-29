@@ -1,4 +1,34 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, addTempDamage, addTempPower } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102060196_high_power_keywords',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '力量4500以上时，获得【速攻】【歼灭】【神依】。',
+  condition: (_gameState, _playerState, instance) => (instance.power || 0) >= 4500,
+  applyContinuous: (_gameState, instance) => {
+    instance.isrush = true;
+    instance.isAnnihilation = true;
+    instance.isShenyi = true;
+    addInfluence(instance, instance, '获得【速攻】');
+    addInfluence(instance, instance, '获得【歼灭】');
+    addInfluence(instance, instance, '获得【神依】');
+  }
+}, {
+  id: '102060196_battle_destroy_boost',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_DESTROYED_BATTLE',
+  triggerLocation: ['UNIT'],
+  isGlobal: true,
+  limitCount: 1,
+  description: '1回合1次：你的单位被战斗破坏时，本回合这个单位伤害+1、力量+500。',
+  condition: (_gameState, playerState, _instance, event) => event?.playerUid === playerState.uid,
+  execute: async (instance) => {
+    addTempDamage(instance, instance, 1);
+    addTempPower(instance, instance, 500);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -37,7 +67,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER'],
   cardPackage: 'BT03',

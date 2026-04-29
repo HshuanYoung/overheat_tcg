@@ -1,4 +1,38 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { createSelectCardQuery, exhaustCost, moveCardsToBottom } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101000205_bottom_grave',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  description: '同名1回合1次，横置：若本回合你的侵蚀区有卡被放逐，选择墓地2张卡放置到卡组底。',
+  condition: (_gameState, playerState, instance) =>
+    !instance.isExhausted &&
+    playerState.exiledFromErosionTurn === _gameState.turnCount &&
+    playerState.grave.length >= 2,
+  cost: exhaustCost,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      playerState.grave,
+      '选择墓地的卡',
+      '选择你的墓地中的2张卡，将其放置到卡组底。',
+      2,
+      2,
+      { sourceCardId: instance.gamecardId, effectId: '101000205_bottom_grave' },
+      () => 'GRAVE'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const cards = selections
+      .map(id => playerState.grave.find(card => card.gamecardId === id))
+      .filter((card): card is Card => !!card);
+    moveCardsToBottom(gameState, playerState.uid, cards, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +68,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT03',

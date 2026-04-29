@@ -270,6 +270,8 @@ export interface PlayerState {
   factionsUsedThisTurn?: string[]; // Log of factions used (played/activated) this turn
   factionLock?: string; // Active faction restriction for the current turn
   markedUnitAttackTarget?: string; // Target selected at start of Main Phase that can be attacked
+  exiledFromErosionTurn?: number;
+  unitFromGraveToFieldTurn?: number;
   skipDrawPhase?: boolean;
   confrontationStrategy?: 'ON' | 'AUTO' | 'OFF';
 }

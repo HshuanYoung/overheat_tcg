@@ -1,4 +1,31 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempPower, createSelectCardQuery, exhaustCost, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102060191_power',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  description: '横置：你的回合中，选择你的1个单位，本回合力量+1000。',
+  condition: (_gameState, playerState, instance) => playerState.isTurn && !instance.isExhausted && ownUnits(playerState).length > 0,
+  cost: exhaustCost,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState),
+      '选择单位',
+      '选择你的1个单位，本回合中力量+1000。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102060191_power' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') addTempPower(target, instance, 1000);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +61,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

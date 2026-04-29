@@ -1,4 +1,62 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, battlingUnits, createSelectCardQuery, ensureData, faceUpErosion, getOpponentUid, moveCard, ownerUidOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000188_destroy_end',
+  type: 'TRIGGER',
+  triggerEvent: ['PHASE_CHANGED', 'CARD_DEFENSE_DECLARED'],
+  triggerLocation: ['UNIT'],
+  isMandatory: true,
+  description: '这个单位参与战斗的战斗自由步骤开始时，参与这次战斗的对手所有单位获得回合结束时破坏。',
+  condition: (gameState, _playerState, instance) =>
+    gameState.phase === 'BATTLE_FREE' &&
+    battlingUnits(gameState).some(unit => unit.gamecardId === instance.gamecardId),
+  execute: async (instance, gameState, playerState) => {
+    const opponentUid = getOpponentUid(gameState, playerState.uid);
+    battlingUnits(gameState)
+      .filter(unit => ownerUidOf(gameState, unit) === opponentUid)
+      .forEach(unit => {
+        const data = ensureData(unit);
+        data.destroyAtEndBy = instance.fullName;
+        data.destroyAtEndSourcePlayerUid = playerState.uid;
+        data.destroyAtEndSourceCardId = instance.gamecardId;
+        addInfluence(unit, instance, '回合结束时破坏');
+      });
+  }
+}, {
+  id: '103000188_ten_flip',
+  type: 'TRIGGER',
+  triggerEvent: 'COMBAT_DAMAGE_CAUSED',
+  triggerLocation: ['UNIT'],
+  erosionTotalLimit: [10, 10],
+  description: '10+：这个单位给予对手战斗伤害时，选择那名玩家侵蚀区2张正面卡翻面。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.data?.source === 'BATTLE' &&
+    (event.data?.attackerIds || []).includes(instance.gamecardId),
+  execute: async (instance, gameState, playerState, event) => {
+    const damagedUid = event?.playerUid || getOpponentUid(gameState, playerState.uid);
+    const targets = faceUpErosion(gameState.players[damagedUid]);
+    if (targets.length === 0) return;
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      targets,
+      '选择翻面的侵蚀卡',
+      '选择那名玩家侵蚀区中的2张正面卡，将其翻面。',
+      Math.min(2, targets.length),
+      Math.min(2, targets.length),
+      { sourceCardId: instance.gamecardId, effectId: '103000188_ten_flip', damagedUid },
+      () => 'EROSION_FRONT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections, context) => {
+    const damaged = gameState.players[context.damagedUid];
+    selections.forEach(id => {
+      const card = damaged.erosionFront.find(candidate => candidate?.gamecardId === id);
+      if (card) moveCard(gameState, context.damagedUid, card, 'EROSION_BACK', instance, { faceDown: true });
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +93,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT03',

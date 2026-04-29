@@ -1,4 +1,29 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, canPutUnitOntoBattlefield, discardHandCost, moveCard } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103100179_return',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_LEFT_ZONE',
+  triggerLocation: ['GRAVE'],
+  limitCount: 1,
+  limitNameType: true,
+  description: '同名1回合1次，舍弃1张手牌：这个单位从战场送入墓地时，可以横置放置到战场。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    event.data?.targetZone === 'GRAVE' &&
+    instance.cardlocation === 'GRAVE' &&
+    playerState.hand.length > 0 &&
+    canPutUnitOntoBattlefield(playerState, instance),
+  cost: discardHandCost(1),
+  execute: async (instance, gameState, playerState) => {
+    if (instance.cardlocation !== 'GRAVE' || !canPutUnitOntoBattlefield(playerState, instance)) return;
+    moveCard(gameState, playerState.uid, instance, 'UNIT', instance);
+    const moved = AtomicEffectExecutor.findCardById(gameState, instance.gamecardId);
+    if (moved) moved.isExhausted = true;
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +59,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

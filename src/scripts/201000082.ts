@@ -1,4 +1,51 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, allCardsOnField, createSelectCardQuery, exileByEffect, ownUnits, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('201000082_sacrifice', '选择你的1个单位放逐。之后选择战场上最多2张非神蚀道具卡放逐；若放逐了【神依】单位，可以改选1张神蚀道具卡。', async (instance, gameState, playerState) => {
+  if (ownUnits(playerState).length === 0) return;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    ownUnits(playerState),
+    '选择放逐的单位',
+    '选择你的1个单位，将其放逐。',
+    1,
+    1,
+    { sourceCardId: instance.gamecardId, effectId: '201000082_sacrifice', step: 'UNIT' },
+    () => 'UNIT'
+  );
+}, {
+  onQueryResolve: async (instance, gameState, _playerState, selections, context) => {
+    if (context?.step === 'ITEMS') {
+      selections.forEach(id => {
+        const card = AtomicEffectExecutor.findCardById(gameState, id);
+        if (card) exileByEffect(gameState, card, instance);
+      });
+      return;
+    }
+
+    const unit = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!unit || unit.cardlocation !== 'UNIT') return;
+    const exiledShenyi = !!unit.isShenyi;
+    exileByEffect(gameState, unit, instance);
+    const targets = allCardsOnField(gameState).filter(card =>
+      card.cardlocation === 'ITEM' &&
+      (exiledShenyi ? card.godMark : !card.godMark)
+    );
+    if (targets.length === 0) return;
+    createSelectCardQuery(
+      gameState,
+      context?.activationPlayerUid || _playerState.uid,
+      targets,
+      '选择放逐的道具',
+      exiledShenyi ? '选择战场上的1张神蚀道具卡，将其放逐。' : '选择战场上的最多2张非神蚀道具卡，将其放逐。',
+      0,
+      exiledShenyi ? 1 : Math.min(2, targets.length),
+      { sourceCardId: instance.gamecardId, effectId: '201000082_sacrifice', step: 'ITEMS' },
+      () => 'ITEM'
+    );
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -28,7 +75,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

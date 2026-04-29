@@ -1,4 +1,15 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempKeyword, createSelectCardQuery, ownUnits, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('202000078_rush', '选择你的1个单位，本回合获得【速攻】。', async (instance, gameState, playerState) => {
+  if (ownUnits(playerState).length === 0) return;
+  createSelectCardQuery(gameState, playerState.uid, ownUnits(playerState), '选择单位', '选择你的1个单位，本回合中获得【速攻】。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '202000078_rush' }, () => 'UNIT');
+}, {
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') addTempKeyword(target, instance, 'rush');
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +38,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

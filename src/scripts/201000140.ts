@@ -1,4 +1,34 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { createSelectCardQuery, moveCardsToBottom, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '201000140_exile_replacement',
+  type: 'CONTINUOUS',
+  triggerLocation: ['PLAY'],
+  content: 'EXILE_WHEN_LEAVES_PLAY_TO_GRAVE',
+  description: '这张卡将要被送入墓地时，放逐作为代替。'
+}, story('201000140_release', '同名1回合1次：选择墓地8张卡放置到卡组底。若你的放逐区有《解放之光》，这张卡0费。', async (instance, gameState, playerState) => {
+  if (playerState.grave.length < 8) return;
+  createSelectCardQuery(
+    gameState,
+    playerState.uid,
+    playerState.grave,
+    '选择墓地的卡',
+    '选择你的墓地中的8张卡，将其放置到卡组底。',
+    8,
+    8,
+    { sourceCardId: instance.gamecardId, effectId: '201000140_release' },
+    () => 'GRAVE'
+  );
+}, {
+  limitCount: 1,
+  limitNameType: true,
+  condition: (_gameState, playerState) => playerState.grave.length >= 8,
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const cards = selections.map(id => playerState.grave.find(card => card.gamecardId === id)).filter((card): card is Card => !!card);
+    moveCardsToBottom(gameState, playerState.uid, cards, instance);
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -29,7 +59,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT03',

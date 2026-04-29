@@ -1,4 +1,17 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempPower, allUnitsOnField, createSelectCardQuery, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('203000072_draw_zero', '抽1张卡。之后选择战场上1张具有【神依】的单位，本回合力量值变为0。', async (instance, gameState, playerState) => {
+  await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 1 }, instance);
+  const targets = allUnitsOnField(gameState).filter(unit => unit.isShenyi);
+  if (targets.length === 0) return;
+  createSelectCardQuery(gameState, playerState.uid, targets, '选择神依单位', '选择战场上的1张具有【神依】的单位，本回合中力量值变为0。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '203000072_draw_zero' }, () => 'UNIT');
+}, {
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') addTempPower(target, instance, -(target.power || 0));
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +40,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

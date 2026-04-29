@@ -1,4 +1,37 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { createSelectCardQuery, moveCardsToBottom, universalEquipEffect } from './BaseUtil';
+
+const substituteEffect: CardEffect = {
+  id: '301000078_substitute',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  description: '装备单位被破坏时，你可以将这张卡送入墓地作为代替。',
+  substitutionFilter: undefined,
+  applyContinuous: (_gameState, instance) => {
+    substituteEffect.substitutionFilter = instance.equipTargetId ? { gamecardId: instance.equipTargetId, onField: true } : undefined;
+  }
+};
+
+const cardEffects: CardEffect[] = [universalEquipEffect, substituteEffect, {
+  id: '301000078_destroyed_bottom',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_LEFT_ZONE',
+  triggerLocation: ['GRAVE'],
+  isMandatory: true,
+  description: '这张卡被破坏并送入墓地时，选择墓地2张卡放置到卡组底。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'ITEM' &&
+    event.data?.targetZone === 'GRAVE' &&
+    playerState.grave.length >= 2,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(gameState, playerState.uid, playerState.grave, '选择墓地的卡', '选择你的墓地中的2张卡，将其放置到卡组底。', 2, 2, { sourceCardId: instance.gamecardId, effectId: '301000078_destroyed_bottom' }, () => 'GRAVE');
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const cards = selections.map(id => playerState.grave.find(card => card.gamecardId === id)).filter((card): card is Card => !!card);
+    moveCardsToBottom(gameState, playerState.uid, cards, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -29,7 +62,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

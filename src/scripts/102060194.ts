@@ -1,4 +1,39 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, destroyByEffect, getOpponentUid } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102060194_destroy',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  erosionTotalLimit: [5, 7],
+  description: '5~7，1回合1次：你的回合中，若这个单位力量3500以上，选择对手战场1张非神蚀卡破坏。',
+  condition: (gameState, playerState, instance) => {
+    if (!playerState.isTurn || (instance.power || 0) < 3500) return false;
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    return [...opponent.unitZone, ...opponent.itemZone].some(card => card && !card.godMark);
+  },
+  execute: async (instance, gameState, playerState) => {
+    const opponentUid = getOpponentUid(gameState, playerState.uid);
+    const opponent = gameState.players[opponentUid];
+    const targets = [...opponent.unitZone, ...opponent.itemZone].filter((card): card is Card => !!card && !card.godMark);
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      targets,
+      '选择破坏对象',
+      '选择对手战场上的1张非神蚀卡，将其破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102060194_destroy' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && !target.godMark) destroyByEffect(gameState, target, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +70,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

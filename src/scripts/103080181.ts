@@ -1,4 +1,42 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempPower, createChoiceQuery, createSelectCardQuery, isNonGodUnit, markSpiritTargeted, moveCard, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103080181_enter_choice',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  description: '入场时，选择：墓地《地鬼降灵》加入手牌，或选择你的非神蚀单位力量+500。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId && event.data?.zone === 'UNIT',
+  execute: async (instance, gameState, playerState) => {
+    const options = [];
+    if (playerState.grave.some(card => card.fullName.includes('地鬼降灵'))) options.push({ id: 'RETURN', label: '回收地鬼降灵' });
+    if (ownUnits(playerState).some(isNonGodUnit)) options.push({ id: 'BOOST', label: '力量+500' });
+    if (options.length === 0) return;
+    createChoiceQuery(gameState, playerState.uid, '选择效果', '选择1项效果执行。', options, { sourceCardId: instance.gamecardId, effectId: '103080181_enter_choice', step: 'CHOICE' });
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'RETURN') {
+      const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+      if (target?.cardlocation === 'GRAVE') moveCard(gameState, playerState.uid, target, 'HAND', instance);
+      return;
+    }
+    if (context?.step === 'BOOST') {
+      const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+      if (target?.cardlocation === 'UNIT') {
+        markSpiritTargeted(gameState, target, instance);
+        addTempPower(target, instance, 500);
+      }
+      return;
+    }
+    if (selections[0] === 'RETURN') {
+      createSelectCardQuery(gameState, playerState.uid, playerState.grave.filter(card => card.fullName.includes('地鬼降灵')), '选择地鬼降灵', '选择墓地中的1张《地鬼降灵》加入手牌。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '103080181_enter_choice', step: 'RETURN' }, () => 'GRAVE');
+    } else if (selections[0] === 'BOOST') {
+      createSelectCardQuery(gameState, playerState.uid, ownUnits(playerState).filter(isNonGodUnit), '选择单位', '选择你的1个非神蚀单位，本回合力量+500。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '103080181_enter_choice', step: 'BOOST' }, () => 'UNIT');
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +74,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT03',

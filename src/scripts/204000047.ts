@@ -33,7 +33,7 @@ const card: Card = {
           p.unitZone.some(u => u && AtomicEffectExecutor.matchesFilter(u, filter as any, card))
         );
       },
-      description: '选择战场上一个非神格的单位卡返回持有者手牌。若你的战场上存在「风花」单位，可以选择战场上一个神格单位返回持有者手牌。',
+      description: '选择战场上一个非神蚀的单位卡返回持有者手牌。若你的战场上存在「风花」单位，可以选择战场上一个神蚀单位返回持有者手牌。',
       execute: async (card: Card, gameState: GameState, playerState: PlayerState) => {
         // 1. Check for Fuhua on your side
         const isFuhuaPresent = playerState.unitZone.some(c => c && c.specialName === '风花');

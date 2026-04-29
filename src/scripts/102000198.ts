@@ -1,4 +1,20 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addContinuousPower, ownUnits, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000198_pack_boost',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '你的战场上每有1张这个单位以外的《异神的魔犬》，这个单位伤害+1、力量+500。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    const count = ownUnits(owner).filter(unit => unit.gamecardId !== instance.gamecardId && unit.id === '102000198').length;
+    if (count <= 0) return;
+    addContinuousDamage(instance, instance, count);
+    addContinuousPower(instance, instance, count * 500);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +50,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

@@ -1,4 +1,32 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, addTempPower, isSpiritEffectEvent, ownUnits, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103080185_spirit_cost',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '选择这个单位为对象的卡名含《降灵》的卡ACCESS值变为0费，颜色需求1绿。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    [...owner.hand, ...owner.playZone].filter(card => card.fullName.includes('降灵')).forEach(card => {
+      card.acValue = 0;
+      card.colorReq = { GREEN: 1 };
+      addInfluence(card, instance, 'ACCESS值变为0费，颜色需求1绿');
+    });
+  }
+}, {
+  id: '103080185_spirit_targeted',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_SELECTED_TARGET',
+  triggerLocation: ['UNIT'],
+  description: '被卡名含有《降灵》的卡选择为效果对象时，本回合你的所有单位力量+500。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.targetCardId === instance.gamecardId && isSpiritEffectEvent(event),
+  execute: async (instance, _gameState, playerState) => {
+    ownUnits(playerState).forEach(unit => addTempPower(unit, instance, 500));
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +63,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

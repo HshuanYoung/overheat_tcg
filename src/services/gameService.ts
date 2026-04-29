@@ -75,6 +75,12 @@ const getEffectivePlayCost = (gameState: GameState | null, player: PlayerState, 
     const itemCount = player.itemZone.filter(c => c !== null).length;
     return Math.max(0, baseCost - itemCount);
   }
+  if (card.id === '201000140' && player.exile.some(c => c.id === '201000140')) {
+    return 0;
+  }
+  if (card.id === '202000080' && player.unitZone.some(unit => unit?.isShenyi)) {
+    return Math.max(0, baseCost - 4);
+  }
   if (
     card.type === 'UNIT' &&
     card.faction === '圣王国' &&

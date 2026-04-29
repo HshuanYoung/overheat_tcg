@@ -1,4 +1,16 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130200_substitute',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '你的<圣王国>单位被破坏时，你可以将这个单位破坏作为代替。',
+  substitutionFilter: {
+    type: 'UNIT',
+    faction: '圣王国',
+    onField: true
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +46,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'U',
   availableRarities: ['U'],
   cardPackage: 'BT03',

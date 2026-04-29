@@ -1,4 +1,22 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { moveCard, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101000210_bottom_to_hand',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  isMandatory: true,
+  description: '入场时，若你的战场上有具有【神依】的单位，将卡组底1张卡加入手牌。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    ownUnits(playerState).some(unit => unit.isShenyi),
+  execute: async (instance, gameState, playerState) => {
+    const bottom = playerState.deck[0];
+    if (bottom) moveCard(gameState, playerState.uid, bottom, 'HAND', instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +53,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT03',

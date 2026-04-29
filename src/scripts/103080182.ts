@@ -1,4 +1,36 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempDamage, addTempKeyword, addTempPower, allUnitsOnField, createSelectCardQuery, isSpiritEffectEvent } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103080182_spirit_targeted',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_SELECTED_TARGET',
+  triggerLocation: ['UNIT'],
+  description: '被卡名含有《降灵》的卡选择为效果对象时，选择战场1个单位伤害+1、力量+1000并获得【歼灭】。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.targetCardId === instance.gamecardId && isSpiritEffectEvent(event),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      allUnitsOnField(gameState),
+      '选择单位',
+      '选择战场上的1个单位，本回合中伤害+1、力量+1000并获得【歼灭】。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103080182_spirit_targeted' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') {
+      addTempDamage(target, instance, 1);
+      addTempPower(target, instance, 1000);
+      addTempKeyword(target, instance, 'annihilation');
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +67,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

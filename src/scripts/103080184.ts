@@ -1,4 +1,72 @@
-import { Card } from '../types/game';
+import { Card, CardEffect, TriggerLocation } from '../types/game';
+import { AtomicEffectExecutor, canPutUnitOntoBattlefield, createSelectCardQuery, discardHandCost, moveCard, ownerOf } from './BaseUtil';
+
+const createTotemReviveEffect = (): CardEffect => ({
+  id: '103080184_granted_totem_revive',
+  type: 'ACTIVATE',
+  triggerLocation: ['GRAVE'],
+  description: '由温多娜赋予：舍弃2张手牌，从墓地放置到战场。',
+  condition: (_gameState, playerState, instance) => canPutUnitOntoBattlefield(playerState, instance),
+  cost: discardHandCost(2),
+  execute: async (instance, gameState, playerState) => {
+    if (instance.cardlocation === 'GRAVE' && canPutUnitOntoBattlefield(playerState, instance)) {
+      moveCard(gameState, playerState.uid, instance, 'UNIT', instance);
+    }
+  }
+});
+
+const cardEffects: CardEffect[] = [{
+  id: '103080184_end_search',
+  type: 'TRIGGER',
+  triggerEvent: 'TURN_END' as any,
+  triggerLocation: ['UNIT'],
+  isMandatory: true,
+  description: '你的回合结束时，选择卡组或墓地1张卡名含有《降灵》的卡加入手牌。',
+  condition: (_gameState, playerState, _instance, event) =>
+    event?.playerUid === playerState.uid &&
+    [...playerState.deck, ...playerState.grave].some(card => card.fullName.includes('降灵')),
+  execute: async (instance, gameState, playerState) => {
+    const options = [
+      ...playerState.deck.filter(card => card.fullName.includes('降灵')),
+      ...playerState.grave.filter(card => card.fullName.includes('降灵'))
+    ];
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      options,
+      '选择加入手牌的卡',
+      '选择你的卡组或墓地中的1张卡名含有《降灵》的卡，将其加入手牌。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103080184_end_search' },
+      card => card.cardlocation as TriggerLocation
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target) return;
+    const fromDeck = target.cardlocation === 'DECK';
+    moveCard(gameState, playerState.uid, target, 'HAND', instance);
+    if (fromDeck) await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+}, {
+  id: '103080184_totem_grant',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  erosionTotalLimit: [2, 4],
+  description: '2~4：你的所有卡名含有《图腾》的单位卡获得从墓地发动并回场的能力。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    [...owner.grave, ...owner.unitZone].forEach(card => {
+      if (!card || card.type !== 'UNIT' || !card.fullName.includes('图腾')) return;
+      if (!card.effects) card.effects = [];
+      if (!card.effects.some(effect => effect.id === '103080184_granted_totem_revive')) {
+        card.effects.push(createTotemReviveEffect());
+      }
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +103,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR', 'SER', 'UR'],
   cardPackage: 'BT03',

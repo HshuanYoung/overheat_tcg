@@ -1,4 +1,17 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { forbidAttackAndDefenseUntil, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101000206_exile_attack_limit',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '若你的放逐区少于7张，这个单位不能宣言攻击或防御。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner || owner.exile.length >= 7) return;
+    forbidAttackAndDefenseUntil(instance, instance, gameState.turnCount);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +47,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

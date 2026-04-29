@@ -1,4 +1,17 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, allCardsOnField, createSelectCardQuery, destroyByEffect, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('202000080_destroy', '5~7：选择战场上的1张卡，将其破坏。若你的战场上有【神依】单位，这张卡费用减少4。', async (instance, gameState, playerState) => {
+  const targets = allCardsOnField(gameState);
+  if (targets.length === 0) return;
+  createSelectCardQuery(gameState, playerState.uid, targets, '选择破坏对象', '选择战场上的1张卡，将其破坏。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '202000080_destroy' }, card => card.cardlocation as any);
+}, {
+  erosionTotalLimit: [5, 7],
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target) destroyByEffect(gameState, target, instance);
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +40,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

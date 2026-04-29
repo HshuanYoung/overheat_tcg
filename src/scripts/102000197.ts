@@ -1,4 +1,37 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempDamage, addTempPower, allUnitsOnField, createSelectCardQuery, moveCardAsCost } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102000197_sac_boost',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  description: '将这个单位送入墓地：选择战场上1个单位，本回合伤害+1、力量+500。',
+  condition: gameState => allUnitsOnField(gameState).length > 0,
+  cost: async (gameState, playerState, instance) => {
+    moveCardAsCost(gameState, playerState.uid, instance, 'GRAVE', instance);
+    return true;
+  },
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      allUnitsOnField(gameState),
+      '选择单位',
+      '选择战场上的1个单位，本回合中伤害+1、力量+500。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102000197_sac_boost' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') {
+      addTempDamage(target, instance, 1);
+      addTempPower(target, instance, 500);
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +67,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT03',

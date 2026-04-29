@@ -1,4 +1,37 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { canPutUnitOntoBattlefield, moveCard, nameContains, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000463_grave_enter',
+  type: 'ACTIVATE',
+  triggerLocation: ['GRAVE'],
+  erosionTotalLimit: [6, 8],
+  limitCount: 1,
+  limitNameType: true,
+  description: '6-8同名1回合1次：你的回合中，若你战场上有卡名含有《黄昏的魔女》的卡，从墓地放置到战场。',
+  condition: (gameState, playerState, instance) =>
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    ownUnits(playerState).some(unit => nameContains(unit, '黄昏的魔女')) &&
+    canPutUnitOntoBattlefield(playerState, instance),
+  execute: async (instance, gameState, playerState) => {
+    moveCard(gameState, playerState.uid, instance, 'UNIT', instance);
+    (instance as any).data = { ...((instance as any).data || {}), exileWhenLeavesFieldSourceName: instance.fullName };
+  }
+}, {
+  id: '103000463_leave_exile',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_LEFT_FIELD',
+  triggerLocation: ['GRAVE'],
+  isMandatory: true,
+  description: '这个单位从战场离开时，将这张卡放逐。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    !!(instance as any).data?.exileWhenLeavesFieldSourceName,
+  execute: async (instance, gameState, playerState) => {
+    if (instance.cardlocation === 'GRAVE') moveCard(gameState, playerState.uid, instance, 'EXILE', instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +67,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

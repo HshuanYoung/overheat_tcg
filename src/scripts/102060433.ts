@@ -1,4 +1,58 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempDamage, addTempPower, createSelectCardQuery, ensureData, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102060433_power_search',
+  type: 'TRIGGER',
+  triggerEvent: ['CARD_POWER_CHANGED', 'PHASE_CHANGED'],
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '1回合1次：这个单位力量变为3500以上时，可以选择卡组中1张<雷霆>卡加入手牌。',
+  condition: (gameState, playerState, instance) =>
+    (instance.power || 0) >= 3500 &&
+    ensureData(instance).powerSearchUsedTurn !== gameState.turnCount &&
+    playerState.deck.some(card => card.faction === '雷霆'),
+  execute: async (instance, gameState, playerState) => {
+    ensureData(instance).powerSearchUsedTurn = gameState.turnCount;
+    createSelectCardQuery(gameState, playerState.uid, playerState.deck.filter(card => card.faction === '雷霆'), '选择雷霆卡', '选择卡组中的1张<雷霆>卡加入手牌。', 0, 1, {
+      sourceCardId: instance.gamecardId,
+      effectId: '102060433_power_search'
+    }, () => 'DECK');
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const selected = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (selected?.cardlocation !== 'DECK') return;
+    AtomicEffectExecutor.moveCard(gameState, playerState.uid, 'DECK', playerState.uid, 'HAND', selected.gamecardId, true, {
+      effectSourcePlayerUid: playerState.uid,
+      effectSourceCardId: instance.gamecardId
+    });
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+}, {
+  id: '102060433_red_story_boost',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_PLAYED',
+  triggerLocation: ['UNIT'],
+  isGlobal: true,
+  description: '你使用红色故事卡时，选择你的1个<雷霆>单位，本回合伤害+1、力量+1000。',
+  condition: (_gameState, playerState, _instance, event) =>
+    event?.playerUid === playerState.uid &&
+    event.sourceCard?.type === 'STORY' &&
+    event.sourceCard?.color === 'RED' &&
+    ownUnits(playerState).some(unit => unit.faction === '雷霆'),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(gameState, playerState.uid, ownUnits(playerState).filter(unit => unit.faction === '雷霆'), '选择雷霆单位', '选择你的1个<雷霆>单位，本回合伤害+1、力量+1000。', 1, 1, {
+      sourceCardId: instance.gamecardId,
+      effectId: '102060433_red_story_boost'
+    });
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation !== 'UNIT') return;
+    addTempDamage(target, instance, 1);
+    addTempPower(target, instance, 1000);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +89,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT04',

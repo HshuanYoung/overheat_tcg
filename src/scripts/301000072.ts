@@ -1,4 +1,21 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addContinuousPower, getOnlyGodMarkUnit, ownerOf, preventFirstDestroyEachTurn } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '301000072_lone_god_boost',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  description: '若你的战场上仅有1个神蚀单位，那个单位伤害+1、力量+1000，且每回合第一次将被破坏时防止。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    const target = getOnlyGodMarkUnit(owner);
+    if (!target) return;
+    addContinuousDamage(target, instance, 1);
+    addContinuousPower(target, instance, 1000);
+    preventFirstDestroyEachTurn(target, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +44,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT04',

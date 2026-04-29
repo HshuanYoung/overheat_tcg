@@ -1,4 +1,17 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { destroyByEffect, getOpponentUid, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('203000129_trample', '创痕2：你的战场上有ACCESS+5以上且具有【神依】的神蚀单位才可使用。破坏对手所有非神蚀单位。', async (instance, gameState, playerState) => {
+  const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+  opponent.unitZone.filter(unit => unit && !unit.godMark).forEach(unit => {
+    if (unit) destroyByEffect(gameState, unit, instance);
+  });
+}, {
+  erosionBackLimit: [2, 10],
+  condition: (gameState, playerState) =>
+    playerState.unitZone.some(unit => unit && unit.godMark && unit.isShenyi && (unit.acValue || 0) >= 5) &&
+    gameState.players[getOpponentUid(gameState, playerState.uid)].unitZone.some(unit => unit && !unit.godMark)
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +40,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

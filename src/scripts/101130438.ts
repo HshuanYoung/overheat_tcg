@@ -1,4 +1,33 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, canPutUnitOntoBattlefield, createSelectCardQuery, putUnitOntoField } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130438_reset_recruit',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ROTATED',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  description: '同名1回合1次：这个单位因为卡的效果被重置时，可以从卡组将1张《殿堂勇士》放置到战场。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.targetCardId === instance.gamecardId &&
+    event.data?.direction === 'VERTICAL' &&
+    !!event.data?.effectSourceCardId &&
+    playerState.deck.some(card => card.fullName === '殿堂勇士' && canPutUnitOntoBattlefield(playerState, card)),
+  execute: async (instance, gameState, playerState) => {
+    const candidates = playerState.deck.filter(card => card.fullName === '殿堂勇士' && canPutUnitOntoBattlefield(playerState, card));
+    createSelectCardQuery(gameState, playerState.uid, candidates, '选择殿堂勇士', '选择卡组中的1张《殿堂勇士》放置到战场。', 0, 1, {
+      sourceCardId: instance.gamecardId,
+      effectId: '101130438_reset_recruit'
+    }, () => 'DECK');
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const selected = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (selected?.cardlocation !== 'DECK') return;
+    putUnitOntoField(gameState, playerState.uid, selected, instance);
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +63,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

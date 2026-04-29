@@ -1,4 +1,40 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addContinuousKeyword, addContinuousPower, canPutUnitOntoBattlefield, ensureData, putUnitOntoField } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050431_trigger_enter_boost',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '你的回合中，由于这张卡的诱发能力进入战场的这个单位伤害+1、力量+2000并获得【速攻】【歼灭】。',
+  applyContinuous: (gameState, instance) => {
+    if (ensureData(instance).enteredBySelfGoddessTriggerTurn !== gameState.turnCount) return;
+    const owner = Object.values(gameState.players).find(player => player.unitZone.some(unit => unit?.gamecardId === instance.gamecardId));
+    if (!owner?.isTurn) return;
+    addContinuousDamage(instance, instance, 1);
+    addContinuousPower(instance, instance, 2000);
+    addContinuousKeyword(instance, instance, 'rush');
+    addContinuousKeyword(instance, instance, 'annihilation');
+  }
+}, {
+  id: '102050431_goddess_enter',
+  type: 'TRIGGER',
+  triggerEvent: 'GODDESS_TRANSFORMATION',
+  triggerLocation: ['HAND'],
+  erosionTotalLimit: [10, 10],
+  description: '10+：你的回合中，你进入女神化状态时，可以将这张卡从手牌放置到战场上。',
+  condition: (_gameState, playerState, instance, event) =>
+    playerState.isTurn &&
+    event?.playerUid === playerState.uid &&
+    canPutUnitOntoBattlefield(playerState, instance),
+  execute: async (instance, gameState, playerState) => {
+    if (!putUnitOntoField(gameState, playerState.uid, instance, instance)) return;
+    ensureData(instance).enteredBySelfGoddessTriggerTurn = gameState.turnCount;
+    addContinuousDamage(instance, instance, 1);
+    addContinuousPower(instance, instance, 2000);
+    addContinuousKeyword(instance, instance, 'rush');
+    addContinuousKeyword(instance, instance, 'annihilation');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -31,12 +67,12 @@ const card: Card = {
   godMark: false,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
-  isrush: true,
-  isAnnihilation: true,
+  isrush: false,
+  isAnnihilation: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

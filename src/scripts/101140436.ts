@@ -1,4 +1,18 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousPower, ownerOf, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101140436_church_power',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '你的战场上每有1个<女神教会>单位，这个单位力量+500。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    const amount = ownUnits(owner).filter(unit => unit.faction === '女神教会').length * 500;
+    if (amount > 0) addContinuousPower(instance, instance, amount);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +48,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

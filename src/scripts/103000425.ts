@@ -1,4 +1,53 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, ensureDeckHasCardsForMove, getOpponentUid, getTopDeckCards, millTop, moveCard, nameContains, ownUnits } from './BaseUtil';
+
+const isWitchName = (card: Card) => nameContains(card, '魔女') || !!ensureDataSafe(card).extraNameContainsWitchBy;
+const ensureDataSafe = (card: Card) => ((card as any).data || {});
+
+const cardEffects: CardEffect[] = [{
+  id: '103000425_opponent_start_mill',
+  type: 'TRIGGER',
+  triggerEvent: 'PHASE_CHANGED',
+  triggerLocation: ['UNIT'],
+  isMandatory: true,
+  description: '对手每个回合开始时，将对手卡组顶X张送入墓地，X为你的其他卡名含有《魔女》的单位数。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.data?.phase === 'START' &&
+    event.playerUid !== playerState.uid &&
+    ownUnits(playerState).some(unit => unit.gamecardId !== instance.gamecardId && isWitchName(unit)),
+  execute: async (instance, gameState, playerState) => {
+    const opponentUid = getOpponentUid(gameState, playerState.uid);
+    const count = ownUnits(playerState).filter(unit => unit.gamecardId !== instance.gamecardId && isWitchName(unit)).length;
+    if (count > 0) millTop(gameState, opponentUid, count, instance);
+  }
+}, {
+  id: '103000425_ten_copy_story',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  erosionTotalLimit: [10, 10],
+  limitCount: 1,
+  limitGlobal: true,
+  description: '10+ 1游戏1次：选择墓地中1张卡名含有《魔女》的故事卡放逐，处理那张卡的效果。',
+  condition: (gameState, playerState) =>
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    playerState.grave.some(card => card.type === 'STORY' && nameContains(card, '魔女')),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(gameState, playerState.uid, playerState.grave.filter(card => card.type === 'STORY' && nameContains(card, '魔女')), '选择魔女故事', '选择墓地中1张卡名含有《魔女》的故事卡放逐，并处理其效果。', 1, 1, {
+      sourceCardId: instance.gamecardId,
+      effectId: '103000425_ten_copy_story'
+    }, () => 'GRAVE');
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const selected = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!selected || selected.cardlocation !== 'GRAVE') return;
+    const copiedEffect = selected.effects?.find(effect => effect.type === 'ACTIVATE');
+    moveCard(gameState, playerState.uid, selected, 'EXILE', instance);
+    if (copiedEffect?.execute) {
+      await copiedEffect.execute(instance, gameState, playerState);
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +84,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR'],
   cardPackage: 'BT04',

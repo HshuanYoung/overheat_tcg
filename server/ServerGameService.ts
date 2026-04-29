@@ -170,6 +170,17 @@ export const ServerGameService = {
       cost <= 3;
   },
 
+  canUseStoryPaymentSubstitute(paymentCard: Card | undefined, playingCard: Card | undefined, cost?: number, playingCardId?: string) {
+    if (!paymentCard || paymentCard.gamecardId === playingCardId || !playingCard || !cost || cost <= 0) return false;
+    if (paymentCard.id === '201000132') {
+      return playingCard.color === 'WHITE' && (playingCard.acValue || 0) <= 3;
+    }
+    if (paymentCard.id === '202060130') {
+      return playingCard.faction === '雷霆';
+    }
+    return false;
+  },
+
   hydrateCard(card: Card | null) {
     if (!card || (!card.id && !card.uniqueId)) return;
     const masterCard = SERVER_CARD_LIBRARY[card.uniqueId] || SERVER_CARD_LIBRARY[card.id];
@@ -560,6 +571,19 @@ export const ServerGameService = {
       return { valid: false, reason: '已锁定阵营，无法发动该卡牌效果' };
     }
 
+    if (
+      card.type === 'STORY' &&
+      !player.isTurn &&
+      Object.entries(gameState.players).some(([uid, opponent]) =>
+        uid !== playerUid &&
+        [...opponent.unitZone, ...opponent.itemZone].some(source =>
+          source?.effects?.some(sourceEffect => sourceEffect.type === 'CONTINUOUS' && sourceEffect.content === 'OPPONENT_STORY_ONLY_OWN_TURN')
+        )
+      )
+    ) {
+      return { valid: false, reason: '对手效果限制：只能在自己的回合中使用故事卡' };
+    }
+
     return { valid: true };
   },
 
@@ -793,6 +817,19 @@ export const ServerGameService = {
       return { canPlay: false, reason: `该卡牌 [${card.fullName}] 在本回合已被禁止打出或发动` };
     }
 
+    if (
+      card.type === 'STORY' &&
+      !player.isTurn &&
+      Object.entries(gameState.players).some(([uid, opponent]) =>
+        uid !== player.uid &&
+        [...opponent.unitZone, ...opponent.itemZone].some(source =>
+          source?.effects?.some(effect => effect.type === 'CONTINUOUS' && effect.content === 'OPPONENT_STORY_ONLY_OWN_TURN')
+        )
+      )
+    ) {
+      return { canPlay: false, reason: '对手效果限制：只能在自己的回合中使用故事卡' };
+    }
+
     if (card.type === 'UNIT') {
       if (!player.unitZone.some(c => c === null)) {
         return { canPlay: false, reason: '单位区已满' };
@@ -872,7 +909,8 @@ export const ServerGameService = {
       let remainingCost = cost;
       const hasSpecialSubstitute = player.hand.some(c =>
         ServerGameService.canUse204000145AsPaymentSubstitute(c, card.color, cost, card.gamecardId) ||
-        ServerGameService.canUse205000136AsPaymentSubstitute(c, card.color, cost, card.gamecardId)
+        ServerGameService.canUse205000136AsPaymentSubstitute(c, card.color, cost, card.gamecardId) ||
+        ServerGameService.canUseStoryPaymentSubstitute(c, card, cost, card.gamecardId)
       );
       if (hasSpecialSubstitute) {
         remainingCost = 0;
@@ -1019,12 +1057,16 @@ export const ServerGameService = {
       let feijingCard: Card | undefined;
       let use204000145Replacement = false;
       let reservedDeckCard: Card | undefined;
+      let playingCard: Card | undefined;
 
       if (playingCardId) {
         const reservedIndex = player.deck.findIndex(c => c?.gamecardId === playingCardId);
         if (reservedIndex !== -1) {
           reservedDeckCard = player.deck.splice(reservedIndex, 1)[0];
         }
+        playingCard = reservedDeckCard ||
+          player.hand.find(c => c.gamecardId === playingCardId) ||
+          player.playZone.find(c => c.gamecardId === playingCardId);
       }
 
       if (paymentSelection.feijingCardId) {
@@ -1034,12 +1076,13 @@ export const ServerGameService = {
         }
         feijingCard = player.hand.find(c =>
           c.gamecardId === paymentSelection.feijingCardId &&
-          (c.feijingMark || c.id === '204000145' || c.id === '205000136')
+          (c.feijingMark || c.id === '204000145' || c.id === '205000136' || c.id === '201000132' || c.id === '202060130')
         );
         if (feijingCard) {
           if (
             ServerGameService.canUse204000145AsPaymentSubstitute(feijingCard, cardColor, cost, playingCardId) ||
-            ServerGameService.canUse205000136AsPaymentSubstitute(feijingCard, cardColor, cost, playingCardId)
+            ServerGameService.canUse205000136AsPaymentSubstitute(feijingCard, cardColor, cost, playingCardId) ||
+            ServerGameService.canUseStoryPaymentSubstitute(feijingCard, playingCard, cost, playingCardId)
           ) {
             remainingCost = 0;
             use204000145Replacement = true;
@@ -2533,6 +2576,12 @@ export const ServerGameService = {
       }
 
       unit.hasAttackedThisTurn = true;
+      if ((unit as any).data?.canAttackExhaustedConsumeOnAttack) {
+        delete (unit as any).data.canAttackExhausted;
+        delete (unit as any).data.canAttackExhaustedUntilTurn;
+        delete (unit as any).data.canAttackExhaustedSourceName;
+        delete (unit as any).data.canAttackExhaustedConsumeOnAttack;
+      }
       attackers.push(unit);
     }
 
@@ -3230,6 +3279,15 @@ export const ServerGameService = {
       delete (unit as any).data.preventNextDestroySourceName;
       delete (unit as any).data.preventNextDestroyUntilTurn;
       gameState.logs.push(`[${sourceName}] 防止了 [${unit.fullName}] 将要被破坏。`);
+      return false;
+    }
+
+    if (
+      (unit as any).data?.preventFirstDestroyEachTurnSourceName &&
+      (unit as any).data.preventFirstDestroyEachTurnUsedTurn !== gameState.turnCount
+    ) {
+      (unit as any).data.preventFirstDestroyEachTurnUsedTurn = gameState.turnCount;
+      gameState.logs.push(`[${(unit as any).data.preventFirstDestroyEachTurnSourceName}] 防止了 [${unit.fullName}] 本回合第一次将被破坏。`);
       return false;
     }
 

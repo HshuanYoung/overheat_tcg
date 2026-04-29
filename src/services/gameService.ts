@@ -57,6 +57,17 @@ const canUse205000136AsPaymentSubstitute = (paymentCard: Card | undefined, cardC
   cost > 0 &&
   cost <= 3;
 
+const canUseStoryPaymentSubstitute = (paymentCard: Card | undefined, playingCard: Card | undefined, cost?: number, playingCardId?: string) => {
+  if (!paymentCard || paymentCard.gamecardId === playingCardId || !playingCard || !cost || cost <= 0) return false;
+  if (paymentCard.id === '201000132') {
+    return playingCard.color === 'WHITE' && (playingCard.acValue || 0) <= 3;
+  }
+  if (paymentCard.id === '202060130') {
+    return playingCard.faction === '雷霆';
+  }
+  return false;
+};
+
 const getEffectivePlayCost = (gameState: GameState | null, player: PlayerState, card: Card) => {
   const baseCost = card.baseAcValue ?? card.acValue ?? 0;
   if (card.id === '101140062') {
@@ -231,6 +242,20 @@ export const GameService = {
       return { canPlay: false, reason: `Faction locked to [${player.factionLock}]` };
     }
 
+    if (
+      gameState &&
+      card.type === 'STORY' &&
+      !player.isTurn &&
+      Object.entries(gameState.players).some(([uid, opponent]) =>
+        uid !== player.uid &&
+        [...opponent.unitZone, ...opponent.itemZone].some(source =>
+          source?.effects?.some(effect => effect.type === 'CONTINUOUS' && effect.content === 'OPPONENT_STORY_ONLY_OWN_TURN')
+        )
+      )
+    ) {
+      return { canPlay: false, reason: 'Story cards can only be used on their owner turn' };
+    }
+
     if (card.type === 'UNIT') {
       if (!player.unitZone.some(cardInZone => cardInZone === null)) {
         return { canPlay: false, reason: 'Unit zone is full' };
@@ -297,7 +322,8 @@ export const GameService = {
       let remainingCost = cost;
       const hasSpecialSubstitute = player.hand.some(cardInHand =>
         canUse204000145AsPaymentSubstitute(cardInHand, card.color, cost, card.gamecardId) ||
-        canUse205000136AsPaymentSubstitute(cardInHand, card.color, cost, card.gamecardId)
+        canUse205000136AsPaymentSubstitute(cardInHand, card.color, cost, card.gamecardId) ||
+        canUseStoryPaymentSubstitute(cardInHand, card, cost, card.gamecardId)
       );
       if (hasSpecialSubstitute) {
         remainingCost = 0;
@@ -431,6 +457,19 @@ export const GameService = {
 
     if (player.factionLock && card.faction !== player.factionLock) {
       return { valid: false, reason: 'Faction locked' };
+    }
+
+    if (
+      card.type === 'STORY' &&
+      !player.isTurn &&
+      Object.entries(gameState.players).some(([uid, opponent]) =>
+        uid !== playerUid &&
+        [...opponent.unitZone, ...opponent.itemZone].some(source =>
+          source?.effects?.some(sourceEffect => sourceEffect.type === 'CONTINUOUS' && sourceEffect.content === 'OPPONENT_STORY_ONLY_OWN_TURN')
+        )
+      )
+    ) {
+      return { valid: false, reason: 'Story cards can only be used on their owner turn' };
     }
 
     return { valid: true };

@@ -385,6 +385,13 @@ export class EventEngine {
             description: '下一次将被破坏时防止'
           });
         }
+        if (card && (card as any).data?.preventFirstDestroyEachTurnSourceName) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.preventFirstDestroyEachTurnSourceName,
+            description: '每回合第一次将被破坏时防止'
+          });
+        }
         if (card && (card as any).data?.cannotAttackOrDefendSourceName) {
           if (!card.influencingEffects) card.influencingEffects = [];
           card.influencingEffects.push({
@@ -467,13 +474,25 @@ export class EventEngine {
             description: '战斗破坏对手单位后可以重置'
           });
         }
-        if (card && (card as any).data?.mustBeDefendedTurn === gameState.turnCount) {
-          if (!card.influencingEffects) card.influencingEffects = [];
-          card.influencingEffects.push({
-            sourceCardName: (card as any).data.mustBeDefendedSourceName || '效果',
-            description: '攻击时对手必须宣言防御'
-          });
-        }
+          if (card && (card as any).data?.mustBeDefendedTurn === gameState.turnCount) {
+            if (!card.influencingEffects) card.influencingEffects = [];
+            card.influencingEffects.push({
+              sourceCardName: (card as any).data.mustBeDefendedSourceName || '效果',
+              description: '攻击时对手必须宣言防御'
+            });
+          }
+          if (
+            card &&
+            (card as any).data?.canAttackExhaustedUntilTurn !== undefined &&
+            (card as any).data.canAttackExhaustedUntilTurn >= gameState.turnCount
+          ) {
+            (card as any).data.canAttackExhausted = true;
+            if (!card.influencingEffects) card.influencingEffects = [];
+            card.influencingEffects.push({
+              sourceCardName: (card as any).data.canAttackExhaustedSourceName || '效果',
+              description: '可以攻击对手横置单位'
+            });
+          }
       });
     });
 
@@ -770,6 +789,20 @@ export class EventEngine {
     } else if (['UNIT', 'ITEM'].includes(fromZone) && toZone === 'HAND') {
       this.dispatchEvent(gameState, {
         type: 'CARD_FIELD_TO_HAND',
+        playerUid: cardOwnerUid,
+        sourceCard: card,
+        sourceCardId: card.gamecardId,
+        data
+      });
+    }
+
+    if (toZone === 'EXILE') {
+      const player = gameState.players[cardOwnerUid];
+      if (player) {
+        (player as any).cardExiledTurn = gameState.turnCount;
+      }
+      this.dispatchEvent(gameState, {
+        type: 'CARD_EXILED',
         playerUid: cardOwnerUid,
         sourceCard: card,
         sourceCardId: card.gamecardId,

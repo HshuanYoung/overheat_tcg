@@ -565,10 +565,20 @@ export const BattleField: React.FC = () => {
     paymentCost > 0 &&
     paymentCost <= 3;
 
+  const canUseStoryPaymentSubstitute = (card: Card, paymentColor?: string, paymentCost?: number, excludeCardId?: string) =>
+    card.gamecardId !== excludeCardId &&
+    !!paymentCost &&
+    paymentCost > 0 &&
+    (
+      (card.id === '201000132' && paymentColor === 'WHITE' && paymentCost <= 3) ||
+      card.id === '202060130'
+    );
+
   const getHandPaymentValue = (card: Card, paymentColor?: string, paymentCost?: number, excludeCardId?: string) => {
     if (
       canUse204000145AsPaymentSubstitute(card, paymentColor, paymentCost, excludeCardId) ||
-      canUse205000136AsPaymentSubstitute(card, paymentColor, paymentCost, excludeCardId)
+      canUse205000136AsPaymentSubstitute(card, paymentColor, paymentCost, excludeCardId) ||
+      canUseStoryPaymentSubstitute(card, paymentColor, paymentCost, excludeCardId)
     ) {
       return paymentCost || 0;
     }

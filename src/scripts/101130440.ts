@@ -1,4 +1,32 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempDamage, addTempKeyword, addTempPower, createSelectCardQuery, ownUnits } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130440_reset_boost',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ROTATED',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '1回合1次：这个单位因为卡的效果被重置时，可以选择你的1个<圣王国>单位，本回合伤害+1、力量+1000并获得【英勇】。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.targetCardId === instance.gamecardId &&
+    event.data?.direction === 'VERTICAL' &&
+    !!event.data?.effectSourceCardId &&
+    ownUnits(playerState).some(unit => unit.faction === '圣王国'),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(gameState, playerState.uid, ownUnits(playerState).filter(unit => unit.faction === '圣王国'), '选择强化单位', '选择你的1个<圣王国>单位，本回合伤害+1、力量+1000并获得【英勇】。', 0, 1, {
+      sourceCardId: instance.gamecardId,
+      effectId: '101130440_reset_boost'
+    });
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation !== 'UNIT') return;
+    addTempDamage(target, instance, 1);
+    addTempPower(target, instance, 1000);
+    addTempKeyword(target, instance, 'heroic');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +63,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT04',

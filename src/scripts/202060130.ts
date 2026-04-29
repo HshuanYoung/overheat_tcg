@@ -1,4 +1,24 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addTempPower, createSelectCardQuery, nameContains, ownUnits, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('202060130_power', '选择你的1个卡名含有《炎雷》的单位，本回合力量+1500。', async (instance, gameState, playerState) => {
+  createSelectCardQuery(gameState, playerState.uid, ownUnits(playerState).filter(unit => nameContains(unit, '炎雷')), '选择炎雷单位', '选择你的1个卡名含有《炎雷》的单位，本回合力量+1500。', 1, 1, {
+    sourceCardId: instance.gamecardId,
+    effectId: '202060130_power'
+  });
+}, {
+  condition: (_gameState, playerState) => ownUnits(playerState).some(unit => nameContains(unit, '炎雷')),
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') addTempPower(target, instance, 1500);
+  }
+}), {
+  id: '202060130_payment_substitute',
+  type: 'CONTINUOUS',
+  triggerLocation: ['HAND'],
+  content: 'SELF_HAND_COST',
+  description: '为<雷霆>卡支付使用费用时，可以将手牌中的这张卡放逐作为代替。'
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -28,7 +48,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

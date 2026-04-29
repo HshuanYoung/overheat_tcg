@@ -13,7 +13,7 @@ const effect_305000073_continuous: CardEffect = {
     const player = gameState.players[ownerUid];
     player.unitZone.forEach(unit => {
       if (!unit) return;
-      if ((unit as any).data?.bt04MysteryWorkshopSourceCardId !== instance.gamecardId) return;
+      if ((unit as any).data?.mysteryWorkshopSourceCardId !== instance.gamecardId) return;
 
       unit.power = 4000;
       unit.damage = 4;
@@ -106,7 +106,7 @@ const effect_305000073_activate: CardEffect = {
     if (!moved) return;
     (moved as any).data = {
       ...((moved as any).data || {}),
-      bt04MysteryWorkshopSourceCardId: instance.gamecardId
+      mysteryWorkshopSourceCardId: instance.gamecardId
     };
   }
 };

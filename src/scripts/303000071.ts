@@ -1,4 +1,20 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousKeyword, getOnlyGodMarkUnit, markCannotBeEffectTarget, ownerOf } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '303000071_lone_god_protect',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  description: '若你的战场上仅有1个神蚀单位，那个单位不能成为效果对象，并获得【歼灭】。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner) return;
+    const target = getOnlyGodMarkUnit(owner);
+    if (!target) return;
+    markCannotBeEffectTarget(target, instance);
+    addContinuousKeyword(target, instance, 'annihilation');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +43,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

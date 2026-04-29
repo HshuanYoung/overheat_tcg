@@ -1,4 +1,61 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addInfluence, appendEndResolution, canPutUnitOntoBattlefield, createSelectCardQuery, ensureData, erosionCost, getOpponentUid, moveCard } from './BaseUtil';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000424_control',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_DESTROYED_BATTLE',
+  triggerLocation: ['GRAVE'],
+  description: '侵蚀1：这个单位参与攻击的战斗中被战斗破坏时，选择对手1个非神蚀单位，得到控制权直到对手回合结束。',
+  cost: erosionCost(1),
+  condition: (gameState, playerState, instance, event) => {
+    if (event?.targetCardId !== instance.gamecardId) return false;
+    if (!(event.data?.attackerIds || []).includes(instance.gamecardId)) return false;
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    return opponent.unitZone.some(unit => unit && !unit.godMark && canPutUnitOntoBattlefield(playerState, unit));
+  },
+  execute: async (instance, gameState, playerState) => {
+    const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
+    createSelectCardQuery(gameState, playerState.uid, opponent.unitZone.filter((unit): unit is Card => !!unit && !unit.godMark && canPutUnitOntoBattlefield(playerState, unit)), '选择控制权目标', '选择对手的1个非神蚀单位，得到其控制权直到对手回合结束。', 1, 1, {
+      sourceCardId: instance.gamecardId,
+      effectId: '103000424_control'
+    });
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    const originalOwnerUid = target ? AtomicEffectExecutor.findCardOwnerKey(gameState, target.gamecardId) : undefined;
+    if (!target || !originalOwnerUid) return;
+    moveCard(gameState, originalOwnerUid, target, 'UNIT', instance, { toPlayerUid: playerState.uid });
+    const moved = AtomicEffectExecutor.findCardById(gameState, target.gamecardId);
+    if (moved) {
+      const data = ensureData(moved);
+      data.controlChangedBy = instance.fullName;
+      data.extraNameContainsWitchBy = instance.fullName;
+      data.controlReturnOwnerUid = originalOwnerUid;
+      data.controlReturnControllerUid = playerState.uid;
+      addInfluence(moved, instance, '控制权已变更');
+      addInfluence(moved, instance, '视为卡名含有《魔女》');
+    }
+    const controlledId = target.gamecardId;
+    const returnControl: CardEffect['resolve'] = async (_source, state) => {
+      const currentTurnUid = state.playerIds[state.currentTurnPlayer];
+      if (currentTurnUid !== originalOwnerUid) {
+        appendEndResolution(state, playerState.uid, instance, '103000424_return_control_retry', returnControl);
+        return;
+      }
+      const controlled = AtomicEffectExecutor.findCardById(state, controlledId);
+      if (!controlled || controlled.cardlocation !== 'UNIT') return;
+      const currentOwner = AtomicEffectExecutor.findCardOwnerKey(state, controlled.gamecardId);
+      if (!currentOwner || currentOwner === originalOwnerUid) return;
+      if (!canPutUnitOntoBattlefield(state.players[originalOwnerUid], controlled)) return;
+      moveCard(state, currentOwner, controlled, 'UNIT', instance, { toPlayerUid: originalOwnerUid });
+      delete ensureData(controlled).controlChangedBy;
+      delete ensureData(controlled).extraNameContainsWitchBy;
+    };
+    appendEndResolution(gameState, playerState.uid, instance, '103000424_return_control', returnControl);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +91,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR'],
   cardPackage: 'BT04',

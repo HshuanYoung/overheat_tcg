@@ -1,4 +1,33 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, faceUpErosion, moveCard, nameContains } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050429_ten_recycle',
+  type: 'TRIGGER',
+  triggerEvent: 'TURN_END' as any,
+  triggerLocation: ['UNIT'],
+  erosionTotalLimit: [10, 10],
+  limitCount: 1,
+  limitNameType: true,
+  description: '10+同名1回合1次：你的回合结束时，可以放逐这个单位，选择侵蚀区2张卡名含有《血焰》的正面卡加入手牌。',
+  condition: (_gameState, playerState, instance) =>
+    playerState.isTurn &&
+    instance.cardlocation === 'UNIT' &&
+    faceUpErosion(playerState).filter(card => nameContains(card, '血焰')).length >= 2,
+  execute: async (instance, gameState, playerState) => {
+    moveCard(gameState, playerState.uid, instance, 'EXILE', instance);
+    createSelectCardQuery(gameState, playerState.uid, faceUpErosion(playerState).filter(card => nameContains(card, '血焰')), '选择回收卡牌', '选择侵蚀区中2张卡名含有《血焰》的正面卡加入手牌。', 0, 2, {
+      sourceCardId: instance.gamecardId,
+      effectId: '102050429_ten_recycle'
+    }, () => 'EROSION_FRONT');
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    selections.forEach(id => {
+      const target = AtomicEffectExecutor.findCardById(gameState, id);
+      if (target?.cardlocation === 'EROSION_FRONT') moveCard(gameState, playerState.uid, target, 'HAND', instance);
+    });
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +63,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

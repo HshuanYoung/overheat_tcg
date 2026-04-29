@@ -1,4 +1,35 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createSelectCardQuery, exhaustCost, nameContains, ownUnits, readyByEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101130439_reset_hall',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '横置：选择这个单位以外你的1个卡名含有《殿堂》的单位，将其重置。',
+  cost: exhaustCost,
+  condition: (gameState, playerState, instance) =>
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    !instance.isExhausted &&
+    ownUnits(playerState).some(unit => unit.gamecardId !== instance.gamecardId && unit.isExhausted && nameContains(unit, '殿堂')),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState).filter(unit => unit.gamecardId !== instance.gamecardId && unit.isExhausted && nameContains(unit, '殿堂')),
+      '选择重置单位',
+      '选择这个单位以外你的1个卡名含有《殿堂》的单位，将其重置。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '101130439_reset_hall' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target?.cardlocation === 'UNIT') readyByEffect(gameState, target, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +65,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT04',

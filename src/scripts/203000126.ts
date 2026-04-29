@@ -1,4 +1,38 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, canPutUnitOntoBattlefield, cardsInZones, createSelectCardQuery, moveCard, nameContains, ownUnits, putUnitOntoField, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('203000126_ritual', '同名1回合1次：若你战场有3个以上《图腾》单位，从卡组或墓地将1张《霸者》单位加入手牌后放置到战场。', async (instance, gameState, playerState) => {
+  const candidates = cardsInZones(playerState, ['DECK', 'GRAVE']).filter(({ card }) =>
+    card.type === 'UNIT' &&
+    nameContains(card, '霸者') &&
+    canPutUnitOntoBattlefield(playerState, card)
+  );
+  gameState.pendingQuery = {
+    id: Math.random().toString(36).substring(7),
+    type: 'SELECT_CARD',
+    playerUid: playerState.uid,
+    options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, candidates),
+    title: '选择霸者单位',
+    description: '选择卡组或墓地中的1张卡名含有《霸者》的单位卡加入手牌，之后放置到战场。',
+    minSelections: 1,
+    maxSelections: 1,
+    callbackKey: 'EFFECT_RESOLVE',
+    context: { sourceCardId: instance.gamecardId, effectId: '203000126_ritual' }
+  };
+}, {
+  limitCount: 1,
+  limitNameType: true,
+  condition: (_gameState, playerState) => ownUnits(playerState).filter(unit => nameContains(unit, '图腾')).length >= 3,
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const selected = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!selected || (selected.cardlocation !== 'DECK' && selected.cardlocation !== 'GRAVE')) return;
+    const fromDeck = selected.cardlocation === 'DECK';
+    moveCard(gameState, playerState.uid, selected, 'HAND', instance);
+    const inHand = AtomicEffectExecutor.findCardById(gameState, selected.gamecardId);
+    if (inHand?.cardlocation === 'HAND') putUnitOntoField(gameState, playerState.uid, inHand, instance);
+    if (fromDeck) await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +61,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT04',

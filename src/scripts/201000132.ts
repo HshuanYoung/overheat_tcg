@@ -1,4 +1,60 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, createPlayerSelectQuery, createSelectCardQuery, faceUpErosion, getOpponentUid, moveCard, ownUnits, story } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [story('201000132_exile_grave', '选择一名玩家墓地2张卡放逐。之后若你场上有<仙雪原>神蚀单位，可以选择侵蚀区1张卡放逐。', async (instance, gameState, playerState) => {
+  const canChooseSelf = playerState.grave.length >= 2;
+  const opponentUid = getOpponentUid(gameState, playerState.uid);
+  const canChooseOpponent = gameState.players[opponentUid].grave.length >= 2;
+  if (!canChooseSelf && !canChooseOpponent) return;
+  createPlayerSelectQuery(gameState, playerState.uid, '选择玩家', '选择1名玩家，之后选择其墓地2张卡放逐。', {
+    sourceCardId: instance.gamecardId,
+    effectId: '201000132_exile_grave',
+    step: 'PLAYER'
+  }, { includeSelf: canChooseSelf, includeOpponent: canChooseOpponent });
+}, {
+  condition: (gameState, playerState) =>
+    playerState.grave.length >= 2 || gameState.players[getOpponentUid(gameState, playerState.uid)].grave.length >= 2,
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'PLAYER') {
+      const targetUid = selections[0] === 'PLAYER_SELF' ? playerState.uid : getOpponentUid(gameState, playerState.uid);
+      createSelectCardQuery(gameState, playerState.uid, gameState.players[targetUid].grave, '选择墓地卡牌', '选择该玩家墓地中的2张卡放逐。', 2, 2, {
+        sourceCardId: instance.gamecardId,
+        effectId: '201000132_exile_grave',
+        step: 'GRAVE',
+        targetUid
+      }, () => 'GRAVE');
+      return;
+    }
+    if (context?.step === 'GRAVE') {
+      const targetUid = context.targetUid;
+      selections.forEach(id => {
+        const target = AtomicEffectExecutor.findCardById(gameState, id);
+        if (target?.cardlocation === 'GRAVE') moveCard(gameState, targetUid, target, 'EXILE', instance);
+      });
+      if (ownUnits(playerState).some(unit => unit.faction === '仙雪原' && unit.godMark) && faceUpErosion(playerState).length + playerState.erosionBack.filter(Boolean).length > 0) {
+        const erosions = [...faceUpErosion(playerState), ...playerState.erosionBack.filter((card): card is Card => !!card)];
+        createSelectCardQuery(gameState, playerState.uid, erosions, '选择侵蚀区卡牌', '你可以选择侵蚀区中的1张卡放逐。', 0, 1, {
+          sourceCardId: instance.gamecardId,
+          effectId: '201000132_exile_grave',
+          step: 'EROSION'
+        }, card => card.cardlocation as any);
+      }
+      return;
+    }
+    if (context?.step === 'EROSION') {
+      const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+      if (target && (target.cardlocation === 'EROSION_FRONT' || target.cardlocation === 'EROSION_BACK')) {
+        moveCard(gameState, playerState.uid, target, 'EXILE', instance);
+      }
+    }
+  }
+}), {
+  id: '201000132_payment_substitute',
+  type: 'CONTINUOUS',
+  triggerLocation: ['HAND'],
+  content: 'SELF_HAND_COST',
+  description: '为ACCESS+3以下白色卡支付使用费用时，可以将手牌中的这张卡放逐作为代替。'
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -28,7 +84,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT04',

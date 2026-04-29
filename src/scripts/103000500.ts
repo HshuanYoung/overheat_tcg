@@ -1,4 +1,22 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { getOpponentUid, millTop } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103000500_grave_to_deck_mill',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  triggerLocation: ['UNIT'],
+  isGlobal: true,
+  limitCount: 1,
+  description: '1回合1次：对手从墓地将卡放置到卡组时，将他的卡组顶3张送入墓地。',
+  condition: (_gameState, playerState, _instance, event) =>
+    event?.playerUid === getOpponentUid(_gameState, playerState.uid) &&
+    event.data?.sourceZone === 'GRAVE' &&
+    event.data?.zone === 'DECK',
+  execute: async (instance, gameState, playerState) => {
+    millTop(gameState, getOpponentUid(gameState, playerState.uid), 3, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +52,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT04',

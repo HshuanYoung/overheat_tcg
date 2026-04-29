@@ -49,9 +49,9 @@ export const revealDeckCards = (gameState: GameState, playerUid: string, count: 
     cards.forEach(card => {
       (card as any).data = {
         ...((card as any).data || {}),
-        bt04PuppetRevealTurn: gameState.turnCount,
-        bt04PuppetRevealPlayerUid: playerUid,
-        bt04PuppetRevealSourceCardId: sourceCard.gamecardId
+        puppetRevealTurn: gameState.turnCount,
+        puppetRevealPlayerUid: playerUid,
+        puppetRevealSourceCardId: sourceCard.gamecardId
       };
     });
   }
@@ -84,8 +84,78 @@ export const isVirtualGodMarkReveal = (gameState: GameState, card: Card | undefi
   (
     card.godMark ||
     VIRTUAL_GOD_MARK_IDS.has(String(card.id)) ||
-    (card as any).data?.bt04PuppetRevealTurn === gameState.turnCount
+    (card as any).data?.puppetRevealTurn === gameState.turnCount
   );
+
+export const enteredFromHand = (instance: Card, event?: any) =>
+  event?.data?.sourceZone === 'HAND' ||
+  (event?.data?.sourceZone === 'PLAY' && (instance as any).__playSnapshot?.sourceZone === 'HAND');
+
+export const nameContains = (card: Card, text: string) =>
+  card.fullName.includes(text) || !!card.specialName?.includes(text);
+
+export const readyByEffect = (gameState: GameState, target: Card, source: Card) => {
+  target.isExhausted = false;
+  EventEngine.dispatchEvent(gameState, {
+    type: 'CARD_ROTATED',
+    sourceCard: source,
+    sourceCardId: source.gamecardId,
+    targetCardId: target.gamecardId,
+    playerUid: ownerUidOf(gameState, source),
+    data: {
+      direction: 'VERTICAL',
+      effectSourcePlayerUid: ownerUidOf(gameState, source),
+      effectSourceCardId: source.gamecardId,
+      allTargetCardIds: [target.gamecardId]
+    }
+  });
+};
+
+export const addContinuousKeyword = (target: Card, source: Card, keyword: 'rush' | 'heroic' | 'annihilation') => {
+  if (keyword === 'rush') {
+    target.isrush = true;
+    addInfluence(target, source, '获得【速攻】');
+  } else if (keyword === 'heroic') {
+    target.isHeroic = true;
+    addInfluence(target, source, '获得【英勇】');
+  } else {
+    target.isAnnihilation = true;
+    addInfluence(target, source, '获得【歼灭】');
+  }
+};
+
+export const markCannotBeEffectTarget = (target: Card, source: Card) => {
+  (target as any).cannotBeEffectTargetByEffect = true;
+  addInfluence(target, source, '不能成为效果对象');
+};
+
+export const markCanAttackExhaustedUnit = (target: Card, source: Card) => {
+  const data = ensureData(target);
+  data.canAttackExhausted = true;
+  data.canAttackExhaustedUntilTurn = Number.MAX_SAFE_INTEGER;
+  data.canAttackExhaustedSourceName = source.fullName;
+  addInfluence(target, source, '可以攻击对手横置单位');
+};
+
+export const cardsInZones = (player: PlayerState, zones: TriggerLocation[]) => {
+  const entries: { card: Card; source: TriggerLocation }[] = [];
+  zones.forEach(zone => {
+    const cards =
+      zone === 'HAND' ? player.hand :
+      zone === 'DECK' ? player.deck :
+      zone === 'GRAVE' ? player.grave :
+      zone === 'EXILE' ? player.exile :
+      zone === 'UNIT' ? player.unitZone :
+      zone === 'ITEM' ? player.itemZone :
+      zone === 'EROSION_FRONT' ? player.erosionFront :
+      zone === 'EROSION_BACK' ? player.erosionBack :
+      player.playZone;
+    cards.forEach(card => {
+      if (card) entries.push({ card, source: zone });
+    });
+  });
+  return entries;
+};
 
 export const cannotBeChosenAsEffectTarget = (card: Card, sourceCard?: Card) =>
   !!sourceCard &&
@@ -650,6 +720,12 @@ export const preventNextDestroy = (target: Card, source: Card, untilTurn?: numbe
   addInfluence(target, source, '下一次将被破坏时防止');
 };
 
+export const preventFirstDestroyEachTurn = (target: Card, source: Card) => {
+  const data = ensureData(target);
+  data.preventFirstDestroyEachTurnSourceName = source.fullName;
+  addInfluence(target, source, '每回合第一次将被破坏时防止');
+};
+
 export const silenceAllEffectsUntil = (target: Card, source: Card, untilTurn: number) => {
   const data = ensureData(target);
   data.fullEffectSilencedTurn = untilTurn;
@@ -791,7 +867,9 @@ export const canPayAccessCost = (gameState: GameState, playerState: PlayerState,
     (
       (card.feijingMark && (!paymentColor || card.color === paymentColor)) ||
       (card.id === '204000145' && paymentColor === 'BLUE' && amount <= 3) ||
-      (card.id === '205000136' && paymentColor === 'YELLOW' && amount <= 3)
+      (card.id === '205000136' && paymentColor === 'YELLOW' && amount <= 3) ||
+      (card.id === '201000132' && paymentColor === 'WHITE' && amount <= 3) ||
+      (card.id === '202060130' && sourceCard?.faction === '雷霆')
     )
   );
 

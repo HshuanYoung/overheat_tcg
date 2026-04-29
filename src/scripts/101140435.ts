@@ -1,4 +1,32 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, addContinuousDamage, addContinuousKeyword, addContinuousPower, createSelectCardQuery, enteredFromHand, ownUnits, searchDeckEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '101140435_lone_god_boost',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '若你的战场上的神蚀单位仅有1个，这个单位伤害+1、力量+2000并获得【英勇】。',
+  applyContinuous: (gameState, instance) => {
+    const owner = Object.values(gameState.players).find(player => player.unitZone.some(unit => unit?.gamecardId === instance.gamecardId));
+    if (!owner || owner.unitZone.filter(unit => unit?.godMark).length !== 1) return;
+    addContinuousDamage(instance, instance, 1);
+    addContinuousPower(instance, instance, 2000);
+    addContinuousKeyword(instance, instance, 'heroic');
+  }
+}, {
+  ...searchDeckEffect('101140435_enter_search', '同名1回合1次：从手牌进入战场时，可以选择卡组中1张《战天使》以外力量1500以下<女神教会>单位加入手牌。', card =>
+    card.type === 'UNIT' &&
+    card.fullName !== '战天使' &&
+    card.faction === '女神教会' &&
+    (card.power || card.basePower || 0) <= 1500
+  ),
+  limitCount: 1,
+  limitNameType: true,
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    enteredFromHand(instance, event)
+} as CardEffect];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +64,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR'],
   cardPackage: 'BT04',

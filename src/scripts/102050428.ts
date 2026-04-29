@@ -1,4 +1,19 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { enteredFromHand, searchDeckEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  ...searchDeckEffect('102050428_enter_search', '同名1回合1次：从手牌进入战场时，本回合只能使用/发动<伊列宇王国>卡；可以从卡组将1张「赛利亚」加入手牌。', card => card.specialName === '赛利亚'),
+  limitCount: 1,
+  limitNameType: true,
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    enteredFromHand(instance, event),
+  execute: async (instance, gameState, playerState, event) => {
+    playerState.factionLock = '伊列宇王国';
+    await searchDeckEffect('102050428_enter_search', '选择卡组中的1张「赛利亚」加入手牌。', card => card.specialName === '赛利亚').execute!(instance, gameState, playerState, event);
+  }
+} as CardEffect];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +49,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT04',

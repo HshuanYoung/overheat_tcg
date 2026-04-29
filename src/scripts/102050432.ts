@@ -1,4 +1,55 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, cardsInZones, createSelectCardQuery, ensureData, markCanAttackExhaustedUnit, moveCard, readyByEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102050432_god_limit',
+  type: 'CONTINUOUS',
+  description: '你的战场上只能有1个神蚀单位。',
+  limitGodmarkCount: 1
+}, {
+  id: '102050432_story_lock',
+  type: 'CONTINUOUS',
+  content: 'OPPONENT_STORY_ONLY_OWN_TURN',
+  description: '所有对手只能在他自己的回合中使用故事卡。'
+}, {
+  id: '102050432_reset_attack_unit',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  description: '同名1回合1次：放逐合计2张「迪凯」神蚀卡，重置这个单位。本回合下一次攻击可以攻击对手的单位。',
+  condition: (gameState, playerState) =>
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    cardsInZones(playerState, ['HAND', 'DECK', 'GRAVE']).filter(({ card }) => card.godMark && card.specialName === '迪凯').length >= 2,
+  execute: async (instance, gameState, playerState) => {
+    const costs = cardsInZones(playerState, ['HAND', 'DECK', 'GRAVE']).filter(({ card }) => card.godMark && card.specialName === '迪凯');
+    gameState.pendingQuery = {
+      id: Math.random().toString(36).substring(7),
+      type: 'SELECT_CARD',
+      playerUid: playerState.uid,
+      options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, costs),
+      title: '选择放逐费用',
+      description: '选择合计2张「迪凯」神蚀卡放逐作为费用。',
+      minSelections: 2,
+      maxSelections: 2,
+      callbackKey: 'EFFECT_RESOLVE',
+      context: { sourceCardId: instance.gamecardId, effectId: '102050432_reset_attack_unit' }
+    };
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    selections.forEach(id => {
+      const cost = AtomicEffectExecutor.findCardById(gameState, id);
+      const ownerUid = cost ? AtomicEffectExecutor.findCardOwnerKey(gameState, cost.gamecardId) : undefined;
+      if (cost && ownerUid) moveCard(gameState, ownerUid, cost, 'EXILE', instance);
+    });
+    readyByEffect(gameState, instance, instance);
+    markCanAttackExhaustedUnit(instance, instance);
+    const data = ensureData(instance);
+    data.canAttackExhaustedUntilTurn = gameState.turnCount;
+    data.canAttackExhaustedConsumeOnAttack = true;
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -36,7 +87,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SER',
   availableRarities: ['SER'],
   cardPackage: 'BT04',

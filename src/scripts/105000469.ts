@@ -1,6 +1,6 @@
 import { Card, CardEffect, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { canPutItemOntoBattlefield, createSelectCardQuery, moveCard } from './BaseUtil';
+import { canPutItemOntoBattlefield, createSelectCardQuery, markReturnToDeckBottomAtEnd, silenceAllEffectsUntil } from './BaseUtil';
 
 const effect_105000469_enter: CardEffect = {
   id: '105000469_enter',
@@ -45,25 +45,8 @@ const effect_105000469_enter: CardEffect = {
     const item = AtomicEffectExecutor.findCardById(gameState, selections[0]);
     if (!item || item.cardlocation !== 'ITEM') return;
 
-    (item as any).data = {
-      ...((item as any).data || {}),
-      fullEffectSilencedTurn: gameState.turnCount,
-      fullEffectSilenceSource: instance.fullName
-    };
-    (instance as any).data = {
-      ...((instance as any).data || {}),
-      bt03HatReturnId: item.gamecardId
-    };
-  },
-  resolve: async (instance, gameState, playerState) => {
-    const targetId = (instance as any).data?.bt03HatReturnId;
-    if (!targetId) return;
-
-    const item = AtomicEffectExecutor.findCardById(gameState, targetId);
-    if (!item || item.cardlocation !== 'ITEM') return;
-
-    moveCard(gameState, playerState.uid, item, 'DECK', instance, { insertAtBottom: true });
-    delete (instance as any).data.bt03HatReturnId;
+    silenceAllEffectsUntil(item, instance, gameState.turnCount);
+    markReturnToDeckBottomAtEnd(item, instance, gameState, playerState.uid);
   }
 };
 

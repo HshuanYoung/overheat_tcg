@@ -56,6 +56,9 @@ export const revealDeckCards = (gameState: GameState, playerUid: string, count: 
     });
   }
   if (cards.length > 0) {
+    const playerName = gameState.players[playerUid]?.displayName || '玩家';
+    const sourceName = sourceCard?.fullName ? ` 因 [${sourceCard.fullName}]` : '';
+    gameState.logs.push(`[公开] ${playerName}${sourceName} 公开了卡组顶的 ${cards.length} 张卡: ${cards.map(card => `[${card.fullName}]`).join(', ')}。`);
     EventEngine.dispatchEvent(gameState, {
       type: 'REVEAL_DECK',
       playerUid,
@@ -704,6 +707,9 @@ export const markSpiritTargeted = (gameState: GameState, target: Card, source: C
   data.spiritTargetedTurn = gameState.turnCount;
   data.spiritTargetedSourceName = source.fullName;
   addInfluence(target, source, '被卡名含有《降灵》的效果选择');
+  if (target.id === '103080185' && source.fullName.includes('降灵')) {
+    addInfluence(source, target, '指定天鬼图腾「暴龙」');
+  }
   EventEngine.dispatchEvent(gameState, {
     type: 'CARD_SELECTED_TARGET',
     sourceCard: source,
@@ -768,6 +774,7 @@ export const markReturnToDeckBottomAtEnd = (target: Card, source: Card, gameStat
   const data = ensureData(target);
   data.returnToDeckBottomAtTurnEnd = gameState.turnCount;
   data.returnToDeckBottomSourceName = source.fullName;
+  data.returnToDeckBottomSourceCardId = source.gamecardId;
   data.returnToDeckBottomOwnerUid = ownerUid || ownerUidOf(gameState, target);
   addInfluence(target, source, '回合结束时放置到卡组底');
 };
@@ -824,6 +831,36 @@ export const discardHandCost = (count: number, predicate?: (card: Card) => boole
   );
   return true;
 };
+
+export const hasActiveTotemReviveGrant = (gameState: GameState, playerState: PlayerState) => {
+  const totalErosion = playerState.erosionFront.filter(Boolean).length + playerState.erosionBack.filter(Boolean).length;
+  return totalErosion >= 2 &&
+    totalErosion <= 4 &&
+    playerState.unitZone.some(unit => unit?.id === '103080184');
+};
+
+export const grantedTotemReviveFromGrave = (): CardEffect => ({
+  id: '103080184_granted_totem_revive',
+  type: 'ACTIVATE',
+  triggerLocation: ['GRAVE'],
+  description: '由温多娜赋予：舍弃2张手牌，从墓地放置到战场。',
+  condition: (gameState, playerState, instance) =>
+    instance.cardlocation === 'GRAVE' &&
+    instance.type === 'UNIT' &&
+    instance.fullName.includes('图腾') &&
+    hasActiveTotemReviveGrant(gameState, playerState) &&
+    canPutUnitOntoBattlefield(playerState, instance),
+  cost: discardHandCost(2),
+  execute: async (instance, gameState, playerState) => {
+    if (
+      instance.cardlocation === 'GRAVE' &&
+      hasActiveTotemReviveGrant(gameState, playerState) &&
+      canPutUnitOntoBattlefield(playerState, instance)
+    ) {
+      moveCard(gameState, playerState.uid, instance, 'UNIT', instance);
+    }
+  }
+});
 
 export const moveByEffect = (
   gameState: GameState,
@@ -904,6 +941,9 @@ export const exileByEffect = (gameState: GameState, target: Card, source: Card) 
 };
 
 export const paymentCost = (amount: number, color?: string): CardEffect['cost'] => async (gameState, playerState, instance) => {
+  if (!canPayAccessCost(gameState, playerState, amount, color === 'NONE' ? undefined : color, instance)) {
+    return false;
+  }
   gameState.pendingQuery = {
     id: Math.random().toString(36).substring(7),
     type: 'SELECT_PAYMENT',

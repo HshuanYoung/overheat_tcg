@@ -19,6 +19,7 @@ const card: Card = {
     {
       id: 'sword_dance_activate',
       type: 'ACTIVATE',
+      triggerLocation: ['PLAY'],
       description: '【对付】：只能在有从战场返回的单位的回合发动。将战场上所有AC2及以下的单位返回持有者手牌。',
       condition: (gameState, playerState) => {
         return !!playerState.hasUnitReturnedThisTurn;

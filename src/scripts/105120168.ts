@@ -1,7 +1,6 @@
 import { Card, CardEffect, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { EventEngine } from '../services/EventEngine';
-import { canPutCardOntoBattlefieldByEffect, createSelectCardQuery, getTopDeckCards, isAlchemyCard, isNonGodAccessLe3UnitOrItem, moveCardAsCost, moveCardsToBottom } from './BaseUtil';
+import { canPutCardOntoBattlefieldByEffect, createSelectCardQuery, isAlchemyCard, isNonGodAccessLe3UnitOrItem, moveCardAsCost, moveCardsToBottom, revealDeckCards } from './BaseUtil';
 
 const effect_105120168_enter: CardEffect = {
   id: '105120168_enter',
@@ -63,15 +62,8 @@ const effect_105120168_activate: CardEffect = {
     return true;
   },
   execute: async (instance, gameState, playerState) => {
-    const topCard = getTopDeckCards(playerState, 1)[0];
+    const topCard = revealDeckCards(gameState, playerState.uid, 1, instance)[0];
     if (!topCard) return;
-
-    EventEngine.dispatchEvent(gameState, {
-      type: 'REVEAL_DECK',
-      playerUid: playerState.uid,
-      data: { cards: [topCard] }
-    });
-    gameState.logs.push(`[${instance.fullName}] 公开了卡组顶的 [${topCard.fullName}]。`);
 
     if (!isNonGodAccessLe3UnitOrItem(topCard)) {
       gameState.logs.push(`[${instance.fullName}] 公开的卡不是ACCESS值3以下的非神蚀单位或道具，留在卡组顶。`);

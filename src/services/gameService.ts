@@ -69,7 +69,7 @@ const canUseStoryPaymentSubstitute = (paymentCard: Card | undefined, playingCard
 };
 
 const getEffectivePlayCost = (gameState: GameState | null, player: PlayerState, card: Card) => {
-  const baseCost = card.baseAcValue ?? card.acValue ?? 0;
+  const baseCost = card.id === '202000080' ? 6 : (card.baseAcValue ?? card.acValue ?? 0);
   if (card.id === '101140062') {
     const unitCount = player.unitZone.filter(c => c !== null).length;
     return Math.max(0, baseCost - unitCount);
@@ -86,11 +86,17 @@ const getEffectivePlayCost = (gameState: GameState | null, player: PlayerState, 
     const itemCount = player.itemZone.filter(c => c !== null).length;
     return Math.max(0, baseCost - itemCount);
   }
-  if (card.id === '201000140' && player.exile.some(c => c.id === '201000140')) {
+  if (
+    (card.id === '201000140' || card.id === '201000040' || card.fullName === '解放之光') &&
+    player.exile.some(c => c.id === card.id || c.id === '201000140' || c.id === '201000040' || c.fullName === card.fullName)
+  ) {
     return 0;
   }
   if (card.id === '202000080' && player.unitZone.some(unit => unit?.isShenyi)) {
     return Math.max(0, baseCost - 4);
+  }
+  if ((card as any).data?.spiritCostTarget103080185) {
+    return 0;
   }
   if (
     card.type === 'UNIT' &&
@@ -117,6 +123,15 @@ const hasGlobalDisableAllActivated = (gameState: GameState | null) => {
       )
   );
 };
+
+const isSpiritDiscountCard = (card: Card) => card.id === '203000075' || card.id === '203000076';
+
+const hasSpiritDiscountTargetOnField = (gameState: GameState | null, card: Card) =>
+  !!gameState &&
+  isSpiritDiscountCard(card) &&
+  Object.values(gameState.players).some(player =>
+    player.unitZone.some(unit => unit?.id === '103080185')
+  );
 
 const hasGlobalDisableErosionRequirementEffects = (gameState: GameState | null) => {
   if (!gameState) return false;
@@ -160,6 +175,10 @@ export const GameService = {
 
   getEffectivePlayerForCard(gameState: GameState | null, player: PlayerState | undefined, card?: Card | null) {
     return getEffectivePlayerForCard(gameState, player, card);
+  },
+
+  getEffectivePlayCost(gameState: GameState | null, player: PlayerState, card: Card) {
+    return getEffectivePlayCost(gameState, player, card);
   },
 
   async advancePhase(gameId: string, action?: any) {
@@ -302,16 +321,24 @@ export const GameService = {
       }
     });
 
-    let totalDeficit = 0;
-    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
-      totalDeficit += Math.max(0, (reqCount as number) - (availableColors[color] || 0));
+    const colorReqOptions = [card.colorReq || {}];
+    if ((card as any).data?.spiritCostTarget103080185 || hasSpiritDiscountTargetOnField(gameState, card)) {
+      colorReqOptions.unshift({ GREEN: 1 });
+    }
+    const colorRequirementResults = colorReqOptions.map(req => {
+      let totalDeficit = 0;
+      for (const [color, reqCount] of Object.entries(req)) {
+        totalDeficit += Math.max(0, (reqCount as number) - (availableColors[color] || 0));
+      }
+      return { valid: totalDeficit <= omniColorCount, totalDeficit };
+    });
+
+    if (!colorRequirementResults.some(result => result.valid)) {
+      const bestDeficit = Math.min(...colorRequirementResults.map(result => result.totalDeficit));
+      return { canPlay: false, reason: `Color requirement not met (missing ${bestDeficit})` };
     }
 
-    if (totalDeficit > omniColorCount) {
-      return { canPlay: false, reason: `Color requirement not met (missing ${totalDeficit})` };
-    }
-
-    const cost = getEffectivePlayCost(gameState, player, card);
+    const cost = hasSpiritDiscountTargetOnField(gameState, card) ? 0 : getEffectivePlayCost(gameState, player, card);
     const onlyFeijingPayment = card.effects?.some(effect => effect.content === 'ONLY_FEIJING_PAYMENT');
     if (cost < 0) {
       const absCost = Math.abs(cost);

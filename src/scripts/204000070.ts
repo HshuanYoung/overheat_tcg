@@ -19,6 +19,7 @@ const card: Card = {
     {
       id: 'ambush_activate',
       type: 'ACTIVATE',
+      triggerLocation: ['HAND', 'PLAY'],
       description: '选择战场上一个在本回合进入战场的单位，将其返回持有者的手牌。',
       condition: (gameState: GameState, playerState: PlayerState, card: Card) => {
         // Find if there's any unit that entered the battlefield this turn

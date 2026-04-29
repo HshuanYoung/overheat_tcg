@@ -28,25 +28,38 @@ const effect_105000471_enter: CardEffect = {
         { id: 'YES', label: 'Discard 2' },
         { id: 'NO', label: 'Do Not Discard' }
       ],
-      { sourceCardId: instance.gamecardId, effectId: '105000471_enter', step: 'ASK_DISCARD' }
+      {
+        sourceCardId: instance.gamecardId,
+        effectId: '105000471_enter',
+        step: 'ASK_DISCARD',
+        controllerUid: playerState.uid,
+        discardPlayerUid: opponentUid
+      }
     );
   },
   onQueryResolve: async (instance, gameState, playerState, selections, context) => {
-    const opponentUid = getOpponentUid(gameState, playerState.uid);
-    const opponent = gameState.players[opponentUid];
+    const controllerUid = context?.controllerUid || playerState.uid;
+    const discardPlayerUid = context?.discardPlayerUid || getOpponentUid(gameState, controllerUid);
+    const discardPlayer = gameState.players[discardPlayerUid];
 
     if (context.step === 'ASK_DISCARD') {
-      if (selections[0] !== 'YES' || opponent.hand.length < 2) return;
+      if (selections[0] !== 'YES' || discardPlayer.hand.length < 2) return;
 
       createSelectCardQuery(
         gameState,
-        opponentUid,
-        [...opponent.hand],
+        discardPlayerUid,
+        [...discardPlayer.hand],
         'Choose 2 Cards',
         'Choose 2 cards to discard.',
         2,
         2,
-        { sourceCardId: instance.gamecardId, effectId: '105000471_enter', step: 'DISCARD_TWO' },
+        {
+          sourceCardId: instance.gamecardId,
+          effectId: '105000471_enter',
+          step: 'DISCARD_TWO',
+          controllerUid,
+          discardPlayerUid
+        },
         () => 'HAND'
       );
       return;
@@ -55,17 +68,17 @@ const effect_105000471_enter: CardEffect = {
     if (context.step !== 'DISCARD_TWO') return;
 
     for (const selectedId of selections) {
-      await AtomicEffectExecutor.execute(gameState, opponentUid, {
+      await AtomicEffectExecutor.execute(gameState, discardPlayerUid, {
         type: 'DISCARD_CARD',
         targetFilter: { gamecardId: selectedId }
       }, instance);
     }
 
-    await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+    await AtomicEffectExecutor.execute(gameState, controllerUid, {
       type: 'DESTROY_CARD',
       targetFilter: { gamecardId: instance.gamecardId }
     }, instance);
-    await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+    await AtomicEffectExecutor.execute(gameState, controllerUid, {
       type: 'DEAL_EFFECT_DAMAGE_SELF',
       value: 2
     }, instance);

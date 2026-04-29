@@ -987,6 +987,14 @@ export class AtomicEffectExecutor {
       (card as any).data.lastMoveEffectSourceCardId = options?.effectSourceCardId;
     }
 
+    if (
+      isEffect &&
+      (fromZone === 'EROSION_FRONT' || fromZone === 'EROSION_BACK') &&
+      toZone === 'EXILE'
+    ) {
+      sourcePlayer.exiledFromErosionTurn = gameState.turnCount;
+    }
+
     const shouldRefreshAsNewInstance =
       (toZone === 'HAND' || toZone === 'DECK') &&
       fromZone !== 'HAND' &&
@@ -1110,6 +1118,15 @@ export class AtomicEffectExecutor {
         (card as any).data.enteredFromDeckByAlchemyTurn = gameState.turnCount;
         (card as any).data.enteredFromDeckByAlchemySourceCardId = sourceCard.gamecardId;
       }
+    }
+
+    if (
+      isEffect &&
+      fromZone === 'GRAVE' &&
+      toZone === 'UNIT' &&
+      card.type === 'UNIT'
+    ) {
+      targetPlayer.unitFromGraveToFieldTurn = gameState.turnCount;
     }
 
     if (

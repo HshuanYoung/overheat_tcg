@@ -60,7 +60,6 @@ const trigger_104010174_damage: CardEffect = {
   type: 'TRIGGER',
   triggerEvent: 'COMBAT_DAMAGE_CAUSED',
   triggerLocation: ['UNIT'],
-  erosionTotalLimit: [1, 4],
   description: '【诱发】【名称一回合一次】当我方侵蚀区为1-4张且此卡对对手造成战斗伤害时，你可以选择发动：选择我方场上一张单位和对方场上一张横置单位返回持有者手牌。',
   isMandatory: false,
   limitCount: 1,
@@ -68,10 +67,14 @@ const trigger_104010174_damage: CardEffect = {
   isGlobal: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     if (event?.type !== 'COMBAT_DAMAGE_CAUSED' || event.playerUid === playerState.uid) return false;
+    const totalErosion = playerState.erosionFront.filter(Boolean).length + playerState.erosionBack.filter(Boolean).length;
+    if (!event.data?.['104010174_erosion_valid'] && (totalErosion < 1 || totalErosion > 4)) return false;
 
-    const isAttacking = gameState.battleState?.attackers.includes(instance.gamecardId);
-    const isDirectAttack = !gameState.battleState?.defender;
-    return !!isAttacking && isDirectAttack;
+    const attackerIds = event.data?.attackerIds || gameState.battleState?.attackers || [];
+    const isAttacking = attackerIds.includes(instance.gamecardId);
+    if (!isAttacking) return false;
+    event.data['104010174_erosion_valid'] = true;
+    return true;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const myUnits = playerState.unitZone.filter((u): u is Card => !!u);

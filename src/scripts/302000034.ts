@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'CARD_ATTACK_DECLARED',
   triggerLocation: ['ITEM'],
+  isGlobal: true,
   limitCount: 1,
   description: '1回合1次：你的单位攻击时，可以选择1个参与攻击的单位，这次战斗中力量+1000。',
   condition: (_gameState, playerState, _instance, event) =>

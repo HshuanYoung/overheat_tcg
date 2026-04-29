@@ -1,6 +1,7 @@
 import { Card, GameState, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 import { EventEngine } from '../services/EventEngine';
+import { addInfluence, ensureData } from './BaseUtil';
 
 const card: Card = {
   id: '204000069',
@@ -20,6 +21,7 @@ const card: Card = {
     {
       id: 'defeat_villains_activate_main',
       type: 'ACTIVATE',
+      triggerLocation: ['HAND', 'PLAY'],
       description: '【回合名称1次】：只能在自己的主要阶段发动。选择对手一个横置单位。在本回合中，当该单位离开战场时，你可以选择对手战场上的一个非神蚀卡牌，放置在对手卡组顶。',
       limitCount: 1,
       limitNameType: true,
@@ -54,12 +56,27 @@ const card: Card = {
       onQueryResolve: async (card, gameState, playerState, selections) => {
         const targetId = selections[0];
         const targetOwnerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, targetId);
+        const target = AtomicEffectExecutor.findCardById(gameState, targetId);
         (card as any).data = {
           ...((card as any).data || {}),
           markedTargetId: targetId,
           markedTargetOwnerUid: targetOwnerUid,
           playedTurn: gameState.turnCount
         };
+        (playerState as any).defeatVillainsMarkedTargetId = targetId;
+        (playerState as any).defeatVillainsMarkedTargetOwnerUid = targetOwnerUid;
+        (playerState as any).defeatVillainsMarkedTurn = gameState.turnCount;
+
+        if (target) {
+          const targetData = ensureData(target);
+          targetData.defeatVillainsMarkedTurn = gameState.turnCount;
+          targetData.defeatVillainsSourceCardId = card.gamecardId;
+          targetData.defeatVillainsSourceOwnerUid = playerState.uid;
+          targetData.defeatVillainsSourceName = card.fullName;
+          targetData.defeatVillainsMarkDescription = '离场时触发：将其控制者战场1张非神蚀卡放置到卡组顶';
+          addInfluence(target, card, '离场时触发：将其控制者战场1张非神蚀卡放置到卡组顶');
+        }
+
         gameState.logs.push('[任务：击溃恶党] 已标记目标单位。当其离开战场时将触发后续效果。');
       }
     },
@@ -72,17 +89,21 @@ const card: Card = {
       isGlobal: true,
       isMandatory: true,
       condition: (gameState, playerState, card, event?: GameEvent) => {
-        const data = (card as any).data;
-        if (!data || !event) return false;
-        return event.sourceCardId === data.markedTargetId &&
+        if (!event) return false;
+        const data = (card as any).data || {};
+        const markedTargetId = data.markedTargetId || (playerState as any).defeatVillainsMarkedTargetId;
+        const markedTurn = data.playedTurn ?? (playerState as any).defeatVillainsMarkedTurn;
+        const leavingCardId = event.sourceCardId || event.data?.previousSourceCardId;
+        return (leavingCardId === markedTargetId || event.data?.previousSourceCardId === markedTargetId) &&
           event.data?.zone === 'UNIT' &&
-          gameState.turnCount === data.playedTurn;
+          gameState.turnCount === markedTurn;
       },
       execute: async (card, gameState, playerState) => {
         const data = (card as any).data || {};
         const fallbackOpponentUid = Object.keys(gameState.players).find(id => id !== playerState.uid);
         const targetOwnerUid =
           data.markedTargetOwnerUid ||
+          (playerState as any).defeatVillainsMarkedTargetOwnerUid ||
           AtomicEffectExecutor.findCardOwnerKey(gameState, data.markedTargetId) ||
           fallbackOpponentUid;
         const targetOwner = targetOwnerUid ? gameState.players[targetOwnerUid] : undefined;
@@ -119,6 +140,9 @@ const card: Card = {
           targetFilter: { gamecardId: targetId },
           destinationZone: 'DECK'
         }, card);
+        delete (playerState as any).defeatVillainsMarkedTargetId;
+        delete (playerState as any).defeatVillainsMarkedTargetOwnerUid;
+        delete (playerState as any).defeatVillainsMarkedTurn;
         gameState.logs.push(`[任务：击溃恶党] 效果：将对方的一张卡牌 [${targetId}] 放置在卡组顶。`);
       }
     },

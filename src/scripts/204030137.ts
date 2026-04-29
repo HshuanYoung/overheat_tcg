@@ -19,6 +19,7 @@ const card: Card = {
     {
       id: 'post_commission_activate',
       type: 'ACTIVATE',
+      triggerLocation: ['PLAY'],
       limitCount: 1,
       limitNameType: true,
       description: '【同名回合1次】只能在你的主要阶段发动。在本回合发动过这个效果的回合，你只能打出「冒险家公会」的卡牌，以及发动「冒险家公会」卡牌的效果。选择你的2张卡正面向上的摆放进入侵蚀区，随后抽3张卡。',

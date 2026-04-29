@@ -5,6 +5,7 @@ import { AtomicEffectExecutor } from '../src/services/AtomicEffectExecutor';
 import { getCardIdentity } from '../src/lib/utils';
 import { SERVER_CARD_LIBRARY } from './card_loader';
 import { GameService } from '../src/services/gameService';
+import { grantedTotemReviveFromGrave } from '../src/scripts/BaseUtil';
 
 export const ServerGameService = {
   isFullEffectSilencedThisTurn(gameState: GameState, card: Card) {
@@ -12,7 +13,7 @@ export const ServerGameService = {
   },
 
   getEffectivePlayCost(player: PlayerState, card: Card, gameState?: GameState) {
-    const baseCost = card.baseAcValue ?? card.acValue ?? 0;
+    const baseCost = card.id === '202000080' ? 6 : (card.baseAcValue ?? card.acValue ?? 0);
     if (card.id === '101140062') {
       const unitCount = player.unitZone.filter(c => c !== null).length;
       return Math.max(0, baseCost - unitCount);
@@ -29,11 +30,17 @@ export const ServerGameService = {
       const itemCount = player.itemZone.filter(c => c !== null).length;
       return Math.max(0, baseCost - itemCount);
     }
-    if (card.id === '201000140' && player.exile.some(c => c.id === '201000140')) {
+    if (
+      (card.id === '201000140' || card.id === '201000040' || card.fullName === '解放之光') &&
+      player.exile.some(c => c.id === card.id || c.id === '201000140' || c.id === '201000040' || c.fullName === card.fullName)
+    ) {
       return 0;
     }
     if (card.id === '202000080' && player.unitZone.some(unit => unit?.isShenyi)) {
       return Math.max(0, baseCost - 4);
+    }
+    if ((card as any).data?.spiritCostTarget103080185) {
+      return 0;
     }
     if (
       card.type === 'UNIT' &&
@@ -44,6 +51,64 @@ export const ServerGameService = {
       return Math.max(0, baseCost - 1);
     }
     return baseCost;
+  },
+
+  isSpiritDiscountCard(card: Card) {
+    return card.id === '203000075' || card.id === '203000076';
+  },
+
+  findCardAnywhere(gameState: GameState, gamecardId?: string) {
+    if (!gamecardId) return undefined;
+    for (const player of Object.values(gameState.players)) {
+      const found = [
+        ...player.deck,
+        ...player.hand,
+        ...player.grave,
+        ...player.exile,
+        ...player.unitZone,
+        ...player.itemZone,
+        ...player.erosionFront,
+        ...player.erosionBack,
+        ...player.playZone
+      ].find(card => card?.gamecardId === gamecardId);
+      if (found) return found;
+    }
+    return undefined;
+  },
+
+  hasSpiritDiscountTargetOnField(gameState: GameState, card: Card) {
+    return ServerGameService.isSpiritDiscountCard(card) &&
+      Object.values(gameState.players).some(player =>
+        player.unitZone.some(unit => unit?.id === '103080185')
+      );
+  },
+
+  isSpiritDiscountSelection(gameState: GameState, card: Card, paymentSelection?: { spiritTargetId?: string }) {
+    if (!ServerGameService.isSpiritDiscountCard(card)) return false;
+    const target = ServerGameService.findCardAnywhere(gameState, paymentSelection?.spiritTargetId);
+    return target?.cardlocation === 'UNIT' && target.id === '103080185';
+  },
+
+  getColorRequirementResult(player: PlayerState, req: Record<string, number> = {}) {
+    const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
+    let omniColorCount = 0;
+
+    player.unitZone.forEach(c => {
+      if (!c) return;
+      const isOmni = String(c.id) === '105000481' || !!c.effects?.some(e => e.id === '105000481_omni');
+      if (isOmni) {
+        omniColorCount++;
+      } else if (c.color !== 'NONE') {
+        availableColors[c.color] = (availableColors[c.color] || 0) + 1;
+      }
+    });
+
+    let totalDeficit = 0;
+    for (const [color, reqCount] of Object.entries(req)) {
+      totalDeficit += Math.max(0, (reqCount as number) - (availableColors[color] || 0));
+    }
+
+    return { valid: totalDeficit <= omniColorCount, totalDeficit, omniColorCount };
   },
 
   hasGlobalDisableAllActivated(gameState: GameState) {
@@ -202,6 +267,13 @@ export const ServerGameService = {
           removeContinuous: originalEffect.removeContinuous
         };
       });
+    }
+    if (
+      card.type === 'UNIT' &&
+      card.fullName?.includes('图腾') &&
+      !card.effects?.some(effect => effect.id === '103080184_granted_totem_revive')
+    ) {
+      card.effects = [...(card.effects || []), grantedTotemReviveFromGrave()];
     }
   },
 
@@ -647,9 +719,11 @@ export const ServerGameService = {
       case 'EROSION_BACK': sourceArray = sourcePlayer.erosionBack; break;
     }
 
+    let previousSourceCardIdForMove: string | undefined;
     const index = sourceArray.findIndex(c => c && (c.gamecardId === cardId || c.id === cardId));
     if (index !== -1) {
       card = sourceArray[index];
+      previousSourceCardIdForMove = card.gamecardId;
       if (sourceZone === 'UNIT' || sourceZone === 'ITEM' || sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') {
         sourceArray[index] = null;
       } else {
@@ -657,7 +731,8 @@ export const ServerGameService = {
       }
       EventEngine.handleCardLeftZone(gameState, sourcePlayerId, card, sourceZone, options?.isEffect, targetZone, {
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
-        effectSourceCardId: options?.effectSourceCardId
+        effectSourceCardId: options?.effectSourceCardId,
+        previousSourceCardId: previousSourceCardIdForMove
       });
     }
 
@@ -802,7 +877,8 @@ export const ServerGameService = {
       toZone: targetZone,
       isEffect: options?.isEffect,
       effectSourcePlayerUid: options?.effectSourcePlayerUid,
-      effectSourceCardId: options?.effectSourceCardId
+      effectSourceCardId: options?.effectSourceCardId,
+      previousSourceCardId: previousSourceCardIdForMove
     });
 
     if (targetZone === 'EROSION_BACK') {
@@ -885,20 +961,31 @@ export const ServerGameService = {
       }
     });
 
-    let totalDeficit = 0;
-    for (const [color, reqCount] of Object.entries(card.colorReq || {})) {
-      const deficit = Math.max(0, (reqCount as number) - (availableColors[color] || 0));
-      totalDeficit += deficit;
+    const colorReqOptions = [card.colorReq || {}];
+    if ((card as any).data?.spiritCostTarget103080185 || ServerGameService.hasSpiritDiscountTargetOnField(gameState, card)) {
+      colorReqOptions.unshift({ GREEN: 1 });
     }
+    const colorRequirementResults = colorReqOptions.map(req => {
+      let totalDeficit = 0;
+      for (const [color, reqCount] of Object.entries(req)) {
+        const deficit = Math.max(0, (reqCount as number) - (availableColors[color] || 0));
+        totalDeficit += deficit;
+      }
+      return { valid: totalDeficit <= omniColorCount, totalDeficit };
+    });
 
-    if (totalDeficit > omniColorCount) {
-      return { canPlay: false, reason: `缺少颜色需求 (缺口: ${totalDeficit}, 可用变色单位: ${omniColorCount})` };
+    if (!colorRequirementResults.some(result => result.valid)) {
+      const bestDeficit = Math.min(...colorRequirementResults.map(result => result.totalDeficit));
+      return { canPlay: false, reason: `缺少颜色需求 (缺口: ${bestDeficit}, 可用变色单位: ${omniColorCount})` };
     }
 
 
 
     // 4. Cost Check (AC Value)
-    const cost = ServerGameService.getEffectivePlayCost(player, card, gameState);
+    const canUseSpiritDiscountOption =
+      ServerGameService.hasSpiritDiscountTargetOnField(gameState, card) &&
+      ServerGameService.getColorRequirementResult(player, { GREEN: 1 }).valid;
+    const cost = canUseSpiritDiscountOption ? 0 : ServerGameService.getEffectivePlayCost(player, card, gameState);
     const onlyFeijingPayment = card.effects?.some(effect => effect.content === 'ONLY_FEIJING_PAYMENT');
     if (cost < 0) {
       const absCost = Math.abs(cost);
@@ -1257,7 +1344,7 @@ export const ServerGameService = {
     gameState.logs.push(`[连锁 Link ${linkNumber}] ${gameState.players[sourcePlayerId].displayName} ${actionDesc}。等待 ${gameState.players[opponentId!].displayName} 响应 (Link ${linkNumber + 1})。`);
   },
 
-  async playCard(gameState: GameState, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }) {
+  async playCard(gameState: GameState, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[], spiritTargetId?: string }) {
     if (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) {
       throw new Error('当前有未结算步骤，请等待处理完毕。');
     }
@@ -1300,7 +1387,13 @@ export const ServerGameService = {
       throw new Error('对抗阶段只能打出故事卡');
     }
 
-    const cost = ServerGameService.getEffectivePlayCost(player, card, gameState);
+    const usesSpiritDiscount = ServerGameService.isSpiritDiscountSelection(gameState, card, paymentSelection);
+    const colorCheck = ServerGameService.getColorRequirementResult(player, usesSpiritDiscount ? { GREEN: 1 } : (card.colorReq || {}));
+    if (!colorCheck.valid) {
+      throw new Error(`缺少颜色需求 (缺口: ${colorCheck.totalDeficit}, 可用变色单位: ${colorCheck.omniColorCount})`);
+    }
+
+    const cost = usesSpiritDiscount ? 0 : ServerGameService.getEffectivePlayCost(player, card, gameState);
     const usesHolyKingdomUnitDiscount =
       card.type === 'UNIT' &&
       card.faction === '圣王国' &&
@@ -1308,6 +1401,17 @@ export const ServerGameService = {
       player.unitZone.some(unit => unit?.id === '101130153');
     const paymentResult = ServerGameService.payCost(gameState, playerId, cost, paymentSelection, card.color, cardId);
     if (!paymentResult.success) throw new Error(paymentResult.reason);
+
+    if (usesSpiritDiscount) {
+      (card as any).data = {
+        ...((card as any).data || {}),
+        preselectedSpiritTargetId: paymentSelection.spiritTargetId,
+        spiritCostTarget103080185: true
+      };
+    } else if ((card as any).data) {
+      delete (card as any).data.preselectedSpiritTargetId;
+      delete (card as any).data.spiritCostTarget103080185;
+    }
 
     ServerGameService.moveCard(gameState, playerId, sourceZone, playerId, 'PLAY', cardId);
     if (usesHolyKingdomUnitDiscount) {
@@ -1597,23 +1701,37 @@ export const ServerGameService = {
             // STORY card
             const effect = card.effects?.find(e => e.type === 'ALWAYS' || e.type === 'ACTIVATE' || e.type === 'ACTIVATED');
             if (effect) {
-              // Enforce limits and requirements (effectively from HAND since it's a STORY card play)
-              const result = ServerGameService.checkEffectLimitsAndReqs(gameState, stackItem.ownerUid, card, effect, 'PLAY');
-              if (!result.valid) {
-                gameState.logs.push(`[连锁结算] ${card.fullName} 的效果未满足条件: ${result.reason || '条件不足'}，结算失败。`);
-              } else {
-                ServerGameService.recordEffectUsage(gameState, stackItem.ownerUid, card, effect);
-                if (effect.execute) {
-                  await (effect.execute as any)(card, gameState, owner);
-                  EventEngine.dispatchEvent(gameState, {
-                    type: 'EFFECT_ACTIVATED',
-                    playerUid: stackItem.ownerUid,
-                    sourceCardId: card.gamecardId
-                  });
-                }
+              // Story activation requirements are checked when the card is played.
+              // Costs may change erosion totals before resolution, so do not re-check
+              // erosion/condition gates here.
+              ServerGameService.recordEffectUsage(gameState, stackItem.ownerUid, card, effect);
+              if (effect.execute) {
+                await (effect.execute as any)(card, gameState, owner);
+                EventEngine.dispatchEvent(gameState, {
+                  type: 'EFFECT_ACTIVATED',
+                  playerUid: stackItem.ownerUid,
+                  sourceCardId: card.gamecardId
+                });
               }
             }
-            ServerGameService.moveCard(gameState, stackItem.ownerUid, 'PLAY', stackItem.ownerUid, 'GRAVE', card.gamecardId);
+            const liveStory = owner.playZone.find(c => c?.gamecardId === card.gamecardId);
+            const replaceToExile = liveStory?.effects?.some(effect =>
+              effect.type === 'CONTINUOUS' &&
+              effect.content === 'EXILE_WHEN_LEAVES_PLAY_TO_GRAVE'
+            );
+            ServerGameService.moveCard(
+              gameState,
+              stackItem.ownerUid,
+              'PLAY',
+              stackItem.ownerUid,
+              replaceToExile ? 'EXILE' : 'GRAVE',
+              card.gamecardId,
+              replaceToExile ? {
+                isEffect: true,
+                effectSourcePlayerUid: stackItem.ownerUid,
+                effectSourceCardId: card.gamecardId
+              } : undefined
+            );
           }
           const identity = getCardIdentity(gameState, stackItem.ownerUid, card);
           gameState.logs.push(`${identity} ${card.fullName} 结算完成`);
@@ -1682,6 +1800,13 @@ export const ServerGameService = {
 
           // Re-calculate effects to ensure 302050013's defensePowerRestriction is applied to the new battleState
           EventEngine.recalculateContinuousEffects(gameState);
+          if (stackItem.skipDefense) {
+            EventEngine.dispatchEvent(gameState, {
+              type: 'PHASE_CHANGED',
+              playerUid: stackItem.ownerUid,
+              data: { phase: 'BATTLE_FREE', reason: 'ATTACK_DECLARED_SKIP_DEFENSE' }
+            });
+          }
           break;
       }
 
@@ -1857,13 +1982,18 @@ export const ServerGameService = {
     if (normalizedType === 'SELECT_PAYMENT') {
       try {
         const paymentSelection = JSON.parse(selections[0]);
+        const paymentTargetId = query.context?.targetCardId || query.context?.targetId;
+        const paymentTarget = paymentTargetId ? ServerGameService.findCardById(gameState, paymentTargetId) : undefined;
+        const paymentCost = paymentTarget && query.context?.useEffectiveCardCost !== false
+          ? ServerGameService.getEffectivePlayCost(gameState.players[playerUid], paymentTarget, gameState)
+          : (query.paymentCost || 0);
         const result = ServerGameService.payCost(
           gameState,
           playerUid,
-          query.paymentCost || 0,
+          paymentCost,
           paymentSelection,
-          query.paymentColor,
-          query.context?.targetCardId || query.context?.targetId // Use optional chaining for safety
+          paymentTarget?.color || query.paymentColor,
+          paymentTargetId
         );
 
         if (!result.success) {
@@ -2409,18 +2539,21 @@ export const ServerGameService = {
         if (effect.type === 'PAY_CARD_COST') {
           const targetId = currentSelections[0];
           const targetCard = ServerGameService.findCardById(gameState, targetId);
-          if (targetCard && targetCard.acValue && targetCard.acValue !== 0) {
+          const targetCost = targetCard
+            ? ServerGameService.getEffectivePlayCost(gameState.players[playerUid], targetCard, gameState)
+            : 0;
+          if (targetCard && targetCost !== 0) {
             gameState.pendingQuery = {
               id: Math.random().toString(36).substring(7),
               type: 'SELECT_PAYMENT',
               playerUid,
               options: [], // Not used for payment
               title: `支付费用: ${targetCard.fullName}`,
-              description: `请选择如何支付 ${targetCard.acValue} 点费用。`,
+              description: `请选择如何支付 ${targetCost} 点费用。`,
               minSelections: 1,
               maxSelections: 1,
               callbackKey: 'GENERIC_RESOLVE',
-              paymentCost: targetCard.acValue,
+              paymentCost: targetCost,
               paymentColor: targetCard.color,
               context: {
                 ...query.context,
@@ -2790,6 +2923,11 @@ export const ServerGameService = {
     // Transition to counter check (for now just move to battle free)
     gameState.phase = 'BATTLE_FREE';
     gameState.phaseTimerStart = Date.now();
+    EventEngine.dispatchEvent(gameState, {
+      type: 'PHASE_CHANGED',
+      playerUid: playerId,
+      data: { phase: 'BATTLE_FREE', reason: 'DEFENSE_DECLARED' }
+    });
 
     await ServerGameService.checkTriggeredEffects(gameState);
 
@@ -3543,15 +3681,21 @@ export const ServerGameService = {
       }
 
       Object.entries(gameState.players).forEach(([uid, player]) => {
-        player.unitZone.forEach(unit => {
-          if (!unit || (unit as any).data?.returnToDeckBottomAtTurnEnd !== gameState.turnCount) return;
-          const sourceName = (unit as any).data.returnToDeckBottomSourceName || '卡牌效果';
-          ServerGameService.moveCard(gameState, uid, 'UNIT', uid, 'DECK', unit.gamecardId, {
+        const fieldCards = [
+          ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
+          ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
+        ];
+
+        fieldCards.forEach(({ card, zone }) => {
+          if (!card || (card as any).data?.returnToDeckBottomAtTurnEnd !== gameState.turnCount) return;
+          const sourceName = (card as any).data.returnToDeckBottomSourceName || '卡牌效果';
+          ServerGameService.moveCard(gameState, uid, zone, uid, 'DECK', card.gamecardId, {
             insertAtBottom: true,
             isEffect: true,
-            effectSourcePlayerUid: uid
+            effectSourcePlayerUid: uid,
+            effectSourceCardId: (card as any).data.returnToDeckBottomSourceCardId
           });
-          gameState.logs.push(`[${sourceName}] 将 [${unit.fullName}] 放置到卡组底。`);
+          gameState.logs.push(`[${sourceName}] 将 [${card.fullName}] 放置到卡组底。`);
         });
       });
 
@@ -3689,6 +3833,11 @@ export const ServerGameService = {
             u.isrush = u.baseIsrush;
             u.isAnnihilation = u.baseAnnihilation || false;
             u.isHeroic = u.baseHeroic || false;
+            u.isShenyi = u.baseShenyi || false;
+            if ((u as any).data?.tempShenyiUntilTurn !== undefined && (u as any).data.tempShenyiUntilTurn < gameState.turnCount) {
+              delete (u as any).data.tempShenyiUntilTurn;
+              delete (u as any).data.tempShenyiSourceName;
+            }
             u.power = u.basePower;
             u.damage = u.baseDamage;
           }
@@ -3818,7 +3967,9 @@ export const ServerGameService = {
       return;
     }
 
-    const triggerLocation = card.cardlocation as TriggerLocation;
+    const triggerLocation = (event?.type === 'REVEAL_DECK' && effect.triggerLocation?.includes('DECK'))
+      ? 'DECK'
+      : card.cardlocation as TriggerLocation;
     const triggerCheck = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, card, effect, triggerLocation, event);
     if (!triggerCheck.valid) {
       await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
@@ -3898,7 +4049,11 @@ export const ServerGameService = {
       sourceCardId: card.gamecardId
     });
 
-    gameState.logs.push(`[诱发结算] ${card.fullName} 的展示效果已结算。`);
+    if (gameState.pendingQuery) {
+      gameState.logs.push(`[诱发结算] ${card.fullName} 的效果等待玩家选择。`);
+    } else {
+      gameState.logs.push(`[诱发结算] ${card.fullName} 的展示效果已结算。`);
+    }
 
     // 7. Cleanup highlight
     gameState.currentProcessingItem = null;

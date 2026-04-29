@@ -1,5 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor } from './BaseUtil';
+import { AtomicEffectExecutor, grantedTotemReviveFromGrave } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
   id: '103080213_leave_draw',
@@ -16,7 +16,7 @@ const cardEffects: CardEffect[] = [{
   execute: async (instance, gameState, playerState) => {
     await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 1 }, instance);
   }
-}];
+}, grantedTotemReviveFromGrave()];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.

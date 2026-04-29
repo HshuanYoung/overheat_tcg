@@ -21,12 +21,13 @@ const cardEffects: CardEffect[] = [{
   triggerEvent: 'CARD_DESTROYED_BATTLE',
   triggerLocation: ['UNIT'],
   isGlobal: true,
+  isMandatory: true,
   limitCount: 1,
-  description: '1回合1次：你的单位被战斗破坏时，本回合这个单位伤害+1、力量+500。',
+  description: '1回合1次：你的单位被战斗破坏时，本回合这个单位伤害+1、力量+1500。',
   condition: (_gameState, playerState, _instance, event) => event?.playerUid === playerState.uid,
   execute: async (instance) => {
     addTempDamage(instance, instance, 1);
-    addTempPower(instance, instance, 500);
+    addTempPower(instance, instance, 1500);
   }
 }];
 
@@ -61,9 +62,12 @@ const card: Card = {
   godMark: true,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
-  isrush: true,
-  isAnnihilation: true,
-  isShenyi: true,
+  isrush: false,
+  baseIsrush: false,
+  isAnnihilation: false,
+  baseAnnihilation: false,
+  isShenyi: false,
+  baseShenyi: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,

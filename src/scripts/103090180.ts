@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103090180_exhaust_boost',
   type: 'ACTIVATE',
   triggerLocation: ['UNIT'],
+  limitCount: 1,
   description: '横置你的X个单位：选择你的1个单位，本回合伤害+X、力量+X000。X不能小于2。',
   condition: (_gameState, playerState) => ownUnits(playerState).filter(unit => !unit.isExhausted).length >= 2 && ownUnits(playerState).length > 0,
   execute: async (instance, gameState, playerState) => {

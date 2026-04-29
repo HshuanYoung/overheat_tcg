@@ -63,8 +63,8 @@ const getEffectiveLimitGodmarkCount = (playerState: any, card: Card) => {
   return fieldEffect?.limitGodmarkCount ?? selfEffect?.limitGodmarkCount;
 };
 
-const canAffordCardCost = (playerState: any, card: Card) => {
-  const cost = card.acValue || 0;
+const canAffordCardCost = (gameState: any, playerState: any, card: Card) => {
+  const cost = GameService.getEffectivePlayCost(gameState, playerState, card);
   if (cost < 0) {
     return getFaceUpErosionFront(playerState).length >= Math.abs(cost);
   }
@@ -97,8 +97,10 @@ const canAffordCardCost = (playerState: any, card: Card) => {
 };
 
 const canUseRevealedCard = (gameState: any, playerState: any, card: Card) => {
+  const playCheck = GameService.canPlayCard(gameState, playerState, card);
+  if (!playCheck.canPlay) return false;
   if (!canMeetColorRequirement(playerState, card)) return false;
-  if (!canAffordCardCost(playerState, card)) return false;
+  if (!canAffordCardCost(gameState, playerState, card)) return false;
   if (playerState.factionLock && card.faction !== playerState.factionLock) return false;
 
   if (card.type === 'UNIT') {
@@ -372,7 +374,7 @@ const effect_105110115_reveal_use_top: CardEffect = {
       const revealed = AtomicEffectExecutor.findCardById(gameState, context.targetId);
       if (!revealed || revealed.cardlocation !== 'DECK') return;
 
-      const cost = revealed.acValue || 0;
+      const cost = GameService.getEffectivePlayCost(gameState, playerState, revealed);
       if (cost < 0) {
         const candidates = getFaceUpErosionFront(playerState);
         if (candidates.length < Math.abs(cost)) return;

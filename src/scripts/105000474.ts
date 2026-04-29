@@ -7,8 +7,6 @@ const effect_105000474_enter: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
-  limitCount: 1,
-  limitNameType: true,
   isMandatory: true,
   description: 'When this unit enters the battlefield, shuffle your deck and reveal the top card. If it is a god-mark card, choose a player and discard a random card from that player hand.',
   condition: (_gameState, _playerState, instance, event?: GameEvent) =>

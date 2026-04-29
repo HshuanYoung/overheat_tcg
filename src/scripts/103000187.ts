@@ -63,7 +63,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,
-  isShenyi: true,
+  isShenyi: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,

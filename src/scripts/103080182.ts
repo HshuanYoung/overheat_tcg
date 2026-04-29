@@ -1,5 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor, addTempDamage, addTempKeyword, addTempPower, allUnitsOnField, createSelectCardQuery, isSpiritEffectEvent } from './BaseUtil';
+import { AtomicEffectExecutor, addTempDamage, addTempKeyword, addTempPower, allUnitsOnField, createSelectCardQuery, grantedTotemReviveFromGrave, isSpiritEffectEvent } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
   id: '103080182_spirit_targeted',
@@ -30,7 +30,7 @@ const cardEffects: CardEffect[] = [{
       addTempKeyword(target, instance, 'annihilation');
     }
   }
-}];
+}, grantedTotemReviveFromGrave()];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -59,11 +59,12 @@ const card: Card = {
   basePower: 2000,
   damage: 1,
   baseDamage: 1,
-  godMark: true,
+  godMark: false,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,
-  isAnnihilation: true,
+  isAnnihilation: false,
+  baseAnnihilation: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,

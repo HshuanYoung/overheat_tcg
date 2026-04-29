@@ -1,6 +1,6 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { createSelectCardQuery, getOpponentUid } from './BaseUtil';
+import { addInfluence, createSelectCardQuery, getOpponentUid } from './BaseUtil';
 
 const effect_105000476_continuous: CardEffect = {
   id: '105000476_continuous',
@@ -15,6 +15,8 @@ const effect_105000476_continuous: CardEffect = {
 
     instance.isHeroic = true;
     instance.isShenyi = true;
+    addInfluence(instance, instance, '获得【英勇】');
+    addInfluence(instance, instance, '获得【神依】');
   }
 };
 

@@ -1,5 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor, allCardsOnField, createSelectCardQuery, destroyByEffect, ensureData } from './BaseUtil';
+import { AtomicEffectExecutor, allCardsOnField, createSelectCardQuery, destroyByEffect, ensureData, grantedTotemReviveFromGrave } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
   id: '103080183_destroy',
@@ -28,7 +28,7 @@ const cardEffects: CardEffect[] = [{
     const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
     if (target && !target.godMark) destroyByEffect(gameState, target, instance);
   }
-}];
+}, grantedTotemReviveFromGrave()];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -57,7 +57,7 @@ const card: Card = {
   basePower: 2000,
   damage: 1,
   baseDamage: 1,
-  godMark: true,
+  godMark: false,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,

@@ -7,6 +7,8 @@ const cardEffects: CardEffect[] = [{
   triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
   triggerLocation: ['UNIT'],
   isGlobal: true,
+  isMandatory: true,
+  limitCount: 1,
   description: '对手的单位被破坏时，本回合你的所有单位力量+500。',
   condition: (_gameState, playerState, _instance, event) =>
     event?.playerUid === getOpponentUid(_gameState, playerState.uid),
@@ -19,6 +21,7 @@ const cardEffects: CardEffect[] = [{
   triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
   triggerLocation: ['UNIT'],
   isGlobal: true,
+  isMandatory: true,
   erosionTotalLimit: [10, 10],
   description: '10+：战场上的单位被破坏时，给予对手1点伤害。',
   condition: () => true,

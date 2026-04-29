@@ -8,7 +8,7 @@ const effect_205000143_activate: CardEffect = {
   triggerLocation: ['PLAY'],
   description: 'Main phase only. Send 1 of your units to grave, then put a non-god unit from your deck onto the battlefield with AC 1 greater.',
   condition: (gameState, playerState) =>
-    gameState.phase === 'MAIN' &&
+    (gameState.phase === 'MAIN' || gameState.previousPhase === 'MAIN') &&
     playerState.unitZone.some(unit => !!unit) &&
     playerState.deck.some(card => card.type === 'UNIT' && !card.godMark),
   execute: async (instance, gameState, playerState) => {
@@ -31,12 +31,13 @@ const effect_205000143_activate: CardEffect = {
 
       const targetAc = (target.baseAcValue ?? target.acValue) + 1;
       moveCard(gameState, playerState.uid, target, 'GRAVE', instance);
+      const livePlayer = gameState.players[playerState.uid];
 
-      const candidates = playerState.deck.filter(card =>
+      const candidates = livePlayer.deck.filter(card =>
         card.type === 'UNIT' &&
         !card.godMark &&
         (card.baseAcValue ?? card.acValue) === targetAc &&
-        canPutUnitOntoBattlefield(playerState, card)
+        canPutUnitOntoBattlefield(livePlayer, card)
       );
       if (candidates.length === 0) return;
 

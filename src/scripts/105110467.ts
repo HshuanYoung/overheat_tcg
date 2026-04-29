@@ -1,6 +1,6 @@
 import { Card, CardEffect, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { createChoiceQuery, createSelectCardQuery, getBattlefieldUnits, isVirtualGodMarkReveal, shuffleAndRevealTopCards } from './BaseUtil';
+import { createChoiceQuery, createSelectCardQuery, getBattlefieldUnits, isVirtualGodMarkReveal, revealDeckCards } from './BaseUtil';
 
 const readySelfIfNeeded = (instance: Card, gameState: any, revealedCardId?: string) => {
   const revealedCard = revealedCardId ? AtomicEffectExecutor.findCardById(gameState, revealedCardId) : undefined;
@@ -23,7 +23,8 @@ const effect_105110467_attack: CardEffect = {
     Array.isArray(event.data?.attackerIds) &&
     event.data.attackerIds.includes(instance.gamecardId),
   execute: async (instance, gameState, playerState) => {
-    const revealedCard = (await shuffleAndRevealTopCards(gameState, playerState.uid, 1, instance))[0];
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+    const revealedCard = revealDeckCards(gameState, playerState.uid, 1, instance)[0];
     if (!revealedCard) return;
 
     if (revealedCard.type !== 'UNIT') {

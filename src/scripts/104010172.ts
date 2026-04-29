@@ -4,16 +4,17 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 const trigger_104010172: CardEffect = {
   id: '104010172_trigger',
   type: 'TRIGGER',
-  erosionTotalLimit: [1, 4],
   description: '【诱发】【名称一回合一次】侵蚀区数量为1-4时，当此单位因你的卡牌效果从单位区返回手牌时：你可以发动。从手牌中选择一张除「水仙-灵法师」以外、「百濑之水城」势力的单位卡放置到战场上。',
-  triggerLocation: ['HAND'],
+  triggerLocation: ['HAND', 'EROSION_FRONT', 'EROSION_BACK', 'GRAVE', 'EXILE', 'DECK', 'UNIT', 'ITEM'],
   triggerEvent: 'CARD_FIELD_TO_HAND',
   isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
-    if (!playerState.unitZone.some(u => u === null)) return false;
     if (!event || event.type !== 'CARD_FIELD_TO_HAND') return false;
+    const totalErosion = playerState.erosionFront.filter(Boolean).length + playerState.erosionBack.filter(Boolean).length;
+    if (!event.data?.['104010172_erosion_valid'] && (totalErosion < 1 || totalErosion > 4)) return false;
+    if (!playerState.unitZone.some(u => u === null)) return false;
 
     const isSelf =
       event.sourceCard === instance ||
@@ -32,7 +33,9 @@ const trigger_104010172: CardEffect = {
       c.fullName !== '水仙--灵法师'
     );
 
-    return targets.length > 0;
+    if (targets.length === 0) return false;
+    event.data['104010172_erosion_valid'] = true;
+    return true;
   },
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const targets = playerState.hand.filter(c =>

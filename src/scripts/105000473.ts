@@ -18,7 +18,6 @@ const effect_105000473_reveal: CardEffect = {
   isMandatory: true,
   description: 'When this card is revealed from the top of your deck, choose up to 2 units. This turn they get +1 damage, +500 power, and Rush.',
   condition: (_gameState, playerState, instance, event?: GameEvent) =>
-    instance.cardlocation === 'DECK' &&
     event?.type === 'REVEAL_DECK' &&
     event.playerUid === playerState.uid &&
     Array.isArray(event.data?.cards) &&

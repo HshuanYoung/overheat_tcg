@@ -8,7 +8,14 @@ const cardEffects: CardEffect[] = [{
   description: '若你的放逐区少于7张，这个单位不能宣言攻击或防御。',
   applyContinuous: (gameState, instance) => {
     const owner = ownerOf(gameState, instance);
-    if (!owner || owner.exile.length >= 7) return;
+    if (!owner) return;
+    if (owner.exile.length >= 7) {
+      if ((instance as any).data?.cannotAttackOrDefendSourceName === instance.fullName) {
+        delete (instance as any).data.cannotAttackOrDefendUntilTurn;
+        delete (instance as any).data.cannotAttackOrDefendSourceName;
+      }
+      return;
+    }
     forbidAttackAndDefenseUntil(instance, instance, gameState.turnCount);
   }
 }];

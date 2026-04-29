@@ -225,9 +225,6 @@ export class EventEngine {
             // For now we just keep the property on the object
           }
           if (card.baseGodMark !== undefined) card.godMark = card.baseGodMark;
-          if ((card as any).data?.tempShenyiUntilTurn === gameState.turnCount) {
-            card.isShenyi = true;
-          }
           if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
           if (card.baseHeroic !== undefined) card.isHeroic = card.baseHeroic || !!card.temporaryHeroic;
           card.canActivateEffect = card.baseCanActivateEffect !== undefined ? card.baseCanActivateEffect : true;
@@ -242,7 +239,14 @@ export class EventEngine {
             card.isImmuneToUnitEffects = card.temporaryImmuneToUnitEffects;
           }
           if (card.baseShenyi !== undefined) card.isShenyi = card.baseShenyi;
+          if ((card as any).data?.tempShenyiUntilTurn === gameState.turnCount) {
+            card.isShenyi = true;
+          }
           if ((card as any).data) {
+            if ((card as any).data.grantedTotemReviveBy103080184) {
+              delete (card as any).data.grantedTotemReviveBy103080184;
+              delete (card as any).data.grantedTotemReviveSourceName;
+            }
             delete (card as any).data.accessTapValue;
             delete (card as any).data.accessTapMinValue;
             delete (card as any).data.accessTapFlexible;
@@ -366,6 +370,13 @@ export class EventEngine {
             description: '在回合结束时回归战场'
           });
         }
+        if (card && (card as any).data?.placedOnOpponentFieldSourceName) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.placedOnOpponentFieldSourceName,
+            description: '被放置到对手战场'
+          });
+        }
         if (card && (card as any).data?.destroyAtEndBy) {
           if (!card.influencingEffects) card.influencingEffects = [];
           card.influencingEffects.push({
@@ -413,6 +424,13 @@ export class EventEngine {
           card.influencingEffects.push({
             sourceCardName: (card as any).data.cocolaMarkedSourceName || '可可拉',
             description: '被可可拉标记'
+          });
+        }
+        if (card && (card as any).data?.defeatVillainsMarkedTurn === gameState.turnCount) {
+          if (!card.influencingEffects) card.influencingEffects = [];
+          card.influencingEffects.push({
+            sourceCardName: (card as any).data.defeatVillainsSourceName || '任务：击溃恶党',
+            description: (card as any).data.defeatVillainsMarkDescription || '离场时触发：将其控制者战场1张非神蚀卡放置到卡组顶'
           });
         }
           if (card && (card as any).data?.cannotActivateUntilTurn !== undefined && (card as any).data.cannotActivateUntilTurn >= gameState.turnCount) {
@@ -630,7 +648,11 @@ export class EventEngine {
                 if (!u.influencingEffects.some(e => e.sourceCardName === source.fullName)) {
                   u.influencingEffects.push({
                     sourceCardName: source.fullName,
-                    description: source.id === '104030125' ? '被可可拉标记' : '已标记'
+                    description: source.id === '104030125'
+                      ? '被可可拉标记'
+                      : source.id === '204000069'
+                        ? '离场时触发：将其控制者战场1张非神蚀卡放置到卡组顶'
+                        : '已标记'
                   });
                 }
               }

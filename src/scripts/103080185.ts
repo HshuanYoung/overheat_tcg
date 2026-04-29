@@ -1,20 +1,12 @@
 import { Card, CardEffect } from '../types/game';
-import { addInfluence, addTempPower, isSpiritEffectEvent, ownUnits, ownerOf } from './BaseUtil';
+import { addTempPower, grantedTotemReviveFromGrave, isSpiritEffectEvent, ownUnits } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
-  id: '103080185_spirit_cost',
+  id: '103080185_spirit_cost_marker',
   type: 'CONTINUOUS',
   triggerLocation: ['UNIT'],
   description: '选择这个单位为对象的卡名含《降灵》的卡ACCESS值变为0费，颜色需求1绿。',
-  applyContinuous: (gameState, instance) => {
-    const owner = ownerOf(gameState, instance);
-    if (!owner) return;
-    [...owner.hand, ...owner.playZone].filter(card => card.fullName.includes('降灵')).forEach(card => {
-      card.acValue = 0;
-      card.colorReq = { GREEN: 1 };
-      addInfluence(card, instance, 'ACCESS值变为0费，颜色需求1绿');
-    });
-  }
+  applyContinuous: () => {}
 }, {
   id: '103080185_spirit_targeted',
   type: 'TRIGGER',
@@ -26,7 +18,7 @@ const cardEffects: CardEffect[] = [{
   execute: async (instance, _gameState, playerState) => {
     ownUnits(playerState).forEach(unit => addTempPower(unit, instance, 500));
   }
-}];
+}, grantedTotemReviveFromGrave()];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -56,10 +48,11 @@ const card: Card = {
   basePower: 2500,
   damage: 2,
   baseDamage: 2,
-  godMark: true,
+  godMark: false,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,
+  isShenyi: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,

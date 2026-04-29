@@ -73,7 +73,7 @@ export const BattleField: React.FC = () => {
   const [previewCard, setPreviewCard] = useState<Card | null>(null);
   const [selectedMulligan, setSelectedMulligan] = useState<string[]>([]);
   const [isMulliganSubmitting, setIsMulliganSubmitting] = useState(false);
-  const [paymentSelection, setPaymentSelection] = useState<{ useFeijing: string[], exhaustIds: string[], erosionFrontIds: string[] }>({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
+  const [paymentSelection, setPaymentSelection] = useState<{ useFeijing: string[], exhaustIds: string[], erosionFrontIds: string[], spiritTargetId?: string }>({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
   const [pendingPlayCard, setPendingPlayCard] = useState<Card | null>(null);
   const [selectedAttackers, setSelectedAttackers] = useState<string[]>([]);
   const [isAlliance, setIsAlliance] = useState(false);
@@ -646,7 +646,19 @@ export const BattleField: React.FC = () => {
   };
 
   const getEffectiveCardCost = (card: Card, player: PlayerState | null = me) => {
-    const baseCost = card.baseAcValue ?? card.acValue ?? 0;
+    const baseCost = card.id === '202000080' ? 6 : (card.baseAcValue ?? card.acValue ?? 0);
+    const selectedSpiritTarget = paymentSelection.spiritTargetId
+      ? Object.values(game?.players || {})
+        .flatMap(playerState => playerState.unitZone)
+        .find(unit => unit?.gamecardId === paymentSelection.spiritTargetId)
+      : undefined;
+    if (
+      pendingPlayCard?.gamecardId === card.gamecardId &&
+      (card.id === '203000075' || card.id === '203000076') &&
+      selectedSpiritTarget?.id === '103080185'
+    ) {
+      return 0;
+    }
     if (card.id === '101140062' && player) {
       const unitCount = player.unitZone.filter(Boolean).length;
       return Math.max(0, baseCost - unitCount);
@@ -662,6 +674,18 @@ export const BattleField: React.FC = () => {
     if (card.id === '205110063' && player) {
       const itemCount = player.itemZone.filter(Boolean).length;
       return Math.max(0, baseCost - itemCount);
+    }
+    if (card.id === '202000080' && player?.unitZone.some(unit => unit?.isShenyi)) {
+      return Math.max(0, baseCost - 4);
+    }
+    if ((card as any).data?.spiritCostTarget103080185) {
+      return 0;
+    }
+    if (
+      (card.id === '201000140' || card.id === '201000040' || card.fullName === '解放之光') &&
+      player?.exile.some(exiled => exiled.id === card.id || exiled.id === '201000140' || exiled.id === '201000040' || exiled.fullName === card.fullName)
+    ) {
+      return 0;
     }
     return baseCost;
   };
@@ -762,10 +786,18 @@ export const BattleField: React.FC = () => {
 
   const canUnitAttack = (card: Card) => {
     if (!card || card.isExhausted || card.canAttack === false) return false;
+    if ((card as any).data?.cannotAttackOrDefendUntilTurn && (card as any).data.cannotAttackOrDefendUntilTurn >= game.turnCount) return false;
     const isRush = !!card.isrush;
     const wasPlayedThisTurn = card.playedTurn === game.turnCount;
     return isRush || !wasPlayedThisTurn;
   };
+
+  const canUnitDefend = (card: Card | null) =>
+    !!card &&
+    !card.isExhausted &&
+    !(card as any).battleForbiddenByEffect &&
+    !((card as any).data?.cannotDefendTurn === game.turnCount) &&
+    !((card as any).data?.cannotAttackOrDefendUntilTurn && (card as any).data.cannotAttackOrDefendUntilTurn >= game.turnCount);
 
   const getForcedAttackIds = () => {
     const ids = new Set<string>();
@@ -1117,7 +1149,8 @@ export const BattleField: React.FC = () => {
       await GameService.playCard(gameId, myUid, pendingPlayCard.gamecardId, {
         feijingCardId: paymentSelection.useFeijing[0],
         exhaustUnitIds: paymentSelection.exhaustIds,
-        erosionFrontIds: paymentSelection.erosionFrontIds
+        erosionFrontIds: paymentSelection.erosionFrontIds,
+        spiritTargetId: paymentSelection.spiritTargetId
       });
       setPendingPlayCard(null);
       setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
@@ -1459,6 +1492,49 @@ export const BattleField: React.FC = () => {
 
                 {/* Right: Selection Area */}
                 <div className="flex flex-col gap-8">
+                  {(pendingPlayCard.id === '203000075' || pendingPlayCard.id === '203000076') && Object.values(game?.players || {})
+                    .flatMap(playerState => playerState.unitZone)
+                    .some(unit => unit?.id === '103080185') && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 text-emerald-300 font-black uppercase italic tracking-widest text-sm">
+                        降灵对象
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pb-2 justify-items-center">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentSelection(prev => ({ ...prev, spiritTargetId: undefined }))}
+                          className={cn(
+                            "min-h-24 rounded-lg border-2 px-3 py-2 text-xs font-black text-white transition-all",
+                            !paymentSelection.spiritTargetId ? "border-emerald-400 bg-emerald-500/20" : "border-white/10 bg-white/5 opacity-70"
+                          )}
+                        >
+                          不预选对象<br />按原费用支付
+                        </button>
+                        {Object.values(game?.players || {}).flatMap(playerState => playerState.unitZone).filter(unit => unit?.id === '103080185').map(unit => {
+                          const isSelected = paymentSelection.spiritTargetId === unit!.gamecardId;
+                          return (
+                            <motion.div
+                              key={unit!.gamecardId}
+                              whileHover={{ y: -3 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => setPaymentSelection(prev => ({ ...prev, spiritTargetId: unit!.gamecardId }))}
+                              className={cn(
+                                "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
+                                isSelected ? "border-emerald-400 scale-105 shadow-[0_0_20px_rgba(52,211,153,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
+                              )}
+                            >
+                              <div className="relative h-full w-full">
+                                <CardComponent card={unit!} disableZoom cardBackUrl={cardBackUrl} />
+                                <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
+                                  指定此单位时 0 费
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {getEffectiveCardCost(pendingPlayCard) > 0 ? (
                     <>
                       {/* Hand Replacement Section */}
@@ -1777,7 +1853,7 @@ export const BattleField: React.FC = () => {
           cancelText="不进行防御"
           onConfirm={() => setIsSelectingDefender(true)}
           onCancel={() => handleDeclareDefense(undefined)}
-          confirmDisabled={!me.unitZone.some(c => c && !c.isExhausted)}
+          confirmDisabled={!me.unitZone.some(canUnitDefend)}
           cardBackUrl={cardBackUrl}
           onHide={() => setIsPopupHidden(true)}
           isHidden={isPopupHidden}
@@ -2060,7 +2136,7 @@ export const BattleField: React.FC = () => {
               {game.phase === 'DEFENSE_DECLARATION' && opponent?.isTurn && cardMenu.zone === 'unit' && (
                 (() => {
                   const isMyCard = me.unitZone.some(c => c?.gamecardId === cardMenu.card.gamecardId);
-                  if (isMyCard && !cardMenu.card.isExhausted) {
+                  if (isMyCard && canUnitDefend(cardMenu.card)) {
                     return (
                       <motion.button
                         whileHover={{ scale: 1.1 }}
@@ -3018,7 +3094,7 @@ export const BattleField: React.FC = () => {
             onClick={() => setPreviewCard(null)}
           >
             <div
-              className="w-full max-w-5xl bg-zinc-900/50 border border-white/10 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in fade-in zoom-in duration-300 pointer-events-auto"
+              className="w-full max-w-5xl max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-6rem)] bg-zinc-900/50 border border-white/10 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in fade-in zoom-in duration-300 pointer-events-auto"
               onClick={e => e.stopPropagation()}
             >
               {/* Left: Card Name & Image */}
@@ -3037,7 +3113,7 @@ export const BattleField: React.FC = () => {
               </div>
 
               {/* Right: Card Information */}
-              <div className="flex-1 flex flex-col p-4 md:p-10 overflow-hidden">
+              <div className="flex-1 min-h-0 flex flex-col p-4 md:p-10 overflow-hidden">
                 <div className="hidden md:flex justify-between items-start mb-6">
                   <div className="space-y-1">
                     <div className="flex items-center gap-3">
@@ -3051,7 +3127,7 @@ export const BattleField: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar space-y-6">
                   {/* Registry Data Section */}
                   <div className="space-y-4">
                     <h3 className="text-[11px] font-black text-white/60 uppercase tracking-[0.4em] flex items-center gap-2">

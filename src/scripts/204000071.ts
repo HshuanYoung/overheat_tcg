@@ -19,6 +19,7 @@ const card: Card = {
     {
       id: 'clear_mirror_activate',
       type: 'ACTIVATE',
+      triggerLocation: ['PLAY'],
       erosionBackLimit: [2, 10],
       description: '若你的侵蚀区背面结算卡在2张及以上，选择战场上的一个单位。在本回合中，该单位的所有效果无效（不影响其他卡牌赋予该单位的效果），且不受该单位以外的单位效果影响。',
       condition: (gameState, playerState) => {

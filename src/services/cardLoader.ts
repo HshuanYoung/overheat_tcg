@@ -1,4 +1,5 @@
 import { Card, GameState } from '../types/game';
+import { grantedTotemReviveFromGrave } from '../scripts/BaseUtil';
 
 // use import.meta.glob to load all scripts from ../scripts
 const modules = import.meta.glob('../scripts/*.ts', { eager: true });
@@ -39,6 +40,13 @@ export function hydrateCard(card: Card | null) {
         removeContinuous: originalEffect.removeContinuous
       };
     });
+  }
+  if (
+    card.type === 'UNIT' &&
+    card.fullName?.includes('图腾') &&
+    !card.effects?.some(effect => effect.id === '103080184_granted_totem_revive')
+  ) {
+    card.effects = [...(card.effects || []), grantedTotemReviveFromGrave()];
   }
 }
 

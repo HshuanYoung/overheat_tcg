@@ -1,19 +1,5 @@
 import { Card, CardEffect, TriggerLocation } from '../types/game';
-import { AtomicEffectExecutor, canPutUnitOntoBattlefield, createSelectCardQuery, discardHandCost, moveCard, ownerOf } from './BaseUtil';
-
-const createTotemReviveEffect = (): CardEffect => ({
-  id: '103080184_granted_totem_revive',
-  type: 'ACTIVATE',
-  triggerLocation: ['GRAVE'],
-  description: '由温多娜赋予：舍弃2张手牌，从墓地放置到战场。',
-  condition: (_gameState, playerState, instance) => canPutUnitOntoBattlefield(playerState, instance),
-  cost: discardHandCost(2),
-  execute: async (instance, gameState, playerState) => {
-    if (instance.cardlocation === 'GRAVE' && canPutUnitOntoBattlefield(playerState, instance)) {
-      moveCard(gameState, playerState.uid, instance, 'UNIT', instance);
-    }
-  }
-});
+import { AtomicEffectExecutor, addInfluence, canPutUnitOntoBattlefield, createSelectCardQuery, ensureData, grantedTotemReviveFromGrave, moveCard, ownerOf } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
   id: '103080184_end_search',
@@ -62,8 +48,12 @@ const cardEffects: CardEffect[] = [{
       if (!card || card.type !== 'UNIT' || !card.fullName.includes('图腾')) return;
       if (!card.effects) card.effects = [];
       if (!card.effects.some(effect => effect.id === '103080184_granted_totem_revive')) {
-        card.effects.push(createTotemReviveEffect());
+        card.effects.push(grantedTotemReviveFromGrave());
       }
+      const data = ensureData(card);
+      data.grantedTotemReviveBy103080184 = instance.gamecardId;
+      data.grantedTotemReviveSourceName = instance.fullName;
+      addInfluence(card, instance, '获得能力：可从墓地发动并回场');
     });
   }
 }];

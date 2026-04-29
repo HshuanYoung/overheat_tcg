@@ -1,6 +1,6 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { canPutUnitOntoBattlefield, createSelectCardQuery, getOpponentUid, moveCard } from './BaseUtil';
+import { addInfluence, canPutUnitOntoBattlefield, createSelectCardQuery, getOpponentUid, moveCard, ownerUidOf } from './BaseUtil';
 
 const effect_205000144_activate: CardEffect = {
   id: '205000144_activate',
@@ -47,7 +47,13 @@ const effect_205000144_activate: CardEffect = {
         'Choose 1 card from your hand to discard.',
         1,
         1,
-        { sourceCardId: instance.gamecardId, effectId: '205000144_activate', step: 'OPPONENT_DISCARD' },
+        {
+          sourceCardId: instance.gamecardId,
+          effectId: '205000144_activate',
+          step: 'OPPONENT_DISCARD',
+          controllerUid: playerState.uid,
+          discardPlayerUid: opponentUid
+        },
         () => 'HAND'
       );
       return;
@@ -55,15 +61,18 @@ const effect_205000144_activate: CardEffect = {
 
     if (context.step !== 'OPPONENT_DISCARD') return;
 
-    const opponentUid = getOpponentUid(gameState, playerState.uid);
+    const controllerUid = context.controllerUid || ownerUidOf(gameState, instance) || getOpponentUid(gameState, playerState.uid);
+    const discardPlayerUid = context.discardPlayerUid || playerState.uid;
+    const controller = gameState.players[controllerUid];
     const discardedCard = AtomicEffectExecutor.findCardById(gameState, selections[0]);
     const canSteal =
+      !!controller &&
       !!discardedCard &&
       discardedCard.type === 'UNIT' &&
       !discardedCard.godMark &&
-      canPutUnitOntoBattlefield(playerState, discardedCard);
+      canPutUnitOntoBattlefield(controller, discardedCard);
 
-    await AtomicEffectExecutor.execute(gameState, opponentUid, {
+    await AtomicEffectExecutor.execute(gameState, discardPlayerUid, {
       type: 'DISCARD_CARD',
       targetFilter: { gamecardId: selections[0] }
     }, instance);
@@ -73,7 +82,12 @@ const effect_205000144_activate: CardEffect = {
     const movedCard = AtomicEffectExecutor.findCardById(gameState, selections[0]);
     if (!movedCard || movedCard.cardlocation !== 'GRAVE') return;
 
-    moveCard(gameState, opponentUid, movedCard, 'UNIT', instance, { toPlayerUid: playerState.uid });
+    moveCard(gameState, discardPlayerUid, movedCard, 'UNIT', instance, { toPlayerUid: controllerUid });
+    (movedCard as any).data = {
+      ...((movedCard as any).data || {}),
+      placedOnOpponentFieldSourceName: instance.fullName
+    };
+    addInfluence(movedCard, instance, '被放置到对手战场');
   }
 };
 

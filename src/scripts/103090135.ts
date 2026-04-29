@@ -1,5 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor, addTempPower, canPayAccessCost, createSelectCardQuery, ownUnits, paymentCost } from './BaseUtil';
+import { AtomicEffectExecutor, addTempPowerUntilEndOfTurn, canPayAccessCost, createSelectCardQuery, ownUnits, paymentCost } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
   id: '103090135_boost_other',
@@ -25,7 +25,7 @@ const cardEffects: CardEffect[] = [{
   },
   onQueryResolve: async (instance, gameState, _playerState, selections) => {
     const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
-    if (target?.cardlocation === 'UNIT') addTempPower(target, instance, 1000);
+    if (target?.cardlocation === 'UNIT') addTempPowerUntilEndOfTurn(target, instance, 1000, gameState);
   }
 }];
 

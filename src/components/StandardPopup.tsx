@@ -22,7 +22,7 @@ interface StandardPopupProps {
   
   // Card Selection & Display props
   cards?: Card[];
-  cardMeta?: Record<string, { ownerName?: string; slotLabel?: string; zoneLabel?: string; isMine?: boolean }>;
+  cardMeta?: Record<string, { ownerName?: string; slotLabel?: string; zoneLabel?: string; isMine?: boolean; isFaceDown?: boolean }>;
   selectedIds?: string[];
   minSelections?: number;
   maxSelections?: number;
@@ -197,21 +197,28 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                   const selectionOrder = selectedIds.indexOf(card.gamecardId) + 1;
                   const meta = cardMeta[card.gamecardId || card.id] || {};
                   const locationText = [meta.ownerName, meta.slotLabel || meta.zoneLabel].filter(Boolean).join(' · ');
+                  const isFaceDown =
+                    !!meta.isFaceDown ||
+                    meta.zoneLabel === 'EROSION_BACK' ||
+                    meta.zoneLabel === '侵蚀区背面';
+                  const isHiddenDisplay = mode === 'card_display' && isFaceDown;
                   
                   return (
                     <motion.div
                       key={`${card.gamecardId}-${i}`}
                       whileHover={{ y: -10, scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={(e) => onCardClick?.(card, e)}
+                      onClick={(e) => {
+                        if (!isHiddenDisplay) onCardClick?.(card, e);
+                      }}
                       className={cn(
                         "w-full aspect-[3/4] rounded-xl md:rounded-2xl overflow-hidden border-2 transition-all relative shrink-0",
                         isSelected 
                           ? "border-[#f27d26] shadow-[0_0_30px_rgba(242,125,38,0.4)] scale-105" 
-                          : "border-white/5 opacity-80 hover:opacity-100 cursor-pointer"
+                          : cn("border-white/5 opacity-80 hover:opacity-100", isHiddenDisplay ? "cursor-default" : "cursor-pointer")
                       )}
                     >
-                      <CardComponent card={card} disableZoom={true} cardBackUrl={cardBackUrl} />
+                      <CardComponent card={card} isBack={isFaceDown} disableZoom={true} cardBackUrl={cardBackUrl} />
                       {locationText && (
                         <div className="absolute left-2 top-2 max-w-[calc(100%-1rem)] rounded-lg bg-black/80 px-2 py-1 text-[10px] font-black leading-tight text-white shadow-lg ring-1 ring-white/10">
                           {locationText}

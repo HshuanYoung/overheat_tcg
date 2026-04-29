@@ -1,4 +1,5 @@
 import { Card, CardEffect } from '../types/game';
+import { EventEngine } from '../services/EventEngine';
 import { AtomicEffectExecutor, createSelectCardQuery, discardHandCost, getOpponentUid, ownUnits } from './BaseUtil';
 
 const isWitchUnit = (card: Card) => card.type === 'UNIT' && card.fullName.includes('魔女');
@@ -34,9 +35,14 @@ const cardEffects: CardEffect[] = [{
     if (!target || target.cardlocation !== 'UNIT') return;
     if (gameState.battleState) {
       gameState.battleState.unitTargetId = target.gamecardId;
+      gameState.battleState.defender = target.gamecardId;
       gameState.battleState.defenseLockedToTargetId = target.gamecardId;
-      gameState.battleState.skipAttackerExhaust = true;
+      gameState.phase = 'BATTLE_FREE';
+      gameState.previousPhase = undefined;
+      gameState.phaseTimerStart = Date.now();
+      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_FREE', reason: 'ATTACK_REDIRECT' } });
       gameState.logs.push(`[魔女的领路人] 将这次战斗的攻击对象变为 [${target.fullName}]。`);
+      gameState.logs.push(`[攻击宣言] [${target.fullName}] 成为攻击对象，直接进入战斗自由步骤。`);
     }
   }
 }];

@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103000137_boost',
   type: 'ACTIVATE',
   triggerLocation: ['UNIT'],
-  erosionBackLimit: [6, 8],
+  erosionTotalLimit: [6, 8],
   description: '6~8：支付2费，选择你的1个单位，本回合伤害+1、力量+2000。',
   condition: (gameState, playerState, instance) =>
     canPayAccessCost(gameState, playerState, 2, 'GREEN', instance) && ownUnits(playerState).length > 0,

@@ -3396,6 +3396,29 @@ export const ServerGameService = {
             delete (card as any).data.forbiddenAlchemySourceName;
             delete (card as any).data.forbiddenAlchemyWillExileAtEndOfTurn;
           }
+          const endOfTurnPowerBuffs = (card as any).data?.endOfTurnTempPowerBuffs;
+          if (Array.isArray(endOfTurnPowerBuffs) && endOfTurnPowerBuffs.length > 0) {
+            const expired = endOfTurnPowerBuffs.filter((buff: any) => buff.turn < gameState.turnCount);
+            const remaining = endOfTurnPowerBuffs.filter((buff: any) => buff.turn >= gameState.turnCount);
+            const expiredAmount = expired.reduce((sum: number, buff: any) => sum + Number(buff.amount || 0), 0);
+            if (expiredAmount !== 0) {
+              card.temporaryPowerBuff = (card.temporaryPowerBuff || 0) - expiredAmount;
+              const details = card.temporaryBuffDetails?.power || [];
+              expired.forEach((buff: any) => {
+                const index = details.findIndex((detail: any) =>
+                  detail.sourceCardName === buff.sourceCardName &&
+                  Number(detail.value || 0) === Number(buff.amount || 0)
+                );
+                if (index !== -1) details.splice(index, 1);
+              });
+              card.temporaryBuffDetails = { ...(card.temporaryBuffDetails || {}), power: details };
+            }
+            if (remaining.length > 0) {
+              (card as any).data.endOfTurnTempPowerBuffs = remaining;
+            } else {
+              delete (card as any).data.endOfTurnTempPowerBuffs;
+            }
+          }
         });
 
         p.unitZone.forEach(u => {

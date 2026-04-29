@@ -594,6 +594,17 @@ export const BattleField: React.FC = () => {
     }, 0);
   };
 
+  const getAccessPaymentValue = (card: Card | null | undefined) =>
+    card ? Math.max(1, Number((card as any).data?.accessTapValue || 1)) : 0;
+
+  const getSelectedAccessPaymentValue = (exhaustIds: string[] = paymentSelection.exhaustIds) => {
+    if (!me) return 0;
+    return exhaustIds.reduce((total, gamecardId) => {
+      const card = me.unitZone.find(unit => unit?.gamecardId === gamecardId);
+      return total + getAccessPaymentValue(card);
+    }, 0);
+  };
+
   const getEffectiveCardCost = (card: Card, player: PlayerState | null = me) => {
     const baseCost = card.baseAcValue ?? card.acValue ?? 0;
     if (card.id === '101140062' && player) {
@@ -1134,7 +1145,7 @@ export const BattleField: React.FC = () => {
           const selectedCard = me?.hand.find(c => c.gamecardId === selectedId);
           return total + (selectedCard ? getHandPaymentValue(selectedCard, paymentColor, required, excludeCardId) : 0);
         }, 0);
-        const current = currentHandValue + prev.exhaustIds.length;
+        const current = currentHandValue + getSelectedAccessPaymentValue(prev.exhaustIds);
         if (current >= required) return prev;
       }
       return {
@@ -1387,7 +1398,7 @@ export const BattleField: React.FC = () => {
                     <span className="text-zinc-500 text-[8px] font-bold tracking-widest">已选</span>
                     <span className="text-xl md:text-2xl font-black text-white">
                       {getEffectiveCardCost(pendingPlayCard) > 0
-                        ? getSelectedHandPaymentValue(pendingPlayCard.color, getEffectiveCardCost(pendingPlayCard), pendingPlayCard.gamecardId) + paymentSelection.exhaustIds.length
+                        ? getSelectedHandPaymentValue(pendingPlayCard.color, getEffectiveCardCost(pendingPlayCard), pendingPlayCard.gamecardId) + getSelectedAccessPaymentValue()
                         : paymentSelection.erosionFrontIds.length}
                     </span>
                   </div>
@@ -1449,12 +1460,13 @@ export const BattleField: React.FC = () => {
                         <div className="flex flex-col gap-3">
                           <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
                             <Sword className="w-4 h-4" />
-                            横置支付（费用 -1）
+                            横置支付（按单位ACCESS值）
                           </div>
                           <div className="grid grid-cols-2 gap-3 pb-2 justify-items-center">
-                            {me.unitZone.filter(c => c && !c.isExhausted).map((card, i) => {
-                              const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
-                              return (
+                          {me.unitZone.filter(c => c && !c.isExhausted).map((card, i) => {
+                            const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
+                            const accessValue = getAccessPaymentValue(card);
+                            return (
                                 <motion.div
                                   key={`${card!.gamecardId}-${i}`}
                                   whileHover={{ y: -3 }}
@@ -1468,7 +1480,7 @@ export const BattleField: React.FC = () => {
                                   <div className="relative h-full w-full">
                                     <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
                                     <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                                      {getOwnedCardLocationLabel(card!)}
+                                      {getOwnedCardLocationLabel(card!)} · +{accessValue}
                                     </div>
                                   </div>
                                 </motion.div>
@@ -2485,7 +2497,7 @@ export const BattleField: React.FC = () => {
         paymentCost={game.pendingQuery?.paymentCost}
         paymentCurrent={
           (game.pendingQuery?.paymentCost || 0) > 0
-            ? getSelectedHandPaymentValue(game.pendingQuery?.paymentColor, game.pendingQuery?.paymentCost) + paymentSelection.exhaustIds.length
+            ? getSelectedHandPaymentValue(game.pendingQuery?.paymentColor, game.pendingQuery?.paymentCost) + getSelectedAccessPaymentValue()
             : paymentSelection.erosionFrontIds.length
         }
         confirmText="确认"
@@ -2535,11 +2547,12 @@ export const BattleField: React.FC = () => {
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
                   <Sword className="w-4 h-4" />
-                  横置支付（费用 -1）
+                  横置支付（按单位ACCESS值）
                 </div>
                 <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
                   {me.unitZone.filter(c => c && !c.isExhausted).map((card, i) => {
                     const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
+                    const accessValue = getAccessPaymentValue(card);
                     return (
                       <motion.div
                         key={`${card!.gamecardId}-${i}`}
@@ -2554,7 +2567,7 @@ export const BattleField: React.FC = () => {
                         <div className="relative h-full w-full">
                           <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
                           <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                            {getOwnedCardLocationLabel(card!)}
+                            {getOwnedCardLocationLabel(card!)} · +{accessValue}
                           </div>
                         </div>
                       </motion.div>

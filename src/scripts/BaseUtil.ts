@@ -572,6 +572,15 @@ export const addTempPower = (target: Card, source: Card, amount: number) => {
   target.temporaryBuffDetails = { ...(target.temporaryBuffDetails || {}), power: details };
 };
 
+export const addTempPowerUntilEndOfTurn = (target: Card, source: Card, amount: number, gameState: GameState) => {
+  addTempPower(target, source, amount);
+  const data = ensureData(target);
+  data.endOfTurnTempPowerBuffs = [
+    ...(data.endOfTurnTempPowerBuffs || []),
+    { turn: gameState.turnCount, amount, sourceCardName: source.fullName }
+  ];
+};
+
 export const addTempDamage = (target: Card, source: Card, amount: number) => {
   target.temporaryDamageBuff = (target.temporaryDamageBuff || 0) + amount;
   target.damage = (target.damage || 0) + amount;
@@ -750,8 +759,10 @@ export const canPayAccessCost = (gameState: GameState, playerState: PlayerState,
   );
 
   let remaining = hasFeijing ? Math.max(0, amount - 3) : amount;
-  const readyUnits = playerState.unitZone.filter(unit => unit && !unit.isExhausted).length;
-  remaining = Math.max(0, remaining - readyUnits);
+  const readyUnitValue = playerState.unitZone
+    .filter(unit => unit && !unit.isExhausted)
+    .reduce((total, unit) => total + Math.max(1, Number((unit as any).data?.accessTapValue || 1)), 0);
+  remaining = Math.max(0, remaining - readyUnitValue);
   if (remaining <= 0) return true;
 
   const totalErosion = playerState.erosionFront.filter(card => card !== null).length +

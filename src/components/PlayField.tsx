@@ -519,6 +519,18 @@ export const PlayField: React.FC<PlayFieldProps> = ({
         title={viewingZone?.title || ''}
         mode="card_display"
         cards={viewingZone?.cards || []}
+        cardMeta={Object.fromEntries(
+          (viewingZone?.cards || []).map(card => {
+            const isFaceDown = viewingZone?.type === 'erosion' && viewingZone.erosionBackIds?.includes(card.gamecardId);
+            return [
+              card.gamecardId || card.id,
+              {
+                zoneLabel: isFaceDown ? '侵蚀区背面' : viewingZone?.title,
+                isFaceDown
+              }
+            ];
+          })
+        )}
         onCardClick={(card, e) => {
           if (onCardClick && viewingZone) {
             const isHiddenErosionBack = viewingZone.type === 'erosion' && viewingZone.erosionBackIds?.includes(card.gamecardId);

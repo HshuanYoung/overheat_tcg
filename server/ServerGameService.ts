@@ -39,6 +39,16 @@ type PaymentSummary = {
 };
 
 export const ServerGameService = {
+  shouldSkipVisualDelay(gameState: GameState) {
+    const mode = gameState.mode || '';
+    return (gameState as any).skipResolutionDelay === true || mode === 'ai-selfplay' || mode === 'ai-evaluation';
+  },
+
+  async waitForVisualDelay(gameState: GameState, ms: number) {
+    if (ServerGameService.shouldSkipVisualDelay(gameState)) return;
+    await new Promise(resolve => setTimeout(resolve, ms));
+  },
+
   isFullEffectSilencedThisTurn(gameState: GameState, card: Card) {
     const data = (card as any).data;
     if (data?.fullEffectSilencedTurn !== gameState.turnCount) return false;
@@ -954,7 +964,7 @@ export const ServerGameService = {
       timestamp: Date.now()
     };
     if (onUpdate) await onUpdate(gameState);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await ServerGameService.waitForVisualDelay(gameState, 1500);
     gameState.currentProcessingItem = null;
     if (onUpdate) await onUpdate(gameState);
     EventEngine.recalculateContinuousEffects(gameState);
@@ -2271,7 +2281,7 @@ export const ServerGameService = {
       if (onUpdate) await onUpdate(gameState);
 
       // Wait for the front-end to display the effect
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await ServerGameService.waitForVisualDelay(gameState, 1500);
 
       const stackItem = gameState.counterStack.pop();
       if (!stackItem) continue;
@@ -2444,7 +2454,7 @@ export const ServerGameService = {
 
       // Small pause between multiple items
       if (gameState.counterStack.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await ServerGameService.waitForVisualDelay(gameState, 500);
       }
     }
 
@@ -5151,7 +5161,7 @@ export const ServerGameService = {
     }
 
     // Small pause for visual feedback
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await ServerGameService.waitForVisualDelay(gameState, 1500);
 
     // 4. Atomic Effects
     if (effect.atomicEffects) {

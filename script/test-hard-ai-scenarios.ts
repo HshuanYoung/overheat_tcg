@@ -1429,6 +1429,114 @@ function testMagicSpearResetEffectScoresWhenAttackWouldLose(): ScenarioResult {
   );
 }
 
+function testHolyPrinceResetHeldInLooseCountering(): ScenarioResult {
+  const profile = getDeckAiProfile('white-temple');
+  const lowUnit = unit({
+    id: 'WHITE_LOW_RESET_TARGET',
+    fullName: 'Low White Unit',
+    power: 1000,
+    damage: 1,
+    isExhausted: true,
+    playedTurn: 1,
+  });
+  const princeEffect = effect({
+    id: '101130441_reset_boost',
+    type: 'ACTIVATE',
+    description: 'reset a saint kingdom unit and give it power +500',
+  });
+  const prince = unit({
+    id: '101130441',
+    fullName: 'Holy Prince Rune',
+    power: 2000,
+    damage: 1,
+    godMark: true,
+    effects: [princeEffect],
+    playedTurn: 1,
+  });
+  const state = game(
+    {
+      unitZone: [lowUnit, prince, null, null, null, null],
+      grave: deckCards(3, 'PRINCE_COST_GRAVE'),
+      botDeckProfileId: 'white-temple',
+    },
+    {},
+    {
+      phase: 'COUNTERING',
+      currentTurnPlayer: 1,
+      priorityPlayerId: 'BOT',
+      previousPhase: 'MAIN',
+    }
+  );
+
+  const scored = scoreActivatableEffect(state, state.players.BOT, prince as any, princeEffect as any, profile, {
+    opponent: state.players.P1,
+    targetCount: 1,
+    hasTargetSpec: true,
+  });
+
+  return assertScenario(
+    'holy prince reset is held in loose countering windows',
+    scored.score < 18 && scored.notes.some(note => note.includes('post-attack high-value reset')),
+    `score=${scored.score.toFixed(1)}, notes=${scored.notes.join('|')}`
+  );
+}
+
+function testHolyPrinceResetSupportsMagicSpearCountering(): ScenarioResult {
+  const profile = getDeckAiProfile('white-temple');
+  const spear = unit({
+    id: '101130440',
+    fullName: 'Temple Knight Magic Spear',
+    power: 2000,
+    damage: 2,
+    isExhausted: true,
+    playedTurn: 1,
+  });
+  const princeEffect = effect({
+    id: '101130441_reset_boost',
+    type: 'ACTIVATE',
+    description: 'reset a saint kingdom unit and give it power +500',
+  });
+  const prince = unit({
+    id: '101130441',
+    fullName: 'Holy Prince Rune',
+    power: 2000,
+    damage: 1,
+    godMark: true,
+    effects: [princeEffect],
+    playedTurn: 1,
+  });
+  const blocker = unit({ id: 'BLOCKER_3000_PRINCE', fullName: '3000 Blocker', power: 3000, damage: 1, playedTurn: 1 });
+  const state = game(
+    {
+      unitZone: [spear, prince, null, null, null, null],
+      grave: deckCards(3, 'PRINCE_SUPPORT_COST'),
+      botDeckProfileId: 'white-temple',
+    },
+    { unitZone: [blocker, null, null, null, null, null] },
+    {
+      phase: 'COUNTERING',
+      currentTurnPlayer: 0,
+      priorityPlayerId: 'BOT',
+      previousPhase: 'BATTLE_DECLARATION',
+      battleState: { attackers: [spear.gamecardId], defender: blocker.gamecardId, isAlliance: false },
+    }
+  );
+
+  const scored = scoreActivatableEffect(state, state.players.BOT, prince as any, princeEffect as any, profile, {
+    opponent: state.players.P1,
+    targetCount: 1,
+    hasTargetSpec: true,
+  });
+
+  return assertScenario(
+    'holy prince reset supports magic spear in countering',
+    scored.score >= 18 &&
+      scored.notes.some(note => note.includes('magic spear reset')) &&
+      !scored.notes.some(note => note.includes('prefers')),
+    `score=${scored.score.toFixed(1)}, notes=${scored.notes.join('|')}`
+  );
+}
+
 function testMagicSpearAttackNeedsResetSupportIntoLargeDefender(): ScenarioResult {
   const profile = getDeckAiProfile('white-temple');
   const unsupportedSpear = unit({
@@ -2858,6 +2966,43 @@ function testTotemHawkDestroyTargetsOpponentThreat(): ScenarioResult {
   );
 }
 
+async function testSelfPlayCounterStackSkipsVisualDelay(): Promise<ScenarioResult> {
+  const source = unit({
+    id: 'SELF_PLAY_STACK_SOURCE',
+    fullName: 'Self Play Stack Source',
+    effects: [effect({ id: 'self_play_stack_effect', description: 'test stack delay' })],
+  });
+  const state = game(
+    { unitZone: [source, null, null, null, null, null] },
+    {},
+    {
+      phase: 'COUNTERING',
+      previousPhase: 'MAIN',
+      isCountering: 1,
+      mode: 'ai-selfplay',
+      skipResolutionDelay: true,
+      counterStack: [{
+        type: 'EFFECT',
+        ownerUid: 'BOT',
+        card: source,
+        effectIndex: 0,
+        isNegated: true,
+        timestamp: Date.now(),
+      }],
+    }
+  );
+
+  const startedAt = Date.now();
+  await ServerGameService.resolveCounterStack(state as any);
+  const elapsedMs = Date.now() - startedAt;
+
+  return assertScenario(
+    'self-play counter stack skips visual delay',
+    elapsedMs < 500 && state.counterStack.length === 0 && !state.isResolvingStack && state.phase === 'MAIN',
+    `elapsed=${elapsedMs}ms, stack=${state.counterStack.length}, resolving=${!!state.isResolvingStack}, phase=${state.phase}`
+  );
+}
+
 function testTotemRitualChoosesOverlord(): ScenarioResult {
   const profile = getDeckAiProfile('overlord-totem');
   const lowTotem = unit({ id: '103080312', color: 'GREEN', fullName: 'Winged Totem', power: 1000, damage: 1, cardlocation: 'DECK' });
@@ -2916,6 +3061,8 @@ const scenarios: ScenarioRun[] = [
   testWhiteTempleFixedOpeningHand,
   testRedDikaiFixedOpeningHand,
   testMagicSpearResetEffectScoresWhenAttackWouldLose,
+  testHolyPrinceResetHeldInLooseCountering,
+  testHolyPrinceResetSupportsMagicSpearCountering,
   testMagicSpearAttackNeedsResetSupportIntoLargeDefender,
   testMagicSpearHeldWhenResetOnlyTrades,
   testWhiteTemplePlaysArcherBeforeHandTargets,
@@ -2960,6 +3107,7 @@ const scenarios: ScenarioRun[] = [
   testBlueSwapChoosesErosionPayoff,
   testAketiBounceTargetsOpponentThreats,
   testTotemHawkDestroyTargetsOpponentThreat,
+  testSelfPlayCounterStackSkipsVisualDelay,
   testTotemRitualChoosesOverlord,
 ];
 

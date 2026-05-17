@@ -1897,9 +1897,12 @@ function countLikelyDefenders(gameState: GameState, defender: PlayerState | unde
 }
 
 const TEMPLE_MAGIC_SPEAR_ID = '101130440';
+const TEMPLE_HERO_SWORD_ID = '101130458';
+const HOLY_PRINCE_RESET_EFFECT_ID = '101130441_reset_boost';
+const TEMPLE_HIGH_VALUE_RESET_TARGET_IDS = new Set([TEMPLE_MAGIC_SPEAR_ID, TEMPLE_HERO_SWORD_ID]);
 const TEMPLE_MAGIC_SPEAR_RESET_ENABLER_EFFECT_IDS = new Set([
   '101130439_reset_hall',
-  '101130441_reset_boost',
+  HOLY_PRINCE_RESET_EFFECT_ID,
   '101130155_enter_reset',
   '101000063_ten_reset_units',
   '202000053_reset_after_destroy',
@@ -1914,7 +1917,7 @@ function isTempleMagicSpearResetEnabler(effect: CardEffect | null | undefined) {
 }
 
 function templeMagicSpearResetBoost(effect?: CardEffect) {
-  return effect?.id === '101130441_reset_boost' ? 1500 : 1000;
+  return effect?.id === HOLY_PRINCE_RESET_EFFECT_ID ? 1500 : 1000;
 }
 
 function getTempleMagicSpearPostAttackResetSupport(player: PlayerState, spear: Card | null | undefined) {
@@ -1929,7 +1932,7 @@ function getTempleMagicSpearPostAttackResetSupport(player: PlayerState, spear: C
       if (effect.id === '101130439_reset_hall') {
         if (source.gamecardId === spear.gamecardId || source.isExhausted) continue;
       }
-      if (effect.id === '101130441_reset_boost' && player.grave.length < 3) continue;
+      if (effect.id === HOLY_PRINCE_RESET_EFFECT_ID && player.grave.length < 3) continue;
       const boost = templeMagicSpearResetBoost(effect);
       if (boost > bestBoost) bestBoost = boost;
       effectIds.push(effect.id);
@@ -2320,6 +2323,32 @@ export function scoreActivatableEffect(
     tags.add('combat');
     tags.add('buff');
     notes.push(...templeSpearBattleReset.notes);
+  }
+
+  if (
+    effect.id === HOLY_PRINCE_RESET_EFFECT_ID &&
+    (gameState.phase === 'BATTLE_FREE' || gameState.phase === 'COUNTERING')
+  ) {
+    const exhaustedResetTargets = player.unitZone.filter((unit): unit is Card => !!unit && unit.isExhausted);
+    const preferredResetTarget = exhaustedResetTargets.find(unit => TEMPLE_HIGH_VALUE_RESET_TARGET_IDS.has(unit.id));
+    const ownBattleResetWindow =
+      !!gameState.battleState?.attackers?.length &&
+      gameState.playerIds[gameState.currentTurnPlayer] === player.uid;
+    const closingDamageReset =
+      ownBattleResetWindow &&
+      inLethalWindow &&
+      exhaustedResetTargets.some(unit => (unit.damage || 0) >= 2);
+    const clearBattlePurpose = !!templeSpearBattleReset || (ownBattleResetWindow && (!!preferredResetTarget || closingDamageReset));
+
+    if (clearBattlePurpose) {
+      if (preferredResetTarget) {
+        score += 10;
+        notes.push('holy prince reset targets magic spear/hero sword');
+      }
+    } else {
+      score -= gameState.phase === 'COUNTERING' ? 34 : 18;
+      notes.push('holy prince reset held for post-attack high-value reset');
+    }
   }
 
   if (textHasAny(searchableText, [/召唤|放置到战场|登场|play.*unit|summon|play_from/i])) {

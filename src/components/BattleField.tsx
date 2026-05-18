@@ -959,6 +959,10 @@ export const BattleField: React.FC = () => {
       ];
     }
     if (!game || !pendingQuery || normalizedPendingQueryType !== 'SELECT_CARD') return rawPendingQueryOptions;
+    // Only target declaration queries should be narrowed by targetSpec. Scripted
+    // cost/search choices may also carry sourceCardId/effectIndex, but their
+    // options already come from the server-side script.
+    if (pendingQuery.callbackKey !== 'DECLARE_EFFECT_TARGETS') return rawPendingQueryOptions;
     const context = pendingQuery.context || {};
     const sourceCardId = context.sourceCardId;
     const effectIndex = context.effectIndex;

@@ -358,26 +358,37 @@ export const BugCup: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black px-5 pb-20 pt-20 text-white md:px-10">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="relative min-h-screen bg-black px-4 pb-24 pt-20 text-white sm:px-6 md:px-10">
+      {/* Dynamic Background Effects */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-1/4 -top-1/4 h-[800px] w-[800px] rounded-full bg-red-900/20 blur-[120px]" />
+        <div className="absolute -right-1/4 bottom-1/4 h-[600px] w-[600px] rounded-full bg-purple-900/20 blur-[100px]" />
+        <div className="absolute inset-0 bg-[url('/assets/noise.png')] opacity-[0.03] mix-blend-overlay" />
+      </div>
+
+      <div className="relative mx-auto max-w-6xl space-y-6 sm:space-y-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/')} className="rounded-full bg-zinc-900 p-2 transition-colors hover:bg-zinc-800">
-              <ArrowLeft className="h-5 w-5" />
+            <button onClick={() => navigate('/')} className="group flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 transition-all hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]">
+              <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-1" />
             </button>
             <div>
-              <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-red-300">
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 text-[10px] font-black tracking-widest text-red-400 drop-shadow-[0_0_5px_rgba(248,113,113,0.5)]"
+              >
                 <Trophy className="h-4 w-4" />
                 第{current?.edition || 1}届
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-black italic tracking-tighter">bug杯</h1>
+              </motion.div>
+              <div className="mt-1 flex flex-wrap items-center gap-3 sm:gap-4">
+                <h1 className="bg-gradient-to-r from-red-500 via-rose-400 to-orange-500 bg-clip-text text-4xl font-black italic tracking-tighter text-transparent drop-shadow-[0_0_20px_rgba(239,68,68,0.3)] md:text-5xl">bug杯</h1>
                 <button
                   type="button"
                   onClick={() => setRulesOpen(true)}
-                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-zinc-100 transition-colors hover:bg-white/10"
+                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-zinc-100 transition-all hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]"
                 >
-                  <BookOpen className="h-4 w-4 text-red-300" />
+                  <BookOpen className="h-4 w-4 text-red-400" />
                   规则
                 </button>
               </div>
@@ -408,8 +419,9 @@ export const BugCup: React.FC = () => {
 
         {current && <PhaseProgress current={current} />}
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
+          <div className="relative mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-xl font-black italic tracking-tight">报名卡组</h2>
               <p className="mt-1 text-xs font-bold text-zinc-500">
@@ -423,7 +435,7 @@ export const BugCup: React.FC = () => {
             )}
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="relative grid gap-3 sm:gap-4 md:grid-cols-2">
             {current?.canEditDecks ? (
               <>
                 {renderDeckPicker(0)}
@@ -431,18 +443,25 @@ export const BugCup: React.FC = () => {
               </>
             ) : (
               (registration?.deckNames || []).map((name, index) => (
-                <div key={`${name}-${index}`} className="rounded-xl border border-zinc-800 bg-black/25 px-4 py-3">
-                  <div className="text-sm font-black text-white">{name}</div>
-                  <div className="mt-1 text-[10px] font-bold text-zinc-500">{registration?.deckCards[index]?.length || 0} 张 · 第 {index + 1} 套</div>
+                <div key={`${name}-${index}`} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-5 py-4 transition-all hover:bg-white/10">
+                  <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                  <div className="relative z-10">
+                    <div className="text-base font-black text-white sm:text-lg">{name}</div>
+                    <div className="mt-1 text-[10px] font-bold text-zinc-400 sm:text-xs">{registration?.deckCards[index]?.length || 0} 张 · 第 {index + 1} 套</div>
+                  </div>
                 </div>
               ))
             )}
           </div>
 
           {selectedDeckErrors.length > 0 && (
-            <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-300">
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="relative mt-4 overflow-hidden rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-300 sm:text-sm"
+            >
               {selectedDeckErrors[0]}
-            </div>
+            </motion.div>
           )}
 
           {current?.canEditDecks && (
@@ -472,8 +491,9 @@ export const BugCup: React.FC = () => {
         </section>
 
         {!!registration && submittedDeckCount > 0 && (
-          <section className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
+            <div className="absolute inset-0 bg-gradient-to-tr from-rose-900/[0.03] to-transparent pointer-events-none" />
+            <div className="relative mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-black italic tracking-tight">比赛操作</h2>
                 <p className="mt-1 text-xs font-bold text-zinc-500">比赛中从提交卡组中选择一套进行对战</p>
@@ -511,15 +531,21 @@ export const BugCup: React.FC = () => {
                   const mineReady = myUid === match.player1Id ? match.player1Ready : match.player2Ready;
                   const opponentName = myUid === match.player1Id ? match.player2Name : match.player1Name;
                   return (
-                    <div key={match.id} className="grid gap-3 rounded-xl border border-zinc-800 bg-black/25 p-4 md:grid-cols-[1fr_auto] md:items-center">
-                      <div>
+                    <div key={match.id} className="group relative grid gap-4 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] p-5 backdrop-blur-sm transition-all hover:border-white/10 hover:bg-white/[0.04] sm:grid-cols-[1fr_auto] sm:items-center">
+                      <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                      <div className="relative z-10">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-black text-white">{match.phase === 'SWISS' ? `瑞士轮第 ${match.round} 轮` : match.round === 1 ? '半决赛' : '决赛'}</span>
-                          <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-[10px] font-black text-zinc-300">{match.resultStatus}</span>
-                          {mineReady && <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black text-emerald-300">已准备</span>}
+                          <span className="text-sm font-black text-white sm:text-base">{match.phase === 'SWISS' ? `瑞士轮第 ${match.round} 轮` : match.round === 1 ? '半决赛' : '决赛'}</span>
+                          <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-black tracking-wider text-zinc-300 backdrop-blur-md">{match.resultStatus}</span>
+                          {mineReady && <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-black tracking-wider text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.3)]">已准备</span>}
                         </div>
-                        <div className="mt-2 text-xs font-bold text-zinc-500">对手：{opponentName || match.opponentId || '轮空/待定'} · {formatDate(match.scheduledFor)}</div>
+                        <div className="mt-2 flex items-center gap-2 text-xs font-bold text-zinc-400 sm:text-sm">
+                          <span className="flex items-center gap-1.5"><UsersRound className="h-3 w-3" /> 对手：<span className="text-white">{opponentName || match.opponentId || '轮空/待定'}</span></span>
+                          <span className="text-zinc-600">·</span>
+                          <span>{formatDate(match.scheduledFor)}</span>
+                        </div>
                       </div>
+                      <div className="relative z-10">
                       {match.gameId ? (
                         <button onClick={() => navigate(`/battle/${match.gameId}`)} className="rounded-xl bg-red-600 px-4 py-3 text-sm font-black hover:bg-red-500">
                           进入战场
@@ -543,6 +569,7 @@ export const BugCup: React.FC = () => {
                           {mineReady ? '等待对手' : '准备'}
                         </button>
                       )}
+                      </div>
                     </div>
                   );
                 })}
@@ -570,48 +597,58 @@ export const BugCup: React.FC = () => {
 };
 
 const StandingsTable = ({ standings, myUid }: { standings: Standing[]; myUid?: string }) => (
-  <section className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
-    <div className="mb-4 flex items-center justify-between gap-3">
+  <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
+    <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/[0.03] to-transparent pointer-events-none" />
+    <div className="relative mb-6 flex items-center justify-between gap-3">
       <div>
-        <h2 className="text-xl font-black italic tracking-tight">当前排名</h2>
-        <p className="mt-1 text-xs font-bold text-zinc-500">瑞士轮战绩 · 同分按对手胜场排序</p>
+        <h2 className="text-xl font-black italic tracking-tight sm:text-2xl">当前排名</h2>
+        <p className="mt-1 text-xs font-bold tracking-widest text-zinc-500">瑞士轮战绩 · 同分按对手胜场排序</p>
       </div>
-      <UsersRound className="h-5 w-5 text-zinc-500" />
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5">
+        <UsersRound className="h-5 w-5 text-indigo-400" />
+      </div>
     </div>
 
     {standings.length > 0 ? (
-      <div className="overflow-hidden rounded-xl border border-zinc-800">
-        {standings.map(item => (
-          <div
-            key={item.userId}
-            className={cn(
-              'grid grid-cols-[60px_1fr_86px_86px] items-center gap-3 border-b border-zinc-800 px-4 py-3 text-sm last:border-b-0',
-              item.userId === myUid ? 'bg-red-500/10' : 'bg-black/25'
-            )}
-          >
-            <span className="font-black text-zinc-500">#{item.rank}</span>
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate font-black text-white">{item.displayName}</span>
-                {item.simulated && (
-                  <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-200">
-                    模拟
-                  </span>
-                )}
-                {item.userId === myUid && (
-                  <span className="shrink-0 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-black text-red-200">
-                    我
-                  </span>
-                )}
+      <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-black/40">
+        {standings.map(item => {
+          const isTop3 = item.rank <= 3;
+          const rankColor = item.rank === 1 ? 'text-amber-300' : item.rank === 2 ? 'text-zinc-300' : item.rank === 3 ? 'text-amber-700/80' : 'text-zinc-500';
+          
+          return (
+            <div
+              key={item.userId}
+              className={cn(
+                'group relative grid grid-cols-[50px_1fr_60px_60px] items-center gap-2 border-b border-white/5 px-4 py-4 text-sm transition-colors last:border-b-0 hover:bg-white/[0.02] sm:grid-cols-[60px_1fr_86px_86px] sm:gap-3',
+                item.userId === myUid ? 'bg-red-500/10' : ''
+              )}
+            >
+              {isTop3 && (
+                <div className={cn(
+                  'absolute inset-0 opacity-[0.03] pointer-events-none',
+                  item.rank === 1 ? 'bg-amber-400' : item.rank === 2 ? 'bg-zinc-300' : 'bg-amber-700'
+                )} />
+              )}
+              <span className={cn('font-black text-lg', rankColor)}>#{item.rank}</span>
+              <div className="min-w-0 relative z-10">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={cn('truncate font-black', isTop3 ? 'text-white' : 'text-zinc-300')}>{item.displayName}</span>
+                  {item.simulated && (
+                    <span className="shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-black text-amber-300">模拟</span>
+                  )}
+                  {item.userId === myUid && (
+                    <span className="shrink-0 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-black text-red-300">我</span>
+                  )}
+                </div>
               </div>
+              <span className="relative z-10 text-xs font-black text-emerald-400 sm:text-sm">{item.wins} <span className="text-[10px] text-zinc-500">胜</span></span>
+              <span className="relative z-10 text-[10px] font-bold text-zinc-500 sm:text-xs">对手 {item.opponentWins}</span>
             </div>
-            <span className="text-xs font-bold text-zinc-400">{item.wins} 胜</span>
-            <span className="text-xs font-bold text-zinc-500">对手 {item.opponentWins}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     ) : (
-      <div className="rounded-xl border border-zinc-800 bg-black/25 px-4 py-8 text-center text-sm font-bold text-zinc-500">
+      <div className="relative rounded-2xl border border-white/5 bg-black/20 px-4 py-12 text-center text-sm font-bold text-zinc-500 backdrop-blur-sm">
         暂无排名
       </div>
     )}
@@ -641,35 +678,15 @@ const EliminationBracket = ({ matches, standings }: { matches: BugCupMatch[]; st
   const winnerName = (match: BracketDisplayMatch) => match.winnerName || findStandingName(match.winnerId);
 
   const generatedSemis: BracketDisplayMatch[] = topFour.length >= 4 ? [
-    {
-      id: 'planned-semi-1',
-      round: 1,
-      player1Id: topFour[0].userId,
-      player2Id: topFour[3].userId,
-      player1Name: topFour[0].displayName,
-      player2Name: topFour[3].displayName,
-      resultStatus: 'PENDING'
-    },
-    {
-      id: 'planned-semi-2',
-      round: 1,
-      player1Id: topFour[1].userId,
-      player2Id: topFour[2].userId,
-      player1Name: topFour[1].displayName,
-      player2Name: topFour[2].displayName,
-      resultStatus: 'PENDING'
-    }
+    { id: 'planned-semi-1', round: 1, player1Id: topFour[0].userId, player2Id: topFour[3].userId, player1Name: topFour[0].displayName, player2Name: topFour[3].displayName, resultStatus: 'PENDING' },
+    { id: 'planned-semi-2', round: 1, player1Id: topFour[1].userId, player2Id: topFour[2].userId, player1Name: topFour[1].displayName, player2Name: topFour[2].displayName, resultStatus: 'PENDING' }
   ] : [];
   const semis: BracketDisplayMatch[] = matches.filter(match => match.round === 1).length
     ? matches.filter(match => match.round === 1)
     : generatedSemis;
   const finalMatch = matches.find(match => match.round === 2);
   const finalDisplay: BracketDisplayMatch = finalMatch || {
-    id: 'planned-final',
-    round: 2,
-    player1Name: semis[0]?.winnerId ? winnerName(semis[0]) : '半决赛 1 胜者',
-    player2Name: semis[1]?.winnerId ? winnerName(semis[1]) : '半决赛 2 胜者',
-    resultStatus: 'PENDING'
+    id: 'planned-final', round: 2, player1Name: semis[0]?.winnerId ? winnerName(semis[0]) : '半决赛 1 胜者', player2Name: semis[1]?.winnerId ? winnerName(semis[1]) : '半决赛 2 胜者', resultStatus: 'PENDING'
   };
 
   const MatchCard = ({ match, label }: { match: BracketDisplayMatch; label: string }) => {
@@ -680,56 +697,70 @@ const EliminationBracket = ({ matches, standings }: { matches: BugCupMatch[]; st
     const resolvedWinner = match.winnerId ? winnerName(match) : '';
 
     return (
-      <div className="rounded-xl border border-zinc-800 bg-black/30 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <span className="text-[10px] font-black tracking-widest text-zinc-500">{label}</span>
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-4 backdrop-blur-md shadow-lg">
+        {match.winnerId && <div className="absolute inset-0 bg-emerald-500/[0.02] pointer-events-none" />}
+        <div className="relative z-10 mb-3 flex items-center justify-between gap-3">
+          <span className="text-[10px] font-black tracking-widest text-zinc-400">{label}</span>
           <span className={cn(
-            'rounded-full px-2.5 py-1 text-[10px] font-black',
-            match.winnerId ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-800 text-zinc-400'
+            'rounded-full px-2.5 py-1 text-[10px] font-black shadow-sm',
+            match.winnerId ? 'bg-emerald-500/20 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-white/5 text-zinc-400'
           )}>
             {match.winnerId ? '已决出' : '待进行'}
           </span>
         </div>
 
-        <div className="space-y-2">
-          <div className={cn('flex items-center justify-between rounded-lg border px-3 py-2', p1Won ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-950/70')}>
-            <span className="min-w-0 truncate text-sm font-black text-white">{p1Name}</span>
-            {p1Won && <Trophy className="h-4 w-4 shrink-0 text-emerald-300" />}
+        <div className="relative z-10 space-y-2">
+          <div className={cn('flex items-center justify-between rounded-xl border px-4 py-3 transition-colors', p1Won ? 'border-emerald-500/40 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'border-white/5 bg-black/40')}>
+            <span className={cn('min-w-0 truncate text-sm font-black', p1Won ? 'text-white' : 'text-zinc-300')}>{p1Name}</span>
+            {p1Won && <Trophy className="h-4 w-4 shrink-0 text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]" />}
           </div>
-          <div className={cn('flex items-center justify-between rounded-lg border px-3 py-2', p2Won ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-950/70')}>
-            <span className="min-w-0 truncate text-sm font-black text-white">{p2Name}</span>
-            {p2Won && <Trophy className="h-4 w-4 shrink-0 text-emerald-300" />}
+          <div className={cn('flex items-center justify-between rounded-xl border px-4 py-3 transition-colors', p2Won ? 'border-emerald-500/40 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'border-white/5 bg-black/40')}>
+            <span className={cn('min-w-0 truncate text-sm font-black', p2Won ? 'text-white' : 'text-zinc-300')}>{p2Name}</span>
+            {p2Won && <Trophy className="h-4 w-4 shrink-0 text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]" />}
           </div>
         </div>
 
-        <div className="mt-3 rounded-lg bg-zinc-950/80 px-3 py-2 text-xs font-bold text-zinc-400">
-          获胜对手：<span className={match.winnerId ? 'text-emerald-300' : 'text-zinc-500'}>{resolvedWinner || '待定'}</span>
+        <div className="relative z-10 mt-3 rounded-xl bg-black/30 px-3 py-2 text-xs font-bold text-zinc-400">
+          获胜对手：<span className={match.winnerId ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.3)]' : 'text-zinc-500'}>{resolvedWinner || '待定'}</span>
         </div>
       </div>
     );
   };
 
   return (
-    <section className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-900/[0.03] to-transparent pointer-events-none" />
+      <div className="relative mb-6 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-black italic tracking-tight">单淘对战图</h2>
-          <p className="mt-1 text-xs font-bold text-zinc-500">半决赛 1 vs 4、2 vs 3，胜者进入决赛</p>
+          <h2 className="text-xl font-black italic tracking-tight sm:text-2xl">单淘对战图</h2>
+          <p className="mt-1 text-xs font-bold tracking-widest text-zinc-500">半决赛 1 vs 4、2 vs 3，胜者进入决赛</p>
         </div>
-        <Trophy className="h-5 w-5 text-red-300" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5">
+          <Trophy className="h-5 w-5 text-amber-400" />
+        </div>
       </div>
 
       {semis.length > 0 ? (
-        <div className="grid gap-4 lg:grid-cols-[1fr_220px_1fr] lg:items-center">
-          <div className="space-y-4">
+        <div className="relative grid gap-6 lg:grid-cols-[1fr_120px_1fr] lg:items-center">
+          <div className="space-y-6 relative z-10">
             <MatchCard match={semis[0]} label="半决赛 1" />
             {semis[1] && <MatchCard match={semis[1]} label="半决赛 2" />}
           </div>
-          <div className="hidden h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent lg:block" />
-          <MatchCard match={finalDisplay} label="决赛" />
+          
+          <div className="hidden lg:flex flex-col items-center justify-center relative z-0 h-full">
+            <div className="h-full w-px bg-gradient-to-b from-transparent via-white/10 to-transparent absolute left-1/2 -translate-x-1/2" />
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent relative z-10" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/60 backdrop-blur-md">
+              <Swords className="h-4 w-4 text-zinc-500" />
+            </div>
+          </div>
+          
+          <div className="relative z-10 lg:pl-4">
+            <MatchCard match={finalDisplay} label="决赛" />
+          </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-zinc-800 bg-black/25 px-4 py-8 text-center text-sm font-bold text-zinc-500">
+        <div className="relative rounded-2xl border border-white/5 bg-black/20 px-4 py-12 text-center text-sm font-bold text-zinc-500 backdrop-blur-sm">
           等待瑞士轮前四生成淘汰赛对阵
         </div>
       )}
@@ -814,33 +845,54 @@ const PhaseProgress = ({ current }: { current: BugCupCurrent }) => {
   ];
 
   return (
-    <section className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
+      <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none" />
+      <div className="relative mb-6 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black italic tracking-tight">杯赛进程</h2>
-          <p className="mt-1 text-[10px] font-bold tracking-widest text-zinc-500">当前阶段会高亮显示</p>
+          <h2 className="text-xl font-black italic tracking-tight sm:text-2xl">杯赛进程</h2>
+          <p className="mt-1 text-[10px] font-bold tracking-widest text-zinc-500 sm:text-xs">当前阶段会高亮显示</p>
         </div>
-        <span className="rounded-full bg-red-500/15 px-3 py-1 text-[10px] font-black text-red-200">
+        <span className="rounded-full border border-red-500/30 bg-red-500/20 px-4 py-1.5 text-xs font-black tracking-widest text-red-300 shadow-[0_0_15px_rgba(239,68,68,0.2)] backdrop-blur-md">
           {phaseLabel[current.phase]}
         </span>
       </div>
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="relative grid gap-4 md:grid-cols-4">
+        {/* Connecting lines for desktop */}
+        <div className="hidden absolute left-[12.5%] right-[12.5%] top-6 h-0.5 bg-white/5 md:block">
+          <div className="absolute left-0 top-0 h-full bg-gradient-to-r from-red-500 to-transparent opacity-50" style={{ width: `${(steps.findIndex(s => s.active) / (steps.length - 1)) * 100}%` }} />
+        </div>
+        
         {steps.map((step, index) => (
           <div
             key={step.key}
             className={cn(
-              'relative overflow-hidden rounded-xl border px-4 py-3 transition-colors',
-              step.active ? 'border-red-400/70 bg-red-500/15 shadow-[0_0_30px_rgba(220,38,38,0.18)]' : 'border-zinc-800 bg-black/25'
+              'group relative overflow-hidden rounded-2xl border px-5 py-4 transition-all duration-300',
+              step.active 
+                ? 'border-red-500/50 bg-red-500/10 shadow-[0_0_25px_rgba(239,68,68,0.15)] scale-[1.02]' 
+                : 'border-white/5 bg-black/40 hover:bg-white/[0.02]'
             )}
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className={cn('text-[10px] font-black tracking-widest', step.active ? 'text-red-200' : 'text-zinc-500')}>
+            {step.active && (
+              <motion.div
+                layoutId="active-phase-bg"
+                className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent pointer-events-none"
+                initial={false}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              />
+            )}
+            <div className="relative z-10 flex items-center justify-between gap-3">
+              <div className={cn('text-[10px] font-black tracking-widest transition-colors', step.active ? 'text-red-400' : 'text-zinc-500')}>
                 STEP {index + 1}
               </div>
-              {step.active && <span className="h-2 w-2 rounded-full bg-red-300 shadow-[0_0_12px_rgba(252,165,165,0.9)]" />}
+              {step.active && (
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(248,113,113,0.8)]"></span>
+                </span>
+              )}
             </div>
-            <div className="mt-2 text-base font-black text-white">{step.label}</div>
-            <div className="mt-1 text-xs font-bold text-zinc-500">{step.value}</div>
+            <div className={cn('relative z-10 mt-3 text-lg font-black transition-colors', step.active ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'text-zinc-300')}>{step.label}</div>
+            <div className="relative z-10 mt-1 text-xs font-bold text-zinc-500">{step.value}</div>
           </div>
         ))}
       </div>

@@ -8072,15 +8072,41 @@ export const ServerGameService = {
           const adjustment = ServerGameService.scoreRedDikaiScadiDeckPaymentAdjustment(bot, estimatedDeckPayment);
           scadiErosionPaymentBonus -= adjustment;
         }
+        const exhaustedClosingAttackers = exhaustedPaymentUnits
+          .map(id => bot.unitZone.find(unit => unit?.gamecardId === id))
+          .filter((unit): unit is Card => !!unit && canUnitAttack(gameState, unit));
+        const exhaustedClosingDamage = exhaustedClosingAttackers.reduce((sum, unit) => sum + Math.max(0, unit.damage || 0), 0);
+        const addedImmediateDamage = card.type === 'UNIT' && card.isrush && bot.unitZone.some(slot => slot === null)
+          ? Math.max(0, card.damage || 0)
+          : 0;
+        let closingPaymentPenalty = 0;
+        if (
+          difficulty === 'hard' &&
+          turnPlan &&
+          isClosingTurnPlan(turnPlan) &&
+          gameState.turnCount > 1 &&
+          exhaustedClosingAttackers.length > 0
+        ) {
+          const projectedClosingDamage = Math.max(0, turnPlan.totalAvailableDamage - exhaustedClosingDamage + addedImmediateDamage);
+          const breaksClosingDamage = projectedClosingDamage < Math.max(1, turnPlan.damageToCritical);
+          closingPaymentPenalty +=
+            80 +
+            exhaustedClosingAttackers.length * 24 +
+            exhaustedClosingDamage * 18;
+          if (breaksClosingDamage || turnPlan.lethalWindow || turnPlan.tacticalLine === 'lethal' || turnPlan.tacticalLine === 'erosion-lethal') {
+            closingPaymentPenalty += 90;
+          }
+        }
         return {
           card,
           rawScore,
-          score: rawScore + defenseDevelopmentBonus + scadiErosionPaymentBonus - defensivePaymentPenalty,
+          score: rawScore + defenseDevelopmentBonus + scadiErosionPaymentBonus - defensivePaymentPenalty - closingPaymentPenalty,
           effectiveCost,
           initialPaymentSelection,
           defensivePaymentPenalty,
           defenseDevelopmentBonus,
           scadiErosionPaymentBonus,
+          closingPaymentPenalty,
           exhaustedPaymentUnits,
           estimatedDeckPayment,
           netReadyDefenders,
@@ -8129,6 +8155,7 @@ export const ServerGameService = {
             rawScore: Number(chosenPlayOption.rawScore.toFixed(1)),
             defensivePaymentPenalty: Number(chosenPlayOption.defensivePaymentPenalty.toFixed(1)),
             defenseDevelopmentBonus: Number(chosenPlayOption.defenseDevelopmentBonus.toFixed(1)),
+            closingPaymentPenalty: Number(chosenPlayOption.closingPaymentPenalty.toFixed(1)),
             paymentExhaustsUnits: chosenPlayOption.exhaustedPaymentUnits.length,
             estimatedDeckPayment: chosenPlayOption.estimatedDeckPayment,
             netReadyDefenders: chosenPlayOption.netReadyDefenders,
@@ -8185,6 +8212,7 @@ export const ServerGameService = {
               rawScore: Number(chosenPlayOption.rawScore.toFixed(1)),
               defensivePaymentPenalty: Number(chosenPlayOption.defensivePaymentPenalty.toFixed(1)),
               defenseDevelopmentBonus: Number(chosenPlayOption.defenseDevelopmentBonus.toFixed(1)),
+              closingPaymentPenalty: Number(chosenPlayOption.closingPaymentPenalty.toFixed(1)),
               estimatedDeckPayment: chosenPlayOption.estimatedDeckPayment,
             },
           });

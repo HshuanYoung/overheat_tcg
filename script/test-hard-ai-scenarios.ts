@@ -3144,6 +3144,61 @@ async function testClosingPlanCommitsAfterOnePrecombatPlay(): Promise<ScenarioRe
   );
 }
 
+async function testClosingPlayDoesNotExhaustLethalAttackers(): Promise<ScenarioResult> {
+  const profile = getDeckAiProfile('blue-adventurer');
+  const attackerA = unit({ id: 'BLUE_CLOSE_ATTACKER_A', color: 'BLUE', damage: 3, power: 3000, playedTurn: 1 });
+  const attackerB = unit({ id: 'BLUE_CLOSE_ATTACKER_B', color: 'BLUE', damage: 2, power: 2500, playedTurn: 1 });
+  const expensiveRush = unit({
+    id: 'BLUE_CLOSE_EXPENSIVE_RUSH',
+    color: 'BLUE',
+    fullName: 'Expensive Closing Distraction',
+    damage: 1,
+    power: 3500,
+    acValue: 2,
+    baseAcValue: 2,
+    colorReq: {},
+    isrush: true,
+    cardlocation: 'HAND',
+  });
+  const blocker = unit({ id: 'P1_CLOSE_BLOCKER', color: 'WHITE', damage: 0, power: 1000, playedTurn: 1 });
+  const state = game(
+    {
+      hand: [expensiveRush],
+      unitZone: [attackerA, attackerB, null, null, null, null],
+      deck: [],
+      botDifficulty: 'hard',
+      botDeckProfileId: profile.id,
+    },
+    {
+      deck: deckCards(1, 'P1_CLOSE_PAYOFF_DECK'),
+      unitZone: [blocker, null, null, null, null, null],
+      erosionBack: erosionCards(5, 'P1_CLOSE_PAYOFF_EROSION'),
+    },
+    {
+      turnCount: 13,
+      botDifficulty: 'hard',
+      botDeckProfiles: { BOT: profile.id },
+    }
+  );
+  const plan = buildTurnPlan(state, state.players.BOT, profile);
+  await ServerGameService.botMoveForPlayer(state, 'BOT');
+  const playedDistraction = state.aiDecisionLogs?.some((log: any) =>
+    log.action === 'PLAY_CARD' &&
+    log.subject === 'Expensive Closing Distraction'
+  );
+  const enteredBattle = state.aiDecisionLogs?.some((log: any) => log.action === 'ENTER_BATTLE');
+
+  return assertScenario(
+    'closing play does not exhaust lethal attackers',
+    isClosingTurnPlan(plan) &&
+      !plan.attackBeforeDeveloping &&
+      !playedDistraction &&
+      enteredBattle &&
+      state.phase === 'BATTLE_DECLARATION',
+    `closing=${isClosingTurnPlan(plan)}, attackBefore=${plan.attackBeforeDeveloping}, played=${!!playedDistraction}, battle=${!!enteredBattle}, phase=${state.phase}, notes=${plan.notes.join('|')}`
+  );
+}
+
 async function testHardAiPlaysTargetedStoryOnlyOnce(): Promise<ScenarioResult> {
   const profile = getDeckAiProfile('white-temple');
   const targetEffect = effect({
@@ -4967,6 +5022,7 @@ const scenarios: ScenarioRun[] = [
   testBlueAdventurerConvertsTempoPressure,
   testBlockedErosionLineStabilizesUnderIncomingLethal,
   testClosingPlanCommitsAfterOnePrecombatPlay,
+  testClosingPlayDoesNotExhaustLethalAttackers,
   testHardAiPlaysTargetedStoryOnlyOnce,
   testRedDikaiCommitsNearKillPressure,
   testRedPursuitUsesAllianceAttackForTrigger,

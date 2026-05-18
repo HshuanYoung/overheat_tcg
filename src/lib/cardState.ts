@@ -1,0 +1,73 @@
+import type { Card, TriggerLocation } from '../types/game';
+
+const FIELD_ZONES = new Set<TriggerLocation>(['UNIT', 'ITEM']);
+
+const FIELD_LEAVE_DATA_PREFIXES_TO_KEEP = [
+  'returnFromExileAfterBattle'
+];
+
+export const isFieldZone = (zone?: TriggerLocation) => !!zone && FIELD_ZONES.has(zone);
+
+const getPreservedFieldLeaveData = (data: any) => {
+  if (!data) return undefined;
+  const preserved: Record<string, any> = {};
+  Object.keys(data).forEach(key => {
+    if (FIELD_LEAVE_DATA_PREFIXES_TO_KEEP.some(prefix => key.startsWith(prefix))) {
+      preserved[key] = data[key];
+    }
+  });
+  return Object.keys(preserved).length > 0 ? preserved : undefined;
+};
+
+export const clearBattlefieldState = (card: Card) => {
+  const preservedData = getPreservedFieldLeaveData((card as any).data);
+  if (preservedData) (card as any).data = preservedData;
+  else delete (card as any).data;
+
+  delete (card as any).__playSnapshot;
+  delete (card as any).battleForbiddenByEffect;
+  delete (card as any).cannotBeAttackTargetByEffect;
+  delete (card as any).cannotBeEffectTargetByEffect;
+  delete (card as any).battleImmuneByEffect;
+
+  card.declaredTargetMarkers = [];
+  card.influencingEffects = [];
+  card.equipTargetId = undefined;
+  card.nextEffectProtection = undefined;
+  card.inAllianceGroup = false;
+  card.hasAttackedThisTurn = false;
+  card.usedShenyiThisTurn = false;
+  card.playedTurn = undefined;
+  card.canResetCount = 0;
+  card.isExhausted = false;
+  card.silencedEffectIds = [];
+
+  card.temporaryCanActivateEffect = undefined;
+  card.temporaryImmuneToUnitEffects = undefined;
+  card.temporaryPowerBuff = 0;
+  card.temporaryDamageBuff = 0;
+  card.temporaryRush = false;
+  card.temporaryAnnihilation = false;
+  card.temporaryHeroic = false;
+  card.temporaryCanAttackAny = false;
+  card.temporaryBuffSources = {};
+  card.temporaryBuffDetails = {};
+
+  if (card.baseColorReq) card.colorReq = { ...card.baseColorReq };
+  if (card.basePower !== undefined) card.power = card.basePower;
+  if (card.baseDamage !== undefined) card.damage = card.baseDamage;
+  if (card.baseAcValue !== undefined) card.acValue = card.baseAcValue;
+  if (card.baseIsrush !== undefined) card.isrush = card.baseIsrush;
+  if (card.baseAnnihilation !== undefined) card.isAnnihilation = card.baseAnnihilation;
+  if (card.baseHeroic !== undefined) card.isHeroic = card.baseHeroic;
+  if (card.baseShenyi !== undefined) card.isShenyi = card.baseShenyi;
+  if (card.baseGodMark !== undefined) card.godMark = card.baseGodMark;
+  if (card.baseCanAttack !== undefined) card.canAttack = card.baseCanAttack;
+  else card.canAttack = true;
+  if (card.baseCanActivateEffect !== undefined) card.canActivateEffect = card.baseCanActivateEffect;
+  else card.canActivateEffect = true;
+  card.isImmuneToUnitEffects = card.baseIsImmuneToUnitEffects ?? false;
+};
+
+export const shouldClearBattlefieldStateOnMove = (fromZone: TriggerLocation, toZone: TriggerLocation) =>
+  isFieldZone(fromZone) && !isFieldZone(toZone);

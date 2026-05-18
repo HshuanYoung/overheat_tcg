@@ -101,14 +101,16 @@ const effect_101000501_battle_exile_return: CardEffect = {
       return;
     }
 
-    (liveSelf as any).data = {
-      ...((liveSelf as any).data || {}),
-      returnFromExileAfterBattleTurn: gameState.turnCount,
-      returnFromExileAfterBattleOwnerUid: playerState.uid
-    };
     moveCard(gameState, playerState.uid, liveSelf, 'EXILE', liveSelf);
 
     const exiledSelf = playerState.exile.find(card => card?.gamecardId === liveSelf.gamecardId);
+    if (exiledSelf) {
+      (exiledSelf as any).data = {
+        ...((exiledSelf as any).data || {}),
+        returnFromExileAfterBattleTurn: gameState.turnCount,
+        returnFromExileAfterBattleOwnerUid: playerState.uid
+      };
+    }
     if (exiledSelf && battleHasEnded(gameState)) {
       gameState.logs.push(`[${exiledSelf.fullName}] 结算时战斗阶段已经结束，立即回到战场。`);
       returnFromBattleExile(exiledSelf, gameState, playerState);

@@ -16,6 +16,7 @@ const cardEffects: CardEffect[] = [{
     type: 'TRIGGER',
     triggerEvent: 'CARD_ENTERED_ZONE',
     triggerLocation: ['UNIT'],
+    isMandatory: true,
     erosionTotalLimit: [9, 9],
     description: '9~9：入场时给予你1点伤害。',
     condition: (_gameState, _playerState, instance, event) => event?.sourceCardId === instance.gamecardId && event.data?.zone === 'UNIT',

@@ -1,6 +1,7 @@
 import { GameState, PlayerState, Card, AtomicEffect, CardFilter, TriggerLocation } from '../types/game';
 import { GameService } from './gameService';
 import { EventEngine } from './EventEngine';
+import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../lib/cardState';
 import { getCardIdentity } from '../lib/utils';
 
 export class AtomicEffectExecutor {
@@ -1000,6 +1001,8 @@ export class AtomicEffectExecutor {
 
     let card: Card | undefined;
     let fromArray: (Card | null)[] = [];
+    let previousSourceCardId: string | undefined;
+    let leftZoneHandled = false;
 
     // Localized movement logic to handle specific Yu-Gi-Oh events
     const findInZone = (zone: (Card | null)[], loc: TriggerLocation) => {
@@ -1018,10 +1021,19 @@ export class AtomicEffectExecutor {
     const idx = fromArray.findIndex(c => c?.gamecardId === cardId);
     if (idx !== -1) {
       card = fromArray[idx]!;
+      previousSourceCardId = card.gamecardId;
       if (['UNIT', 'ITEM', 'EROSION_FRONT', 'EROSION_BACK'].includes(fromZone)) {
         fromArray[idx] = null;
       } else {
         fromArray.splice(idx, 1);
+      }
+      if (fromZone !== toZone) {
+        EventEngine.handleCardLeftZone(gameState, playerUid, card, fromZone, isEffect, toZone, {
+          effectSourcePlayerUid: options?.effectSourcePlayerUid,
+          effectSourceCardId: options?.effectSourceCardId,
+          previousSourceCardId
+        });
+        leftZoneHandled = true;
       }
     }
 
@@ -1032,16 +1044,6 @@ export class AtomicEffectExecutor {
       gameState.logs.push(`[替换效果] [${card.fullName}] 将要被送入墓地，改为放逐。`);
     }
 
-    if (!(card as any).data) {
-      (card as any).data = {};
-    }
-    (card as any).data.lastMovedFromZone = fromZone;
-    (card as any).data.lastMovedToZone = toZone;
-    if (isEffect) {
-      (card as any).data.lastMovedByEffectTurn = gameState.turnCount;
-      (card as any).data.lastMoveEffectSourceCardId = options?.effectSourceCardId;
-    }
-
     if (
       isEffect &&
       (fromZone === 'EROSION_FRONT' || fromZone === 'EROSION_BACK') &&
@@ -1050,21 +1052,10 @@ export class AtomicEffectExecutor {
       sourcePlayer.exiledFromErosionTurn = gameState.turnCount;
     }
 
-    const shouldRefreshAsNewInstance =
+    let shouldRefreshAsNewInstance =
       (toZone === 'HAND' || toZone === 'DECK') &&
       fromZone !== 'HAND' &&
       fromZone !== 'DECK';
-
-    const previousSourceCardId = card.gamecardId;
-
-    if (fromZone !== toZone && shouldRefreshAsNewInstance) {
-      // Preserve the leaving card identity for leave-field triggers before instance refresh.
-      EventEngine.handleCardLeftZone(gameState, playerUid, card, fromZone, isEffect, toZone, {
-        effectSourcePlayerUid: options?.effectSourcePlayerUid,
-        effectSourceCardId: options?.effectSourceCardId,
-        previousSourceCardId
-      });
-    }
 
     if (shouldRefreshAsNewInstance) {
       const newGamecardId = Math.random().toString(36).substring(2, 10);
@@ -1129,6 +1120,31 @@ export class AtomicEffectExecutor {
         }
       }
     }
+    const clearsBattlefieldState = shouldClearBattlefieldStateOnMove(fromZone, toZone);
+    if (clearsBattlefieldState) {
+      EventEngine.dispatchMovementSubEvents(gameState, {
+        card,
+        cardOwnerUid: playerUid,
+        fromZone,
+        toZone,
+        isEffect,
+        effectSourcePlayerUid: options?.effectSourcePlayerUid,
+        effectSourceCardId: options?.effectSourceCardId,
+        previousSourceCardId,
+        onlyLeftFieldEvent: true
+      });
+      clearBattlefieldState(card);
+    }
+
+    if (!(card as any).data) {
+      (card as any).data = {};
+    }
+    (card as any).data.lastMovedFromZone = fromZone;
+    (card as any).data.lastMovedToZone = toZone;
+    if (isEffect) {
+      (card as any).data.lastMovedByEffectTurn = gameState.turnCount;
+      (card as any).data.lastMoveEffectSourceCardId = options?.effectSourceCardId;
+    }
 
     if (options?.faceDown !== undefined) {
       card.displayState = options.faceDown ? 'FRONT_FACEDOWN' : 'FRONT_UPRIGHT';
@@ -1184,6 +1200,10 @@ export class AtomicEffectExecutor {
     }
 
     card.cardlocation = toZone;
+    if (toZone === 'UNIT' || toZone === 'ITEM') {
+      card.isExhausted = false;
+      card.playedTurn = gameState.turnCount;
+    }
     let toArray: (Card | null)[] = [];
     const findToZone = (zone: (Card | null)[], loc: TriggerLocation) => {
       if (loc === toZone) toArray = zone;
@@ -1222,7 +1242,7 @@ export class AtomicEffectExecutor {
     }
 
     // Specific Events based on movement
-    if (shouldRefreshAsNewInstance) {
+    if (leftZoneHandled) {
       EventEngine.handleCardEnteredZone(gameState, playerUid, card, toZone, isEffect, {
         sourceZone: fromZone,
         targetZone: toZone,
@@ -1238,7 +1258,8 @@ export class AtomicEffectExecutor {
         isEffect,
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
         effectSourceCardId: options?.effectSourceCardId,
-        previousSourceCardId
+        previousSourceCardId,
+        skipLeftFieldEvent: clearsBattlefieldState
       });
     } else {
       this.dispatchMovementEvents(gameState, playerUid, card, fromZone, toZone, isEffect, options);

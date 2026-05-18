@@ -2,6 +2,7 @@ import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackI
 import { CARD_LIBRARY } from '../src/data/cards';
 import { EventEngine } from '../src/services/EventEngine';
 import { AtomicEffectExecutor } from '../src/services/AtomicEffectExecutor';
+import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../src/lib/cardState';
 import { getCardIdentity, getLocationLabel } from '../src/lib/utils';
 import { addBattleLog, cardToBattleLogRef, describeBattleLogTarget } from '../src/lib/battleLog';
 import { SERVER_CARD_LIBRARY } from './card_loader';
@@ -448,6 +449,30 @@ export const ServerGameService = {
         marker.sourceCardId !== target.sourceCardId || marker.effectIndex !== target.effectIndex
       );
     }
+    EventEngine.recalculateContinuousEffects(gameState);
+  },
+
+  clearAllDeclaredTargetMarkers(gameState: GameState) {
+    Object.values(gameState.players).forEach(player => {
+      const allCards = [
+        ...player.deck,
+        ...player.hand,
+        ...player.grave,
+        ...player.exile,
+        ...player.unitZone,
+        ...player.itemZone,
+        ...player.erosionFront,
+        ...player.erosionBack,
+        ...player.playZone
+      ];
+      allCards.forEach(card => {
+        if (!card) return;
+        card.declaredTargetMarkers = [];
+        if (card.influencingEffects?.length) {
+          card.influencingEffects = card.influencingEffects.filter(effect => !effect.description.includes('指定为效果对象'));
+        }
+      });
+    });
     EventEngine.recalculateContinuousEffects(gameState);
   },
 
@@ -1224,16 +1249,6 @@ export const ServerGameService = {
       gameState.logs.push(`[替换效果] [${card.fullName}] 将要被送入墓地，改为放逐。`);
     }
 
-    if (!(card as any).data) {
-      (card as any).data = {};
-    }
-    (card as any).data.lastMovedFromZone = sourceZone;
-    (card as any).data.lastMovedToZone = targetZone;
-    if (options?.isEffect) {
-      (card as any).data.lastMovedByEffectTurn = gameState.turnCount;
-      (card as any).data.lastMoveEffectSourceCardId = options.effectSourceCardId;
-    }
-
     if (
       options?.isEffect &&
       (sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') &&
@@ -1268,6 +1283,32 @@ export const ServerGameService = {
           }
         }
       }
+    }
+
+    const clearsBattlefieldState = shouldClearBattlefieldStateOnMove(sourceZone, targetZone);
+    if (clearsBattlefieldState) {
+      EventEngine.dispatchMovementSubEvents(gameState, {
+        card,
+        cardOwnerUid: sourcePlayerId,
+        fromZone: sourceZone,
+        toZone: targetZone,
+        isEffect: options?.isEffect,
+        effectSourcePlayerUid: options?.effectSourcePlayerUid,
+        effectSourceCardId: options?.effectSourceCardId,
+        previousSourceCardId: previousSourceCardIdForMove,
+        onlyLeftFieldEvent: true
+      });
+      clearBattlefieldState(card);
+    }
+
+    if (!(card as any).data) {
+      (card as any).data = {};
+    }
+    (card as any).data.lastMovedFromZone = sourceZone;
+    (card as any).data.lastMovedToZone = targetZone;
+    if (options?.isEffect) {
+      (card as any).data.lastMovedByEffectTurn = gameState.turnCount;
+      (card as any).data.lastMoveEffectSourceCardId = options.effectSourceCardId;
     }
 
     card.cardlocation = targetZone;
@@ -1365,7 +1406,8 @@ export const ServerGameService = {
       isEffect: options?.isEffect,
       effectSourcePlayerUid: options?.effectSourcePlayerUid,
       effectSourceCardId: options?.effectSourceCardId,
-      previousSourceCardId: previousSourceCardIdForMove
+      previousSourceCardId: previousSourceCardIdForMove,
+      skipLeftFieldEvent: clearsBattlefieldState
     });
 
     if (sourceZone !== targetZone && !options?.suppressLog) {
@@ -2256,6 +2298,7 @@ export const ServerGameService = {
       gameState.isResolvingStack = false;
       delete (gameState as any).deferTriggeredEffectsUntilCounterStackEnds;
       gameState.priorityPlayerId = undefined;
+      ServerGameService.clearAllDeclaredTargetMarkers(gameState);
 
       const nextPhase = phaseEndItem!.nextPhase;
       if (gameState.previousPhase) {
@@ -2479,6 +2522,7 @@ export const ServerGameService = {
     gameState.currentProcessingItem = null; // Ensure this is cleared
     gameState.phaseTimerStart = Date.now();
     delete (gameState as any).deferTriggeredEffectsUntilCounterStackEnds;
+    ServerGameService.clearAllDeclaredTargetMarkers(gameState);
 
     // After resolving the stack, return to previous phase if it exists
     if (gameState.previousPhase) {
@@ -7933,10 +7977,6 @@ export const ServerGameService = {
         });
         let declaredTargets: DeclaredEffectTarget[] | undefined;
         try {
-          await ServerGameService.playCard(gameState, playerUid, cardToPlay.gamecardId, initialPaymentSelection);
-          if (turnPlan && isClosingTurnPlan(turnPlan) && !turnPlan.attackBeforeDeveloping && gameState.turnCount > 1) {
-            ServerGameService.markBotClosingAttackCommitment(gameState, playerUid, turnPlan);
-          }
           const playEffect = ServerGameService.getStoryPlayEffect(cardToPlay);
           const playEffectIndex = playEffect ? cardToPlay.effects?.indexOf(playEffect) ?? -1 : -1;
           if (playEffect && playEffectIndex >= 0 && ServerGameService.hasPreselectTargetSpec(playEffect)) {
@@ -7951,6 +7991,9 @@ export const ServerGameService = {
           }
 
           await ServerGameService.playCard(gameState, playerUid, cardToPlay.gamecardId, initialPaymentSelection, declaredTargets);
+          if (turnPlan && isClosingTurnPlan(turnPlan) && !turnPlan.attackBeforeDeveloping && gameState.turnCount > 1) {
+            ServerGameService.markBotClosingAttackCommitment(gameState, playerUid, turnPlan);
+          }
           // We return and let the next botMove tick handle the next card to ensure stack resolution
           return;
         } catch (e) {

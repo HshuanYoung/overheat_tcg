@@ -6,7 +6,7 @@ import { getCardIdentity, getLocationLabel } from '../src/lib/utils';
 import { addBattleLog, cardToBattleLogRef, describeBattleLogTarget } from '../src/lib/battleLog';
 import { SERVER_CARD_LIBRARY } from './card_loader';
 import { GameService } from '../src/services/gameService';
-import { grantedTotemReviveFromGrave } from '../src/scripts/BaseUtil';
+import { grantedTotemReviveFromGrave, standardizeChoiceOptions } from '../src/scripts/BaseUtil';
 import { BotDifficulty, DeckAiProfile } from './ai/types';
 import { getDeckAiProfile } from './ai/deckProfiles';
 import {
@@ -302,22 +302,23 @@ export const ServerGameService = {
         .filter(mode => ServerGameService.getTargetCandidates(gameState, playerUid, sourceCard, effect, mode).length >= mode.minSelections)
         .map(mode => ({ id: mode.id, label: mode.label, detail: mode.modeDescription || mode.description }));
       if (options.length === 0) return false;
+      const choiceContext = {
+        ...context,
+        sourceCardId: sourceCard.gamecardId,
+        effectIndex,
+        activationPlayerUid: playerUid
+      };
       gameState.pendingQuery = {
         id: Math.random().toString(36).substring(7),
         type: 'SELECT_CHOICE',
         playerUid,
-        options,
+        options: standardizeChoiceOptions(gameState, options, choiceContext),
         title: activeSpec.modeTitle || '选择效果',
         description: activeSpec.modeDescription || '选择要发动的效果。',
         minSelections: 1,
         maxSelections: 1,
         callbackKey: 'DECLARE_EFFECT_TARGET_MODE',
-        context: {
-          ...context,
-          sourceCardId: sourceCard.gamecardId,
-          effectIndex,
-          activationPlayerUid: playerUid
-        }
+        context: choiceContext
       };
       return true;
     }
@@ -2615,6 +2616,15 @@ export const ServerGameService = {
     return ServerGameService.resolveCounterStack(gameState, onUpdate);
   },
 
+  resolveStandardChoiceSelections(query: GameState['pendingQuery'], selections: string[]) {
+    if (!query || query.type.replace(/-/g, '_').toUpperCase() !== 'SELECT_CHOICE') return selections;
+
+    return selections.map(selection => {
+      const option = query.options?.find(opt => opt.id === selection);
+      return option?.value ?? option?.id ?? selection;
+    });
+  },
+
   async handleQueryChoice(gameState: GameState, playerUid: string, queryId: string, selections: string[], onUpdate?: (state: GameState) => Promise<void>) {
     // console.log(`[Server] handleQueryChoice: player=${playerUid}, queryId=${queryId}, selections=`, selections);
 
@@ -2637,6 +2647,9 @@ export const ServerGameService = {
     const sourceCard = sourceCardId ? ServerGameService.findCardById(gameState, sourceCardId) : undefined;
 
     const normalizedType = query.type.replace(/-/g, '_').toUpperCase();
+    if (normalizedType === 'SELECT_CHOICE') {
+      currentSelections = ServerGameService.resolveStandardChoiceSelections(query, selections);
+    }
 
     if (query.callbackKey === 'PLAY_CARD_PAYMENT') {
       const declaredTargets = query.context?.declaredTargets as DeclaredEffectTarget[] | undefined;
@@ -3048,7 +3061,7 @@ export const ServerGameService = {
           };
         }
         try {
-          await (effect.onQueryResolve as any)(sourceCard, gameState, gameState.players[playerUid], selections, query.context);
+          await (effect.onQueryResolve as any)(sourceCard, gameState, gameState.players[playerUid], currentSelections, query.context);
           ServerGameService.normalizeForcedGuardBattleState(gameState);
           EventEngine.recalculateContinuousEffects(gameState);
         } catch (err: any) {
@@ -3199,7 +3212,7 @@ export const ServerGameService = {
         (normalizedType !== 'SELECT_PAYMENT' || query.context?.step !== undefined || query.context?.effectId !== undefined);
 
       if (shouldResumeEffectQuery) {
-        await (effect.onQueryResolve as any)(sourceCard, gameState, gameState.players[activationPlayerUid], selections, query.context);
+        await (effect.onQueryResolve as any)(sourceCard, gameState, gameState.players[activationPlayerUid], currentSelections, query.context);
       }
 
       if (gameState.pendingQuery) {
@@ -3503,18 +3516,27 @@ export const ServerGameService = {
       const targetUnit = opponent.unitZone.find(u => u && u.gamecardId === player.markedUnitAttackTarget);
 
       if (targetUnit && !(targetUnit as any).cannotBeAttackTargetByEffect) {
+        const sourceAttacker = player.unitZone.find(unit => unit?.gamecardId === attackerIds[0]);
+        const choiceContext = {
+          attackerIds,
+          isAlliance,
+          markedTargetId: player.markedUnitAttackTarget,
+          ...(sourceAttacker ? { sourceCardId: sourceAttacker.gamecardId } : {})
+        };
         gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
           type: 'SELECT_CHOICE',
           playerUid: playerId,
-          options: [
+          options: standardizeChoiceOptions(gameState, [
             { id: 'YES', label: '发动(YES)' },
             { id: 'NO', label: '不发动(NO)' }
-          ],
+          ], choiceContext, targetUnit.id),
           title: '全攻确认',
           description: `是否选择发动【全攻】，攻击指定单位 [${targetUnit.fullName}]？选择“是”将直接进入战斗自由阶段。`,
+          minSelections: 1,
+          maxSelections: 1,
           callbackKey: 'COCOLA_ATTACK_CHOICE',
-          context: { attackerIds, isAlliance, markedTargetId: player.markedUnitAttackTarget }
+          context: choiceContext
         };
         return gameState;
       }
@@ -3536,58 +3558,61 @@ export const ServerGameService = {
       );
 
       if (ServerGameService.hasReadyUnitAttack(attackerUnit) && readyTargets.length > 0) {
+        const choiceContext = { attackerIds, isAlliance, targetMode: 'READY', sourceCardId: attackerUnit!.gamecardId };
         gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
           type: 'SELECT_CHOICE',
           playerUid: playerId,
-          options: [
+          options: standardizeChoiceOptions(gameState, [
             { id: 'YES', label: '攻击重置单位(YES)' },
             { id: 'NO', label: '不攻击重置单位(NO)' }
-          ],
+          ], choiceContext),
           title: '攻击重置单位',
           description: `[${attackerUnit!.fullName}] 可以攻击对手的重置单位。是否选择攻击重置单位？`,
           minSelections: 1,
           maxSelections: 1,
           callbackKey: 'DIKAI_ATTACK_TARGET_CHOICE',
-          context: { attackerIds, isAlliance, targetMode: 'READY' }
+          context: choiceContext
         };
         return gameState;
       }
 
       if ((attackerUnit as any)?.data?.canAttackAnyUnit && (readyTargets.length + exhaustedTargets.length) > 0) {
+        const choiceContext = { attackerIds, isAlliance, targetMode: 'ANY', sourceCardId: attackerUnit!.gamecardId };
         gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
           type: 'SELECT_CHOICE',
           playerUid: playerId,
-          options: [
+          options: standardizeChoiceOptions(gameState, [
             { id: 'YES', label: '攻击单位(YES)' },
             { id: 'NO', label: '不攻击单位(NO)' }
-          ],
+          ], choiceContext),
           title: '攻击单位',
           description: `[${attackerUnit!.fullName}] 可以攻击对手的单位。是否选择攻击单位？`,
           minSelections: 1,
           maxSelections: 1,
           callbackKey: 'DIKAI_ATTACK_TARGET_CHOICE',
-          context: { attackerIds, isAlliance, targetMode: 'ANY' }
+          context: choiceContext
         };
         return gameState;
       }
 
       if (ServerGameService.has102050091ExhaustedAttack(attackerUnit) && exhaustedTargets.length > 0) {
+        const choiceContext = { attackerIds, isAlliance, targetMode: 'EXHAUSTED', sourceCardId: attackerUnit!.gamecardId };
         gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
           type: 'SELECT_CHOICE',
           playerUid: playerId,
-          options: [
+          options: standardizeChoiceOptions(gameState, [
             { id: 'YES', label: '攻击横置单位(YES)' },
             { id: 'NO', label: '不攻击横置单位(NO)' }
-          ],
+          ], choiceContext),
           title: '攻击横置单位',
           description: `[${attackerUnit!.fullName}] 可以攻击对手的横置单位。是否选择攻击横置单位？`,
           minSelections: 1,
           maxSelections: 1,
           callbackKey: 'DIKAI_ATTACK_TARGET_CHOICE',
-          context: { attackerIds, isAlliance, targetMode: 'EXHAUSTED' }
+          context: choiceContext
         };
         return gameState;
       }
@@ -4017,23 +4042,25 @@ export const ServerGameService = {
                 const sourceName = (attackingUnit as any).data.resetAfterNextBattleDestroySourceName || '效果';
                 delete (attackingUnit as any).data.resetAfterNextBattleDestroyTurn;
                 delete (attackingUnit as any).data.resetAfterNextBattleDestroySourceName;
+                const choiceContext = {
+                  unitId: attackingUnit.gamecardId,
+                  sourceName,
+                  sourceCardId: attackingUnit.gamecardId
+                };
                 gameState.pendingQuery = {
                   id: Math.random().toString(36).substring(7),
                   type: 'SELECT_CHOICE',
                   playerUid: attackerId,
-                  options: [
+                  options: standardizeChoiceOptions(gameState, [
                     { id: 'YES', label: '重置(YES)' },
                     { id: 'NO', label: '不重置(NO)' }
-                  ],
+                  ], choiceContext),
                   title: '重置确认',
                   description: `由于 [${sourceName}]，是否将 [${attackingUnit.fullName}] 重置？`,
                   minSelections: 1,
                   maxSelections: 1,
                   callbackKey: 'RESET_AFTER_BATTLE_DESTROY_CHOICE',
-                  context: {
-                    unitId: attackingUnit.gamecardId,
-                    sourceName
-                  }
+                  context: choiceContext
                 };
                 gameState.priorityPlayerId = attackerId;
                 gameState.logs.push(`[${sourceName}] 等待选择是否重置 [${attackingUnit.fullName}]。`);
@@ -4564,23 +4591,27 @@ export const ServerGameService = {
     if (!isEffect && !skipSubstitution && !skip102050091BattleSave) {
       const dikai = ServerGameService.get102050091BattleSaveCandidate(gameState, playerId);
       if (dikai) {
+        const choiceContext = {
+          cardId: dikai.gamecardId,
+          sourceCardId: dikai.gamecardId,
+          targetUnitId: gamecardId,
+          isEffect,
+          sourcePlayerId
+        };
         gameState.pendingQuery = {
           id: Math.random().toString(36).substring(7),
           type: 'SELECT_CHOICE',
           playerUid: playerId,
-          options: [
+          options: standardizeChoiceOptions(gameState, [
             { id: 'YES', label: '发动(YES)' },
             { id: 'NO', label: '不发动(NO)' }
-          ],
+          ], choiceContext),
           title: '战斗破坏防止',
           description: `你的 [${unit.fullName}] 将要被战斗破坏。是否支付三费，将手牌中的 [${dikai.fullName}] 放置到战场并防止那次破坏？`,
+          minSelections: 1,
+          maxSelections: 1,
           callbackKey: 'DIKAI_BATTLE_SAVE_CHOICE',
-          context: {
-            cardId: dikai.gamecardId,
-            targetUnitId: gamecardId,
-            isEffect,
-            sourcePlayerId
-          }
+          context: choiceContext
         };
         return undefined;
       }
@@ -4601,18 +4632,21 @@ export const ServerGameService = {
         if (effect && result.valid) {
           // Issue Query
           const queryId = Math.random().toString(36).substring(7);
+          const choiceContext = { subCardId: subCard.gamecardId, sourceCardId: subCard.gamecardId, targetUnitId: gamecardId, isEffect, sourcePlayerId };
           gameState.pendingQuery = {
             id: queryId,
             type: 'SELECT_CHOICE',
             playerUid: playerId,
-            options: [
+            options: standardizeChoiceOptions(gameState, [
               { id: 'YES', label: '发动(YES)' },
               { id: 'NO', label: '不发动(NO)' }
-            ],
+            ], choiceContext),
             title: '效果发动确认',
             description: `是否发动 [${subCard.fullName}] 的效果，将其送入墓地代替 [${unit.fullName}] 的破坏？`,
+            minSelections: 1,
+            maxSelections: 1,
             callbackKey: 'SUBSTITUTION_CHOICE',
-            context: { subCardId: subCard.gamecardId, targetUnitId: gamecardId, isEffect, sourcePlayerId }
+            context: choiceContext
           };
           return undefined; // Indicates pending choice
         }
@@ -5551,20 +5585,21 @@ export const ServerGameService = {
       )
     );
     if (drawReplacementCard && player.grave.length >= 2) {
+      const choiceContext = { sourceCardId: drawReplacementCard.gamecardId };
       gameState.pendingQuery = {
         id: Math.random().toString(36).substring(7),
         type: 'SELECT_CHOICE',
         playerUid: player.uid,
-        options: [
+        options: standardizeChoiceOptions(gameState, [
           { id: 'YES', label: '发动(YES)' },
           { id: 'NO', label: '通常抽卡(NO)' }
-        ],
+        ], choiceContext),
         title: '通常抽卡替代',
         description: `是否发动 [${drawReplacementCard.fullName}] 的效果，选择墓地中的2张卡放置到卡组底，代替通常抽卡？`,
         minSelections: 1,
         maxSelections: 1,
         callbackKey: 'DRAW_REPLACEMENT_CHOICE',
-        context: { sourceCardId: drawReplacementCard.gamecardId }
+        context: choiceContext
       };
       return;
     }
@@ -6418,6 +6453,117 @@ export const ServerGameService = {
     return candidates.length >= (firstTargetShape.minSelections ?? 0) ? candidates.length : 0;
   },
 
+  getStoryPlayEffect(card: Card) {
+    return card.type === 'STORY'
+      ? card.effects?.find(effect => effect.type === 'ALWAYS' || effect.type === 'ACTIVATE' || effect.type === 'ACTIVATED')
+      : undefined;
+  },
+
+  chooseBotDeclaredTargetsForEffect(
+    gameState: GameState,
+    playerUid: string,
+    sourceCard: Card,
+    effect: CardEffect,
+    effectIndex: number
+  ) {
+    if (!ServerGameService.hasPreselectTargetSpec(effect) || !effect.targetSpec) return undefined;
+
+    const profile = ServerGameService.getBotProfile(gameState, playerUid);
+    const difficulty = ServerGameService.getBotDifficulty(gameState, playerUid);
+    const spec: any = effect.targetSpec;
+    let modeId: string | undefined;
+    let targetShapes: any[] = [];
+
+    if (spec.modeOptions?.length) {
+      const player = gameState.players[playerUid];
+      const availableModes = spec.modeOptions.filter((mode: any) => {
+        if (mode.condition && !mode.condition(gameState, player, sourceCard)) return false;
+        return ServerGameService.getTargetCandidates(gameState, playerUid, sourceCard, effect, mode).length >= (mode.minSelections ?? 0);
+      });
+      if (availableModes.length === 0) return undefined;
+
+      const modeQuery: any = {
+        id: 'BOT_DECLARE_TARGET_MODE',
+        type: 'SELECT_CHOICE',
+        playerUid,
+        options: availableModes.map((mode: any) => ({
+          id: mode.id,
+          value: mode.id,
+          label: mode.label,
+          detail: mode.modeDescription || mode.description
+        })),
+        title: spec.modeTitle || '选择效果',
+        description: spec.modeDescription || '选择要发动的效果。',
+        minSelections: 1,
+        maxSelections: 1,
+        callbackKey: 'DECLARE_EFFECT_TARGET_MODE',
+        context: { sourceCardId: sourceCard.gamecardId, effectIndex }
+      };
+      const [selectedModeId] = chooseQuerySelections(gameState, playerUid, modeQuery, profile, difficulty);
+      const selectedMode = availableModes.find((mode: any) => mode.id === selectedModeId) || availableModes[0];
+      modeId = selectedMode.id;
+      targetShapes = [selectedMode];
+    } else {
+      targetShapes = spec.targetGroups?.length ? spec.targetGroups : [spec];
+    }
+
+    let declaredTargets: DeclaredEffectTarget[] = [];
+    for (let index = 0; index < targetShapes.length; index += 1) {
+      const targetShape = targetShapes[index];
+      const candidates = ServerGameService.getTargetCandidates(gameState, playerUid, sourceCard, effect, targetShape, declaredTargets);
+      if (candidates.length < (targetShape.minSelections ?? 0)) {
+        ServerGameService.clearDeclaredTargetMarkers(gameState, declaredTargets);
+        return undefined;
+      }
+
+      const targetQuery: any = {
+        id: 'BOT_DECLARE_TARGETS',
+        type: 'SELECT_CARD',
+        playerUid,
+        options: AtomicEffectExecutor.enrichQueryOptions(
+          gameState,
+          playerUid,
+          candidates.map(candidate => ({
+            card: candidate.card,
+            source: candidate.source || (candidate.card.cardlocation as TriggerLocation)
+          }))
+        ),
+        title: targetShape.title || spec.title || '选择对象',
+        description: targetShape.description || spec.description || '请选择合法对象。',
+        minSelections: targetShape.minSelections ?? 1,
+        maxSelections: targetShape.maxSelections ?? targetShape.minSelections ?? 1,
+        callbackKey: 'DECLARE_EFFECT_TARGETS',
+        context: {
+          sourceCardId: sourceCard.gamecardId,
+          effectIndex,
+          modeId,
+          targetGroupIndex: index,
+          declaredTargets
+        }
+      };
+      const selections = chooseQuerySelections(gameState, playerUid, targetQuery, profile, difficulty);
+      if (selections.length < (targetShape.minSelections ?? 1)) {
+        ServerGameService.clearDeclaredTargetMarkers(gameState, declaredTargets);
+        return undefined;
+      }
+
+      const newlyDeclaredTargets = ServerGameService.declareEffectTargets(
+        gameState,
+        playerUid,
+        sourceCard,
+        effect,
+        effectIndex,
+        selections,
+        targetShape,
+        declaredTargets,
+        modeId
+      );
+      declaredTargets = [...declaredTargets, ...newlyDeclaredTargets];
+    }
+
+    return declaredTargets;
+  },
+
   getBotActivatableEffectCandidates(gameState: GameState, playerUid: string) {
     const player = gameState.players[playerUid];
     if (!player || ServerGameService.getBotDifficulty(gameState, playerUid) !== 'hard') return [];
@@ -6538,11 +6684,24 @@ export const ServerGameService = {
       })),
     });
 
+    let declaredTargets: DeclaredEffectTarget[] | undefined;
     try {
-      await ServerGameService.activateEffect(gameState, playerUid, chosen.card.gamecardId, chosen.effectIndex, undefined, undefined);
+      if (ServerGameService.hasPreselectTargetSpec(chosen.effect)) {
+        declaredTargets = ServerGameService.chooseBotDeclaredTargetsForEffect(
+          gameState,
+          playerUid,
+          chosen.card,
+          chosen.effect,
+          chosen.effectIndex
+        );
+        if (!declaredTargets) throw new Error('没有可指定的合法对象');
+      }
+
+      await ServerGameService.activateEffect(gameState, playerUid, chosen.card.gamecardId, chosen.effectIndex, declaredTargets, undefined);
       delete (player as any).lastBotEffectFailure;
       return true;
     } catch (err) {
+      ServerGameService.clearDeclaredTargetMarkers(gameState, declaredTargets);
       const message = err instanceof Error ? err.message : String(err);
       (player as any).lastBotEffectFailure = message;
       if (chosen.effect.id) {
@@ -7606,9 +7765,16 @@ export const ServerGameService = {
         }
         return ServerGameService.canBotPayPositiveCost(gameState, bot, effectiveCost, card.color, card);
       };
-      const canPlayForBot = (card: Card) =>
-        ServerGameService.canPlayCard(gameState, bot, card).canPlay &&
-        canPayPlayCostForBot(card);
+      const canPlayForBot = (card: Card) => {
+        const playEffect = ServerGameService.getStoryPlayEffect(card);
+        if (playEffect && ServerGameService.hasPreselectTargetSpec(playEffect)) {
+          const targetCount = ServerGameService.getEffectTargetCount(gameState, playerUid, card, playEffect);
+          if (targetCount !== undefined && targetCount <= 0) return false;
+        }
+
+        return ServerGameService.canPlayCard(gameState, bot, card).canPlay &&
+          canPayPlayCostForBot(card);
+      };
       const playableCards = bot.hand.filter(canPlayForBot);
       const playableCandidates = playableCards
         .map(card => ({
@@ -7765,14 +7931,30 @@ export const ServerGameService = {
             score: candidate.score,
           })),
         });
+        let declaredTargets: DeclaredEffectTarget[] | undefined;
         try {
           await ServerGameService.playCard(gameState, playerUid, cardToPlay.gamecardId, initialPaymentSelection);
           if (turnPlan && isClosingTurnPlan(turnPlan) && !turnPlan.attackBeforeDeveloping && gameState.turnCount > 1) {
             ServerGameService.markBotClosingAttackCommitment(gameState, playerUid, turnPlan);
           }
+          const playEffect = ServerGameService.getStoryPlayEffect(cardToPlay);
+          const playEffectIndex = playEffect ? cardToPlay.effects?.indexOf(playEffect) ?? -1 : -1;
+          if (playEffect && playEffectIndex >= 0 && ServerGameService.hasPreselectTargetSpec(playEffect)) {
+            declaredTargets = ServerGameService.chooseBotDeclaredTargetsForEffect(
+              gameState,
+              playerUid,
+              cardToPlay,
+              playEffect,
+              playEffectIndex
+            );
+            if (!declaredTargets) throw new Error('没有可指定的合法对象');
+          }
+
+          await ServerGameService.playCard(gameState, playerUid, cardToPlay.gamecardId, initialPaymentSelection, declaredTargets);
           // We return and let the next botMove tick handle the next card to ensure stack resolution
           return;
         } catch (e) {
+          ServerGameService.clearDeclaredTargetMarkers(gameState, declaredTargets);
           playFailure = e instanceof Error ? e.message : String(e);
           ServerGameService.recordAiDecision(gameState, playerUid, {
             action: 'PLAY_CARD_FAILED',

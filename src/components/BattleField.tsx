@@ -14,7 +14,7 @@ import { PlayField } from './PlayField';
 import { Rulebook } from './Rulebook';
 import { motion, AnimatePresence } from 'motion/react';
 import { StandardPopup } from './StandardPopup';
-import { Flag, Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers, Sparkles, Flame, AlertTriangle, RotateCcw, Undo2, Hand, PackagePlus, Scissors, Circle, FileText } from 'lucide-react';
+import { Flag, Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers, Sparkles, Flame, AlertTriangle, PackagePlus, Scissors, Circle, FileText } from 'lucide-react';
 import { cn, getCardColorLabel, getCardImageUrl, getCardIdentity, getCardTypeLabel, getLocationLabel, getPhaseLabel } from '../lib/utils';
 import { KeywordBadges } from './KeywordBadges';
 import { BattleLogPanel } from './BattleLogPanel';
@@ -229,21 +229,6 @@ const MulliganRevealOverlay: React.FC<{
       </motion.div>
     </AnimatePresence>
   );
-};
-
-const getChoiceIcon = (icon?: string) => {
-  switch (icon) {
-    case 'draw':
-      return PackagePlus;
-    case 'destroy':
-      return Trash2;
-    case 'exhaust':
-      return RotateCcw;
-    case 'return':
-      return Undo2;
-    default:
-      return Hand;
-  }
 };
 
 const CONFRONTATION_STRATEGY_LABELS: Record<'ON' | 'AUTO' | 'OFF', string> = {
@@ -683,7 +668,7 @@ export const BattleField: React.FC = () => {
   // Join game effect
   useEffect(() => {
     if (!gameId || gameId === 'undefined') return;
-    if (seat === 'player' && !deckId && !gameId.startsWith('friend_')) return;
+    if (seat === 'player' && !deckId && !gameId.startsWith('friend_') && !gameId.startsWith('bugcup_')) return;
 
     const performJoin = () => {
       console.log('[BattleField] Emitting joinGame:', gameId);
@@ -718,7 +703,7 @@ export const BattleField: React.FC = () => {
     if (!gameId || !gameId.startsWith('friend_')) return;
     if (!myUid || seat !== 'player') return;
     if (me && opponent) return;
-    if (seat === 'player' && !deckId && !gameId.startsWith('friend_')) return;
+    if (seat === 'player' && !deckId && !gameId.startsWith('friend_') && !gameId.startsWith('bugcup_')) return;
 
     const timeout = window.setTimeout(() => {
       if (Date.now() - lastJoinEmitRef.current < 1200) return;
@@ -967,6 +952,12 @@ export const BattleField: React.FC = () => {
   const rawPendingQueryOptions = Array.isArray(pendingQuery?.options) ? pendingQuery.options : [];
   const isSelectCardPendingQuery = normalizedPendingQueryType === 'SELECT_CARD';
   const pendingQueryOptions = useMemo(() => {
+    if (normalizedPendingQueryType === 'ASK_TRIGGER') {
+      return [
+        { id: 'YES', value: 'YES', label: '是', icon: 'trigger', detail: '发动这个诱发效果' },
+        { id: 'NO', value: 'NO', label: '否', icon: 'decline', detail: '跳过这个诱发效果' }
+      ];
+    }
     if (!game || !pendingQuery || normalizedPendingQueryType !== 'SELECT_CARD') return rawPendingQueryOptions;
     const context = pendingQuery.context || {};
     const sourceCardId = context.sourceCardId;
@@ -1013,6 +1004,46 @@ export const BattleField: React.FC = () => {
       return rawPendingQueryOptions;
     }
   }, [game, pendingQuery, rawPendingQueryOptions, normalizedPendingQueryType]);
+  const getPendingOptionId = (option?: any) => option?.card?.gamecardId || option?.card?.id || option?.id || '';
+  const getPendingOptionText = (option?: any) =>
+    `${option?.value || ''} ${option?.id || ''} ${option?.label || ''}`.toUpperCase();
+  const isPositiveBinaryOption = (option?: any) => {
+    const text = getPendingOptionText(option);
+    if (/不发动|取消|否|跳过|不使用|通常/.test(text)) return false;
+    return /\bYES\b/.test(text) || /\bY\b/.test(text) || /发动|确认|同意|是/.test(text);
+  };
+  const isNegativeBinaryOption = (option?: any) => {
+    const text = getPendingOptionText(option);
+    return /\bNO\b/.test(text) || /\bN\b/.test(text) || /不发动|取消|否|跳过|不使用|通常/.test(text);
+  };
+  const enabledPendingQueryOptions = pendingQueryOptions.filter(option => !option.disabled);
+  const binaryConfirmOption = enabledPendingQueryOptions.find(isPositiveBinaryOption);
+  const binaryCancelOption = enabledPendingQueryOptions.find(isNegativeBinaryOption);
+  const isBinaryChoicePendingQuery =
+    normalizedPendingQueryType !== 'ASK_TRIGGER' &&
+    (
+      normalizedPendingQueryType === 'SELECT_CHOICE' &&
+      enabledPendingQueryOptions.length === 2 &&
+      !!binaryConfirmOption &&
+      !!binaryCancelOption &&
+      (pendingQuery?.minSelections ?? 1) === 1 &&
+      (pendingQuery?.maxSelections ?? 1) === 1
+    );
+  const pendingQueryPopupMode =
+    normalizedPendingQueryType === 'SELECT_PAYMENT' ? 'payment_selection' :
+    normalizedPendingQueryType === 'ASK_TRIGGER' ? 'double_selection' :
+    isBinaryChoicePendingQuery ? 'double_selection' :
+    normalizedPendingQueryType === 'SELECT_CHOICE' ? 'choice_selection' :
+    normalizedPendingQueryType === 'SELECT_CARD' ? (pendingQueryOptions.some(o => o.card?.id === 'PLAYER_SELF' || o.card?.id === 'PLAYER_OPPONENT') ? 'player_selection' : 'card_selection') :
+    'choice_selection';
+  const binaryConfirmText =
+    normalizedPendingQueryType === 'ASK_TRIGGER' || /是否发动/.test(`${pendingQuery?.title || ''} ${pendingQuery?.description || ''}`)
+      ? '是'
+      : binaryConfirmOption?.label || '确认';
+  const binaryCancelText =
+    normalizedPendingQueryType === 'ASK_TRIGGER' || /是否发动/.test(`${pendingQuery?.title || ''} ${pendingQuery?.description || ''}`)
+      ? '否'
+      : binaryCancelOption?.label || '取消';
   const selectablePendingQueryOptions = isSelectCardPendingQuery
     ? pendingQueryOptions.filter(option => !!option?.card && !option.disabled)
     : [];
@@ -1168,100 +1199,6 @@ export const BattleField: React.FC = () => {
 
   const getAvailableDefenders = () => {
     return me.unitZone.filter(canUnitDefend) as Card[];
-  };
-
-  const getGraphicOptionMeta = (card: Card) => {
-    switch (card.id) {
-      case 'OPTION_A':
-        return {
-          title: '选项A',
-          subtitle: '本回合 +500 / +1，并获得速攻',
-          accent: 'from-amber-500 via-orange-500 to-red-500',
-          glow: 'shadow-[0_0_35px_rgba(249,115,22,0.35)]',
-          Icon: Flame
-        };
-      case 'OPTION_B':
-        return {
-          title: '选项B',
-          subtitle: '横置对方 1 张未横置的非神蚀单位',
-          accent: 'from-cyan-500 via-sky-500 to-blue-600',
-          glow: 'shadow-[0_0_35px_rgba(14,165,233,0.35)]',
-          Icon: Shield
-        };
-      case 'OPTION_C':
-        return {
-          title: '选项C',
-          subtitle: '将墓地 1 张冒险家公会卡放入侵蚀区',
-          accent: 'from-emerald-500 via-teal-500 to-green-600',
-          glow: 'shadow-[0_0_35px_rgba(16,185,129,0.35)]',
-          Icon: Layers
-        };
-      case 'MODE_A':
-        return {
-          title: '模式A',
-          subtitle: '对手抽 3，然后选择 2 张手牌放入侵蚀区',
-          accent: 'from-violet-500 via-fuchsia-500 to-pink-500',
-          glow: 'shadow-[0_0_35px_rgba(217,70,239,0.35)]',
-          Icon: Sparkles
-        };
-      case 'MODE_B':
-        return {
-          title: '模式B',
-          subtitle: '选择并破坏 1 张横置单位',
-          accent: 'from-rose-500 via-red-500 to-orange-600',
-          glow: 'shadow-[0_0_35px_rgba(244,63,94,0.35)]',
-          Icon: Sword
-        };
-      case 'MODE_EXHAUST':
-        return {
-          title: '模式A',
-          subtitle: '选择 1 张未横置的非神蚀单位并横置',
-          accent: 'from-cyan-500 via-sky-500 to-blue-600',
-          glow: 'shadow-[0_0_35px_rgba(14,165,233,0.35)]',
-          Icon: Shield
-        };
-      case 'MODE_BOUNCE':
-        return {
-          title: '模式B',
-          subtitle: '选择 1 张横置的非神蚀单位或道具返回手牌',
-          accent: 'from-emerald-500 via-teal-500 to-green-600',
-          glow: 'shadow-[0_0_35px_rgba(16,185,129,0.35)]',
-          Icon: Layers
-        };
-      default:
-        return null;
-    }
-  };
-
-  const renderGraphicQueryOption = (card: Card) => {
-    const meta = getGraphicOptionMeta(card);
-    if (!meta) return null;
-
-    const { Icon } = meta;
-
-    return (
-      <div className={cn(
-        "relative w-full aspect-[3/4] overflow-hidden rounded-lg md:rounded-2xl border border-white/10 bg-zinc-950",
-        meta.glow
-      )}>
-        <div className={cn("absolute inset-0 bg-gradient-to-br opacity-90", meta.accent)} />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.28),_transparent_48%)]" />
-        <div className="absolute inset-x-5 top-5 h-px bg-white/30" />
-        <div className="absolute inset-x-5 bottom-5 h-px bg-white/20" />
-        <div className="relative z-10 flex h-full flex-col items-center justify-between px-4 py-5 text-white">
-          <div className="w-full text-center">
-            <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/80">{meta.title}</div>
-            <div className="mt-2 text-lg md:text-xl font-black leading-tight">{card.fullName}</div>
-          </div>
-          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-white/30 bg-black/20 backdrop-blur-sm md:h-28 md:w-28">
-            <Icon className="h-12 w-12 md:h-14 md:w-14" />
-          </div>
-          <div className="w-full rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-center backdrop-blur-sm">
-            <div className="text-[11px] md:text-xs font-bold leading-relaxed text-white/90">{meta.subtitle}</div>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const getOwnedCardLocationLabel = (card: Card) => {
@@ -3396,14 +3333,15 @@ export const BattleField: React.FC = () => {
 
       {/* Standardized My Pending Query Popup */}
       <StandardPopup
+        key={`${game.pendingQuery?.id || 'no-query'}-${pendingQueryPopupMode}`}
         isOpen={!!(!isSpectator && game.pendingQuery && game.pendingQuery.playerUid === myUid)}
         title={game.pendingQuery?.title || ''}
         description={game.pendingQuery?.description || ''}
-        mode={
-          normalizedPendingQueryType === 'SELECT_PAYMENT' ? 'payment_selection' :
-          normalizedPendingQueryType === 'ASK_TRIGGER' ? 'double_selection' :
-          normalizedPendingQueryType === 'SELECT_CARD' ? (pendingQueryOptions.some(o => o.card?.id === 'PLAYER_SELF' || o.card?.id === 'PLAYER_OPPONENT') ? 'player_selection' : 'card_selection') :
-          'card_selection' // Fallback for SELECT_CHOICE or others
+        mode={pendingQueryPopupMode}
+        options={
+          normalizedPendingQueryType === 'ASK_TRIGGER' || normalizedPendingQueryType === 'SELECT_CHOICE' || normalizedPendingQueryType === 'SELECT_CARD'
+            ? pendingQueryOptions
+            : undefined
         }
         cards={pendingQueryOptions.filter(o => !!o.card).map(o => o.card!)}
         cardMeta={Object.fromEntries(
@@ -3444,10 +3382,11 @@ export const BattleField: React.FC = () => {
             ? formatSelectedPaymentValue(game.pendingQuery?.paymentCost || 0, game.pendingQuery?.paymentColor)
             : paymentSelection.erosionFrontIds.length
         }
-        confirmText="确认"
-        cancelText="取消"
-        onConfirm={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, ['YES'])}
-        onCancel={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, ['NO'])}
+        squarePanel={normalizedPendingQueryType === 'ASK_TRIGGER'}
+        confirmText={binaryConfirmText}
+        cancelText={binaryCancelText}
+        onConfirm={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryConfirmOption) || 'YES'])}
+        onCancel={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryCancelOption) || 'NO'])}
         cardBackUrl={cardBackUrl}
         onHide={() => setIsPopupHidden(true)}
         isHidden={isPopupHidden}
@@ -3563,60 +3502,6 @@ export const BattleField: React.FC = () => {
           </div>
         )}
 
-        {normalizedPendingQueryType === 'SELECT_CHOICE' && (
-          <div className="grid grid-cols-2 gap-4 mt-4 w-full justify-center max-w-2xl px-6 md:px-12">
-            {pendingQueryOptions.map((option, i) => {
-              const optionId = option.id || option.card?.gamecardId || '';
-              const isSelected = selectedQueryIds.includes(optionId);
-              const ChoiceIcon = getChoiceIcon(option.icon);
-              return (
-                <button
-                  key={i}
-                  onClick={() => {
-                    if (!optionId || option.disabled) return;
-                    setSelectedQueryIds(prev => {
-                      if (prev.includes(optionId)) return prev.filter(id => id !== optionId);
-                      if (prev.length >= (game.pendingQuery?.maxSelections || 1)) {
-                        if (game.pendingQuery?.maxSelections === 1) return [optionId];
-                        return prev;
-                      }
-                      return [...prev, optionId];
-                    });
-                  }}
-                  className={cn(
-                    "px-4 py-6 md:px-8 md:py-8 backdrop-blur-md text-white border-2 font-black italic uppercase tracking-[0.1em] rounded-3xl transition-all hover:scale-105 active:scale-95 shadow-[0_10px_30px_rgba(0,0,0,0.5)] group relative overflow-hidden text-center flex items-center justify-center min-h-[140px]",
-                    isSelected
-                      ? "bg-[#f27d26] border-transparent text-black shadow-[#f27d26]/25"
-                      : "bg-zinc-900/80 border-white/10 hover:bg-[#f27d26] hover:text-black hover:border-transparent"
-                  )}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="relative z-10 flex flex-col items-center gap-3">
-                    <div className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-2xl border-2 transition-colors",
-                      isSelected
-                        ? "border-black/20 bg-black/10"
-                        : "border-[#f27d26]/40 bg-[#f27d26]/10 text-[#f27d26] group-hover:border-black/20 group-hover:bg-black/10 group-hover:text-black"
-                    )}>
-                      <ChoiceIcon className="h-8 w-8 stroke-[2.5]" />
-                    </div>
-                    <span className="text-xs md:text-sm">{option.label || option.card?.fullName || option.id}</span>
-                    {option.detail && (
-                      <span className="max-w-[14rem] text-[10px] md:text-xs font-bold not-italic leading-relaxed tracking-wide opacity-75">
-                        {option.detail}
-                      </span>
-                    )}
-                    {(option.slotLabel || option.zoneLabel || option.ownerName) && (
-                      <span className="text-[10px] md:text-xs font-bold tracking-wide opacity-80">
-                        {[option.ownerName, option.slotLabel || option.zoneLabel].filter(Boolean).join(' · ')}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </StandardPopup>
 
 

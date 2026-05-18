@@ -1168,6 +1168,7 @@ export const exileByEffect = (gameState: GameState, target: Card, source: Card) 
 };
 
 export const paymentCost = (amount: number, color?: string): CardEffect['cost'] => async (gameState, playerState, instance) => {
+  if (amount <= 0) return true;
   if (!canPayAccessCost(gameState, playerState, amount, color === 'NONE' ? undefined : color, instance)) {
     return false;
   }

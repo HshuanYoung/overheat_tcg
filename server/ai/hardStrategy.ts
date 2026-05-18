@@ -649,12 +649,13 @@ export function analyzeMainPhaseSequencing(gameState: GameState, player: PlayerS
       if (!(effect.type === 'ACTIVATE' || effect.type === 'ACTIVATED')) return undefined;
       if (effect.id === '102050432_reset_attack_unit' && !card.isExhausted) return undefined;
       const text = effectSearchText(card, effect).toUpperCase();
+      const templeResetOpportunity = getTempleHighValueResetOpportunity(gameState, player, card, effect, profile);
       const isPreCombatEffect = textHasAny(text, [
         /DESTROY|EXILE|BANISH|SILENCE|CANNOT.*DEFEND|CANNOT_DEFEND|EXHAUST|TAP|BOUNCE|RETURN.*HAND|SUMMON|REVIVE|PLAY_FROM|EROSION/i,
         /鐮村潖|闄ゅ|妯疆|涓嶈兘闃插尽|渚佃殌|澧撳湴|降灵/,
       ]);
-      if (!isPreCombatEffect) return undefined;
-      let score = 18;
+      if (!isPreCombatEffect && !templeResetOpportunity) return undefined;
+      let score = templeResetOpportunity ? templeResetOpportunity.score : 18;
       if (likelyDefenders > 0) score += 24 + likelyDefenders * 8;
       if (!opponent.isGoddessMode && totalAvailableDamage >= Math.max(1, 10 - opponentErosion - 1)) score += 18;
       const slotPenalty = scorePendingUnitReturnSlotPenalty(gameState, player, estimateUnitSlotsConsumedByEffect(card, effect));
@@ -2137,6 +2138,70 @@ function getTempleMagicSpearPostAttackResetSupport(player: PlayerState, spear: C
   return bestBoost > 0 ? { bestBoost, effectIds } : undefined;
 }
 
+function getTempleHighValueResetOpportunity(
+  gameState: GameState,
+  player: PlayerState,
+  sourceCard: Card,
+  effect: CardEffect,
+  profile: DeckAiProfile
+) {
+  if (!isTempleMagicSpearResetEnabler(effect)) return undefined;
+  if (effect.id === '101130439_reset_hall' && sourceCard.isExhausted) return undefined;
+  if (effect.id === HOLY_PRINCE_RESET_EFFECT_ID && player.grave.length < 3) return undefined;
+
+  const opponent = getOpponent(gameState, player);
+  const readyDamageWithoutSource = player.unitZone
+    .filter((unit): unit is Card => !!unit && unit.gamecardId !== sourceCard.gamecardId && canUnitAttack(gameState, unit))
+    .reduce((sum, unit) => sum + Math.max(0, unit.damage || 0), 0);
+  const defenderPower = getLikelyDefenderCards(gameState, opponent)
+    .reduce((best, defender) => Math.max(best, Math.max(0, defender.power || 0)), 0);
+  const boost = templeMagicSpearResetBoost(effect);
+  const sourceAttackCost = canUnitAttack(gameState, sourceCard)
+    ? Math.max(0, sourceCard.damage || 0) * 7 + Math.max(0, sourceCard.power || 0) / 1200
+    : 0;
+
+  const candidates = player.unitZone
+    .filter((unit): unit is Card => {
+      if (!unit || !unit.isExhausted) return false;
+      if (unit.gamecardId === sourceCard.gamecardId) return false;
+      if (effect.id === HOLY_PRINCE_RESET_EFFECT_ID && unit.godMark) return false;
+      if (effect.id === '101130439_reset_hall') {
+        return TEMPLE_HIGH_VALUE_RESET_TARGET_IDS.has(unit.id) ||
+          (unit.id.startsWith('101130') && Math.max(0, unit.damage || 0) >= 2);
+      }
+      return TEMPLE_HIGH_VALUE_RESET_TARGET_IDS.has(unit.id) ||
+        Math.max(0, unit.damage || 0) >= 2 ||
+        scoreCardValue(unit, profile) >= 45;
+    })
+    .map(unit => {
+      const damage = Math.max(0, unit.damage || 0);
+      const power = Math.max(0, unit.power || 0);
+      const cardValue = scoreCardValue(unit, profile);
+      let score = 20 + damage * 13 + power / 900 + Math.min(22, cardValue * 0.28);
+
+      if (TEMPLE_HIGH_VALUE_RESET_TARGET_IDS.has(unit.id)) score += 22;
+      if (unit.id === TEMPLE_MAGIC_SPEAR_ID) {
+        if (defenderPower > 0 && defenderPower >= power && power + boost > defenderPower) score += 34;
+        else if (defenderPower > 0 && defenderPower >= power + boost) score -= 10;
+      }
+      if (opponent) {
+        if (battleDamageWouldBeFatal(readyDamageWithoutSource + damage, opponent)) score += 30;
+        if (battleDamageCreatesErosionPressure(readyDamageWithoutSource + damage, opponent)) score += 18;
+      }
+
+      score -= sourceAttackCost;
+      return { target: unit, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const best = candidates[0];
+  if (!best || best.score < 34) return undefined;
+  return {
+    ...best,
+    notes: [`temple reset unlocks ${best.target.fullName || best.target.id}`],
+  };
+}
+
 function getTempleMagicSpearBattleResetOpportunity(
   gameState: GameState,
   player: PlayerState,
@@ -2245,6 +2310,11 @@ export function scoreAttackCandidate(gameState: GameState, player: PlayerState, 
     otherAttackersCanClose &&
     preserveValue <= 28 &&
     !card.godMark;
+  const clearClosingPurpose = lethalWindow || erosionPressureWindow || attackWouldBeFatal || singleAttackThreat;
+  const templeResetInstead = (card.effects || [])
+    .map(effect => getTempleHighValueResetOpportunity(gameState, player, card, effect, profile))
+    .filter(Boolean)
+    .sort((a, b) => (b?.score || 0) - (a?.score || 0))[0];
 
   let score = ((damage * 10 + power / 1000 + cardValue * 0.25) * profile.weights.attackBias);
   score += damage * attackPriority * 1.6;
@@ -2287,7 +2357,6 @@ export function scoreAttackCandidate(gameState: GameState, player: PlayerState, 
 
   if (defenderCount > 0 && strongestDefenderPower >= power && !expendableBait) {
     const losingIntoDefender = strongestDefenderPower > power;
-    const clearClosingPurpose = lethalWindow || erosionPressureWindow || attackWouldBeFatal || singleAttackThreat;
     const pressureDiscount = clearClosingPurpose ? 0.45 : 1;
     let badAttackPenalty = losingIntoDefender ? 34 : 20;
     badAttackPenalty += Math.min(24, preserveValue * (losingIntoDefender ? 0.42 : 0.28));
@@ -2319,6 +2388,22 @@ export function scoreAttackCandidate(gameState: GameState, player: PlayerState, 
     score,
     reason: 'attack',
   });
+
+  if (defenderCount > 0 && !clearClosingPurpose && !expendableBait && !templeSpearResetFixesBlock) {
+    const narrowOrLosingIntoBlock = strongestDefenderPower + 800 >= power;
+    const highValueAttacker = card.godMark || preserveValue >= 38 || cardValue >= 55;
+    if (narrowOrLosingIntoBlock) {
+      score -= 12 + Math.min(22, strongestDefenderValue * 0.12);
+      if (damage <= 1) score -= 8;
+    }
+    if (highValueAttacker) {
+      score -= 18 + Math.min(24, preserveValue * 0.28);
+    }
+  }
+
+  if (templeResetInstead && !singleAttackThreat) {
+    score -= 18 + Math.min(34, templeResetInstead.score * 0.36);
+  }
 
   return score;
 }
@@ -2523,6 +2608,17 @@ export function scoreActivatableEffect(
     tags.add('combat');
     tags.add('buff');
     notes.push(...templeSpearBattleReset.notes);
+  }
+
+  const templeMainReset = gameState.phase === 'MAIN'
+    ? getTempleHighValueResetOpportunity(gameState, player, card, effect, profile)
+    : undefined;
+  if (templeMainReset) {
+    score += templeMainReset.score;
+    tags.add('reset');
+    tags.add('combat');
+    tags.add('buff');
+    notes.push(...templeMainReset.notes);
   }
 
   if (

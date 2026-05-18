@@ -2742,7 +2742,7 @@ export const ServerGameService = {
         const paymentSelection = JSON.parse(selections[0]);
         const paymentTargetId = query.context?.targetCardId || query.context?.targetId;
         const paymentTarget = paymentTargetId ? ServerGameService.findCardById(gameState, paymentTargetId) : undefined;
-        const paymentCost = paymentTarget && query.context?.useEffectiveCardCost !== false
+        const paymentCost = paymentTarget && query.context?.useEffectiveCardCost === true
           ? ServerGameService.getEffectivePlayCost(gameState.players[paymentPlayerUid], paymentTarget, gameState)
           : (query.paymentCost || 0);
         const result = ServerGameService.payCost(
@@ -6336,9 +6336,10 @@ export const ServerGameService = {
     const player = gameState.players[paymentPlayerUid];
     if (!player) return false;
 
-    const paymentTargetId = query.context?.targetCardId || query.context?.targetId || query.context?.sourceCardId;
+    const paymentTargetId = query.context?.targetCardId || query.context?.targetId;
     const paymentTarget = paymentTargetId ? ServerGameService.findCardById(gameState, paymentTargetId) : undefined;
-    const paymentCost = paymentTarget && query.context?.useEffectiveCardCost !== false
+    const sourceCard = query.context?.sourceCardId ? ServerGameService.findCardById(gameState, query.context.sourceCardId) : undefined;
+    const paymentCost = paymentTarget && query.context?.useEffectiveCardCost === true
       ? ServerGameService.getEffectivePlayCost(player, paymentTarget, gameState)
       : Number(query.paymentCost || 0);
 
@@ -6352,7 +6353,7 @@ export const ServerGameService = {
       player,
       paymentCost,
       paymentTarget?.color || query.paymentColor,
-      paymentTarget
+      paymentTarget || sourceCard
     );
   },
 
@@ -6376,6 +6377,46 @@ export const ServerGameService = {
       !!inferredProfile?.traits.includes('low-curve-swarm');
 
     return !opponentIsAggro;
+  },
+
+  getRedDikaiScadiErosionWindow(player: PlayerState | undefined) {
+    if (!player) return undefined;
+    const dikai = player.unitZone.find(unit => unit?.id === '102050432');
+    const scadi = player.itemZone.find(item =>
+      item?.id === '302050013' &&
+      (!dikai || item.equipTargetId === dikai.gamecardId)
+    );
+    if (!scadi?.equipTargetId) return undefined;
+    const equippedTarget = player.unitZone.find(unit => unit?.gamecardId === scadi.equipTargetId);
+    if (!equippedTarget) return undefined;
+    const erosion = countErosion(player);
+    return {
+      scadi,
+      equippedTarget,
+      erosion,
+      inWindow: erosion >= 5 && erosion <= 7,
+      belowWindow: erosion < 5,
+      aboveWindow: erosion > 7,
+    };
+  },
+
+  scoreRedDikaiScadiDeckPaymentAdjustment(player: PlayerState, deckPayment: number) {
+    const window = ServerGameService.getRedDikaiScadiErosionWindow(player);
+    if (!window || deckPayment <= 0) return 0;
+    const after = window.erosion + deckPayment;
+
+    if (window.belowWindow) {
+      if (after >= 5 && after <= 7) return -46 - deckPayment * 8;
+      if (after < 5) return -12 * deckPayment;
+      return 34 + (after - 7) * 22;
+    }
+
+    if (window.inWindow) {
+      if (after <= 7) return -4 * deckPayment;
+      return 48 + (after - 7) * 24;
+    }
+
+    return 30 + deckPayment * 16;
   },
 
   scoreBotPaymentSelectionRisk(
@@ -6481,6 +6522,14 @@ export const ServerGameService = {
         return total + accessMax;
       }, 0);
       estimatedDeckPayment = Math.max(0, paymentCost - feijingReduction - unitPayment);
+    }
+
+    if (profile.id === 'red-dikai' && estimatedDeckPayment > 0) {
+      const scadiAdjustment = ServerGameService.scoreRedDikaiScadiDeckPaymentAdjustment(player, estimatedDeckPayment);
+      if (scadiAdjustment !== 0) {
+        penalty += scadiAdjustment;
+        notes.push(scadiAdjustment < 0 ? 'scadi erosion window setup' : 'scadi erosion window risk');
+      }
     }
 
     if (estimatedDeckPayment > 0 && defensePressure) {
@@ -7192,6 +7241,9 @@ export const ServerGameService = {
           ? 18
           : 5
       : 0;
+    const redScadiErosionWindow = difficulty === 'hard' && profile.id === 'red-dikai'
+      ? ServerGameService.getRedDikaiScadiErosionWindow(player)
+      : undefined;
     let bestSelection: { feijingCardId?: string; exhaustUnitIds?: string[] } | undefined;
     let bestRemaining = Number.POSITIVE_INFINITY;
     let bestPaymentScore = Number.POSITIVE_INFINITY;
@@ -7281,7 +7333,15 @@ export const ServerGameService = {
         if (remainingAfterUnits > player.deck.length) continue;
         if (remainingAfterUnits > 0 && !canUseWindProduction && remainingAfterUnits >= 10 - totalErosion) continue;
 
-        const paymentScore = feijingValue + selectedUnitValue + remainingAfterUnits * deckPaymentWeight + exhaustUnitIds.length * 0.1;
+        const scadiDeckPaymentAdjustment = redScadiErosionWindow
+          ? ServerGameService.scoreRedDikaiScadiDeckPaymentAdjustment(player, remainingAfterUnits)
+          : 0;
+        const paymentScore =
+          feijingValue +
+          selectedUnitValue +
+          remainingAfterUnits * deckPaymentWeight +
+          scadiDeckPaymentAdjustment +
+          exhaustUnitIds.length * 0.1;
         if (
           paymentScore < bestPaymentScore ||
           (paymentScore === bestPaymentScore && remainingAfterUnits < bestRemaining) ||
@@ -7369,16 +7429,17 @@ export const ServerGameService = {
         selections = canPay ? [JSON.stringify(payment)] : [];
         const paymentPlayerUid = query.context?.activationPlayerUid || playerUid;
         const paymentPlayer = gameState.players[paymentPlayerUid];
-        const paymentTargetId = query.context?.targetCardId || query.context?.targetId || query.context?.sourceCardId;
+        const paymentTargetId = query.context?.targetCardId || query.context?.targetId;
         const paymentTarget = paymentTargetId ? ServerGameService.findCardById(gameState, paymentTargetId) : undefined;
-        const resolvedPaymentCost = paymentTarget && query.context?.useEffectiveCardCost !== false && paymentPlayer
+        const sourceCard = query.context?.sourceCardId ? ServerGameService.findCardById(gameState, query.context.sourceCardId) : undefined;
+        const resolvedPaymentCost = paymentTarget && query.context?.useEffectiveCardCost === true && paymentPlayer
           ? ServerGameService.getEffectivePlayCost(paymentPlayer, paymentTarget, gameState)
           : Number(query.paymentCost || 0);
         const paymentRisk = canPay && resolvedPaymentCost > 0
           ? ServerGameService.scoreBotPaymentSelectionRisk(gameState, paymentPlayerUid, payment, {
             paymentCost: resolvedPaymentCost,
             paymentColor: paymentTarget?.color || query.paymentColor,
-            sourceCard: paymentTarget,
+            sourceCard: paymentTarget || sourceCard,
           })
           : { penalty: 0, notes: [] as string[], exhaustedUnits: [] as Card[], estimatedDeckPayment: 0, readyDefendersAfter: undefined };
         if (canPay) ServerGameService.recordAiDecision(gameState, playerUid, {
@@ -7666,21 +7727,49 @@ export const ServerGameService = {
       const erosionCards = bot.erosionFront.filter((card): card is Card => !!card);
       let erosionChoice: 'A' | 'B' | 'C' = 'A';
       let selectedErosionCard: Card | undefined;
+      let selectedErosionScore: number | undefined;
       let erosionReason = 'clear erosion cards to grave';
 
       if (difficulty === 'hard' && erosionCards.length > 0) {
+        const recoveryValue = (card: Card) => {
+          const preserve = profile.preserveCardIds?.[card.id] || profile.preserveCardIds?.[card.uniqueId] || 0;
+          const preferred = profile.preferredCardIds?.[card.id] || profile.preferredCardIds?.[card.uniqueId] || 0;
+          const baseValue = scoreCardValue(card, profile);
+          const playableValue = scorePlayableCard(gameState, bot, card, profile);
+          let score = baseValue + Math.max(-10, playableValue * 0.12);
+          if (card.godMark) score += card.type === 'UNIT' ? 76 : 42;
+          if (preserve > 0 || preferred > 0) score += 26 + preserve * 0.9 + preferred * 0.55;
+          if (card.type === 'UNIT') {
+            score += Math.max(0, card.damage || 0) * 8;
+            score += Math.max(0, card.power || 0) / 800;
+            if (card.isrush) score += 6;
+          } else if (card.type === 'ITEM') {
+            score += card.isEquip ? 14 : 5;
+          } else if (card.type === 'STORY') {
+            score += Math.max(0, card.acValue || 0) <= 3 ? 4 : 0;
+          }
+          return score;
+        };
         const scoredErosionCards = [...erosionCards]
           .map(card => ({
             card,
-            score: scoreCardValue(card, profile) + scorePlayableCard(gameState, bot, card, profile) * 0.25,
+            valueScore: scoreCardValue(card, profile),
+            playableScore: scorePlayableCard(gameState, bot, card, profile),
+            score: recoveryValue(card),
           }))
-          .sort((a, b) => b.score - a.score);
+          .sort((a, b) =>
+            b.score - a.score ||
+            b.valueScore - a.valueScore ||
+            b.playableScore - a.playableScore
+          );
         selectedErosionCard = scoredErosionCards[0]?.card;
+        selectedErosionScore = scoredErosionCards[0]?.score;
         const lowDeck = profile.riskThresholds?.lowDeck ?? 10;
         const criticalDeck = profile.riskThresholds?.criticalDeck ?? 3;
         const stopSelfDrawAtDeck = profile.riskThresholds?.stopSelfDrawAtDeck ?? lowDeck;
         const deckDanger = bot.deck.length <= stopSelfDrawAtDeck;
         const canUseChoiceC = bot.deck.length > Math.max(criticalDeck + 2, 5) && bot.erosionBack.filter(Boolean).length < 9;
+        const canUseHighValueChoiceC = bot.deck.length > Math.max(criticalDeck + 1, 4) && bot.erosionBack.filter(Boolean).length < 9;
         const handPressure = bot.hand.length <= 2;
         const ownUnits = bot.unitZone.filter(Boolean).length;
         const readyDefenders = bot.unitZone.filter(unit =>
@@ -7705,18 +7794,6 @@ export const ServerGameService = {
           (ownUnits === 0 && opponentUnits >= 2);
         const selectedScore = scoredErosionCards[0]?.score || 0;
         const openUnitSlot = bot.unitZone.some(slot => slot === null);
-        const recoveryValue = (card: Card) => {
-          const preserve = profile.preserveCardIds?.[card.id] || profile.preserveCardIds?.[card.uniqueId] || 0;
-          const preferred = profile.preferredCardIds?.[card.id] || profile.preferredCardIds?.[card.uniqueId] || 0;
-          let score = scoreCardValue(card, profile) + scorePlayableCard(gameState, bot, card, profile) * 0.2;
-          if (card.type === 'UNIT') {
-            if (card.godMark) score += 72;
-            if (preserve > 0 || preferred > 0) score += 24 + preserve * 0.8 + preferred * 0.45;
-            score += Math.max(0, card.damage || 0) * 5;
-            score += Math.max(0, card.power || 0) / 900;
-          }
-          return score;
-        };
         const emergencyRecoveryCard = scoredErosionCards
           .filter(({ card }) => {
           if (!canUseChoiceC || !openUnitSlot || card.type !== 'UNIT') return false;
@@ -7732,11 +7809,42 @@ export const ServerGameService = {
           !!emergencyRecoveryCard &&
           incomingThreat.lethalWithoutBlocks &&
           readyDefenders < Math.max(1, incomingThreat.defendersNeeded);
+        const selectedRecoveryValue = selectedErosionCard ? recoveryValue(selectedErosionCard) : 0;
+        const selectedPlayableNow = (() => {
+          const card = selectedErosionCard;
+          if (!card || card.type !== 'UNIT') return false;
+          if (!openUnitSlot) return false;
+          if (bot.factionLock && card.faction !== bot.factionLock) return false;
+          const colorCheck = ServerGameService.getColorRequirementResult(bot, card.colorReq || {});
+          if (!colorCheck.valid) return false;
+          const effectiveCost = ServerGameService.getEffectivePlayCost(bot, card, gameState);
+          if (effectiveCost < 0) return true;
+          return ServerGameService.canBotPayPositiveCost(gameState, bot, effectiveCost, card.color, card);
+        })();
+        const boardBehind = ownUnits <= Math.max(1, opponentUnits);
+        const highValueLowDeckRecovery =
+          canUseHighValueChoiceC &&
+          deckDanger &&
+          !!selectedErosionCard &&
+          (
+            selectedRecoveryValue >= 70 ||
+            selectedScore >= 50 ||
+            (selectedErosionCard.godMark && (selectedRecoveryValue >= 45 || selectedScore >= 30))
+          ) &&
+          (
+            handPressure ||
+            (needsTempoRecovery && selectedPlayableNow) ||
+            (boardBehind && selectedPlayableNow) ||
+            (selectedErosionCard.godMark && selectedPlayableNow)
+          );
 
         if (needsEmergencyRecovery) {
           selectedErosionCard = emergencyRecoveryCard;
           erosionChoice = 'C';
           erosionReason = 'emergency defense: recover a high-value playable unit from erosion despite low deck pressure';
+        } else if (highValueLowDeckRecovery) {
+          erosionChoice = 'C';
+          erosionReason = 'low deck but high-value recovery: take the erosion card because the current board or hand needs it';
         } else if (deckDanger && selectedErosionCard) {
           erosionChoice = 'B';
           erosionReason = 'low deck: preserve the best erosion card without spending another deck card';
@@ -7764,6 +7872,7 @@ export const ServerGameService = {
           ownDeck: bot.deck.length,
           handSize: bot.hand.length,
           erosionReason,
+          selectedScore: selectedErosionScore !== undefined ? Number(selectedErosionScore.toFixed(1)) : undefined,
         },
       });
       await ServerGameService.handleErosionChoice(gameState, playerUid, erosionChoice, selectedErosionCard?.gamecardId);
@@ -7807,6 +7916,9 @@ export const ServerGameService = {
       }
 
       if (difficulty === 'hard' && ServerGameService.hasBotClosingAttackCommitment(gameState, playerUid)) {
+        if (await ServerGameService.tryActivateBotEffect(gameState, playerUid, 'MAIN_COMBAT_SETUP', Math.max(42, turnPlan?.minBattleEffectScore ?? 9.5), onUpdate)) {
+          return;
+        }
         const attackCandidates = bot.unitZone.filter(unit => canUnitAttack(gameState, unit)) as Card[];
         if (attackCandidates.length > 0) {
           ServerGameService.recordAiDecision(gameState, playerUid, {
@@ -7850,6 +7962,9 @@ export const ServerGameService = {
         const shouldAttackBeforeDeveloping = turnPlan.attackBeforeDeveloping;
 
         if (shouldAttackBeforeDeveloping) {
+          if (await ServerGameService.tryActivateBotEffect(gameState, playerUid, 'MAIN_PRE_ATTACK_SETUP', Math.max(42, turnPlan?.minBattleEffectScore ?? 9.5), onUpdate)) {
+            return;
+          }
           ServerGameService.markBotClosingAttackCommitment(gameState, playerUid, turnPlan);
           ServerGameService.recordAiDecision(gameState, playerUid, {
             action: 'ENTER_BATTLE',
@@ -7993,14 +8108,49 @@ export const ServerGameService = {
             defensivePaymentPenalty += 18;
           }
         }
+        const redScadiWindow = difficulty === 'hard' && profile.id === 'red-dikai'
+          ? ServerGameService.getRedDikaiScadiErosionWindow(bot)
+          : undefined;
+        let scadiErosionPaymentBonus = 0;
+        if (redScadiWindow && estimatedDeckPayment > 0) {
+          const adjustment = ServerGameService.scoreRedDikaiScadiDeckPaymentAdjustment(bot, estimatedDeckPayment);
+          scadiErosionPaymentBonus -= adjustment;
+        }
+        const exhaustedClosingAttackers = exhaustedPaymentUnits
+          .map(id => bot.unitZone.find(unit => unit?.gamecardId === id))
+          .filter((unit): unit is Card => !!unit && canUnitAttack(gameState, unit));
+        const exhaustedClosingDamage = exhaustedClosingAttackers.reduce((sum, unit) => sum + Math.max(0, unit.damage || 0), 0);
+        const addedImmediateDamage = card.type === 'UNIT' && card.isrush && bot.unitZone.some(slot => slot === null)
+          ? Math.max(0, card.damage || 0)
+          : 0;
+        let closingPaymentPenalty = 0;
+        if (
+          difficulty === 'hard' &&
+          turnPlan &&
+          isClosingTurnPlan(turnPlan) &&
+          gameState.turnCount > 1 &&
+          exhaustedClosingAttackers.length > 0
+        ) {
+          const projectedClosingDamage = Math.max(0, turnPlan.totalAvailableDamage - exhaustedClosingDamage + addedImmediateDamage);
+          const breaksClosingDamage = projectedClosingDamage < Math.max(1, turnPlan.damageToCritical);
+          closingPaymentPenalty +=
+            80 +
+            exhaustedClosingAttackers.length * 24 +
+            exhaustedClosingDamage * 18;
+          if (breaksClosingDamage || turnPlan.lethalWindow || turnPlan.tacticalLine === 'lethal' || turnPlan.tacticalLine === 'erosion-lethal') {
+            closingPaymentPenalty += 90;
+          }
+        }
         return {
           card,
           rawScore,
-          score: rawScore + defenseDevelopmentBonus - defensivePaymentPenalty,
+          score: rawScore + defenseDevelopmentBonus + scadiErosionPaymentBonus - defensivePaymentPenalty - closingPaymentPenalty,
           effectiveCost,
           initialPaymentSelection,
           defensivePaymentPenalty,
           defenseDevelopmentBonus,
+          scadiErosionPaymentBonus,
+          closingPaymentPenalty,
           exhaustedPaymentUnits,
           estimatedDeckPayment,
           netReadyDefenders,
@@ -8049,6 +8199,7 @@ export const ServerGameService = {
             rawScore: Number(chosenPlayOption.rawScore.toFixed(1)),
             defensivePaymentPenalty: Number(chosenPlayOption.defensivePaymentPenalty.toFixed(1)),
             defenseDevelopmentBonus: Number(chosenPlayOption.defenseDevelopmentBonus.toFixed(1)),
+            closingPaymentPenalty: Number(chosenPlayOption.closingPaymentPenalty.toFixed(1)),
             paymentExhaustsUnits: chosenPlayOption.exhaustedPaymentUnits.length,
             estimatedDeckPayment: chosenPlayOption.estimatedDeckPayment,
             netReadyDefenders: chosenPlayOption.netReadyDefenders,
@@ -8105,6 +8256,7 @@ export const ServerGameService = {
               rawScore: Number(chosenPlayOption.rawScore.toFixed(1)),
               defensivePaymentPenalty: Number(chosenPlayOption.defensivePaymentPenalty.toFixed(1)),
               defenseDevelopmentBonus: Number(chosenPlayOption.defenseDevelopmentBonus.toFixed(1)),
+              closingPaymentPenalty: Number(chosenPlayOption.closingPaymentPenalty.toFixed(1)),
               estimatedDeckPayment: chosenPlayOption.estimatedDeckPayment,
             },
           });
@@ -8264,6 +8416,10 @@ export const ServerGameService = {
       const comboAllianceAttack = difficulty === 'hard' && !forcedAttackUnit
         ? getComboAllianceAttack(gameState, bot, profile, attackCandidates)
         : undefined;
+      const minimumAttackScore =
+        difficulty === 'hard' && !forcedAttackUnit && !isClosingTurnPlan(turnPlan) && !turnPlan?.desperationAttack
+          ? 14
+          : 0;
       if (comboAllianceAttack) {
         ServerGameService.markBotClosingAttackCommitment(gameState, playerUid, turnPlan);
         comboAllianceAttack.attackers.forEach(card => reservedDefenderIds.delete(card.gamecardId));
@@ -8299,7 +8455,7 @@ export const ServerGameService = {
         return;
       }
       const attacker = difficulty === 'hard'
-        ? forcedAttackUnit || (scoredAvailableAttackers[0]?.score > 0 ? scoredAvailableAttackers[0].card : undefined)
+        ? forcedAttackUnit || (scoredAvailableAttackers[0]?.score > minimumAttackScore ? scoredAvailableAttackers[0].card : undefined)
         : forcedAttackUnit || bot.unitZone.find(c => {
         if (!c || c.isExhausted || c.canAttack === false) return false;
         if ((c as any).battleForbiddenByEffect) return false;
@@ -8339,6 +8495,7 @@ export const ServerGameService = {
             dynamicCounterPressure,
             ownErosion,
             planMode: turnPlan?.mode,
+            minimumAttackScore,
           },
           candidates: scoredAvailableAttackers.slice(0, 3).map(candidate => ({
             name: ServerGameService.getAiCardName(candidate.card),
@@ -8371,6 +8528,7 @@ export const ServerGameService = {
             reservedDefenders: reservedDefenderIds.size,
             heldUnfavorableAttack,
             bestAttackScore: scoredAvailableAttackers[0]?.score,
+            minimumAttackScore,
             opponentPotentialDamage,
             dynamicCounterPressure,
             ownErosion,

@@ -210,7 +210,7 @@ function logToText(log: any) {
 }
 
 function hasTimingWarningText(text: string) {
-  if (/prefers/i.test(text)) return true;
+  if (/\bprefers\s+(?:MAIN|BATTLE|BATTLE_FREE|COUNTERING|DEFENSE_DECLARATION|DAMAGE_CALCULATION)\b/i.test(text)) return true;
   return text.split(/[、,|]/).some(part => /timing\s+[^、,|]*-[0-9]/i.test(part));
 }
 

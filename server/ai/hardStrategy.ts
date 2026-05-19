@@ -2484,14 +2484,22 @@ function effectTargetControllers(effect: CardEffect) {
 }
 
 function estimateEffectPaymentCost(effect: CardEffect) {
-  const explicitCost = Number(effect.playCost || 0);
+  const explicitCost = Number((effect.cost as any)?.paymentCost || effect.playCost || 0);
   if (Number.isFinite(explicitCost) && explicitCost > 0) return explicitCost;
 
   const text = `${effect.description || ''} ${effect.content || ''}`;
   const match = text.match(/鏀粯\s*(\d+)\s*璐圭敤/) ||
     text.match(/pay\s*(\d+)\s*(?:cost|resource)?/i);
   const parsed = match ? Number(match[1]) : 0;
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+
+  const looksLikeAccessPayment = /支付|鏀粯|敮浠|费|費|费用|璐|璐圭敤|pay|payment|cost|resource/i.test(text);
+  return effect.cost && looksLikeAccessPayment ? 1 : 0;
+}
+
+function effectPaymentExhaustsSource(effect: CardEffect) {
+  const text = `${effect.description || ''} ${effect.content || ''}`;
+  return /横置|妯疆|exhaust/i.test(text);
 }
 
 function estimateDeckPaymentForEffect(player: PlayerState, sourceCard: Card, effect: CardEffect) {
@@ -2499,6 +2507,7 @@ function estimateDeckPaymentForEffect(player: PlayerState, sourceCard: Card, eff
   if (paymentCost <= 0) return 0;
 
   const sourceColor = sourceCard.color === 'NONE' ? undefined : sourceCard.color;
+  const excludeSourcePayment = effectPaymentExhaustsSource(effect);
   const hasFeijing = player.hand.some(card =>
     card.gamecardId !== sourceCard.gamecardId &&
     card.feijingMark &&
@@ -2506,7 +2515,12 @@ function estimateDeckPaymentForEffect(player: PlayerState, sourceCard: Card, eff
   );
   const feijingReduction = hasFeijing ? 3 : 0;
   const readyUnitPayment = player.unitZone
-    .filter((unit): unit is Card => !!unit && !unit.isExhausted && !(unit as any).data?.cannotExhaustByEffect)
+    .filter((unit): unit is Card =>
+      !!unit &&
+      !unit.isExhausted &&
+      !(unit as any).data?.cannotExhaustByEffect &&
+      (!excludeSourcePayment || unit.gamecardId !== sourceCard.gamecardId)
+    )
     .reduce((total, unit) => {
       const data = (unit as any).data || {};
       const accessMin = Math.max(1, Number(data.accessTapMinValue || 1));

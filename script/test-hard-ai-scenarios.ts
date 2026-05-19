@@ -2515,6 +2515,58 @@ function testEffectPaymentUsesActivationCostNotSourcePlayCost(): ScenarioResult 
   );
 }
 
+function testEffectCostFunctionPrecheckSkipsUnaffordableActivation(): ScenarioResult {
+  const profile = getDeckAiProfile('big-salala');
+  const paidCost = (async () => true) as any;
+  paidCost.paymentCost = 1;
+  paidCost.paymentColor = 'GREEN';
+  const source = unit({
+    id: '103090078',
+    fullName: 'Windmill Cannon',
+    color: 'GREEN',
+    faction: 'Green Engine',
+    power: 2500,
+    damage: 2,
+    effects: [effect({
+      id: '103090078_destroy_later',
+      type: 'ACTIVATE',
+      triggerLocation: ['UNIT'],
+      description: 'pay 1 cost and exhaust this: destroy later',
+      condition: () => true,
+      cost: paidCost,
+      targetSpec: { controller: 'OPPONENT', zones: ['UNIT'], minSelections: 1, maxSelections: 1 },
+    })],
+  });
+  const target = unit({
+    id: 'OPPONENT_TARGET_FOR_WINDMILL',
+    fullName: 'Opponent Target',
+    power: 1500,
+    damage: 1,
+  });
+  const state = game(
+    {
+      deck: [],
+      unitZone: [source, null, null, null, null, null],
+      erosionBack: erosionCards(9, 'BOT_EFFECT_COST_EROSION'),
+      botDifficulty: 'hard',
+      botDeckProfileId: profile.id,
+    },
+    { unitZone: [target, null, null, null, null, null] },
+    {
+      phase: 'MAIN',
+      botDifficulty: 'hard',
+      botDeckProfiles: { BOT: profile.id },
+    }
+  );
+  const candidates = ServerGameService.getBotActivatableEffectCandidates(state, 'BOT') as any[];
+  const included = candidates.some(candidate => candidate.effect?.id === '103090078_destroy_later');
+  return assertScenario(
+    'effect cost function precheck skips unaffordable activation',
+    !included,
+    `included=${included}, candidates=${candidates.map(candidate => `${candidate.effect?.id}:${candidate.paymentCost}`).join(',')}`
+  );
+}
+
 function testOpeningFirstPlayerPaymentUsesUnitAgainstNonAggro(): ScenarioResult {
   const profile = getDeckAiProfile('white-temple');
   const payer = unit({
@@ -5251,6 +5303,7 @@ const scenarios: ScenarioRun[] = [
   testWhiteTempleEscortTargetsOpponentFirst,
   testBotDoesNotAlwaysSpendFeijing,
   testEffectPaymentUsesActivationCostNotSourcePlayCost,
+  testEffectCostFunctionPrecheckSkipsUnaffordableActivation,
   testOpeningFirstPlayerPaymentUsesUnitAgainstNonAggro,
   testOpeningFirstPlayerPaymentStillRespectsAggro,
   testPaymentProtectsGodMark,

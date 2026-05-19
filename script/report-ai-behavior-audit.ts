@@ -189,6 +189,11 @@ function markdownTable(headers: string[], rows: Array<Array<string | number>>) {
   ].join('\n');
 }
 
+function hasTimingWarningText(text: string) {
+  if (/prefers/i.test(text)) return true;
+  return text.split(/[、,|]/).some(part => /timing\s+[^、,|]*-[0-9]/i.test(part));
+}
+
 function stringifyJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
@@ -592,7 +597,7 @@ function analyzeDecisionLogs(findings: BehaviorFinding[], result: any) {
     if (action === 'ACTIVATE_EFFECT') {
       const notes = `${detail(log, 'notes')} ${log.reason || ''}`;
       const hasClearPayoff = /lethal|close|closing|saves|beats|threat|combo|斩杀|保|威胁|magic spear reset/i.test(notes);
-      if (/prefers|timing .*-[0-9]/i.test(notes) && !(hasClearPayoff && score !== undefined && score >= 18)) {
+      if (hasTimingWarningText(notes) && !(hasClearPayoff && score !== undefined && score >= 18)) {
         addFinding(findings, result, 'BAD_EFFECT_TIMING', {
           deck,
           turn: log.turn,

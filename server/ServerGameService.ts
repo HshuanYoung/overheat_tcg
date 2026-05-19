@@ -6237,20 +6237,35 @@ export const ServerGameService = {
   },
 
   getBotEffectPaymentCost(effect: CardEffect) {
-    const explicitCost = Number(effect.playCost || 0);
+    const explicitCost = Number((effect.cost as any)?.paymentCost || effect.playCost || 0);
     if (Number.isFinite(explicitCost) && explicitCost > 0) return explicitCost;
 
     const text = `${effect.description || ''} ${effect.content || ''}`;
     const match = text.match(/支付\s*(\d+)\s*费用/) ||
       text.match(/pay\s*(\d+)\s*(?:cost|resource)?/i);
     const parsed = match ? Number(match[1]) : 0;
-    return Number.isFinite(parsed) ? parsed : 0;
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    const looksLikeAccessPayment = /支付|鏀粯|敮浠|费|費|费用|璐|璐圭敤|pay|payment|cost|resource/i.test(text);
+    return effect.cost && looksLikeAccessPayment ? 1 : 0;
   },
 
-  canBotPayPositiveCost(gameState: GameState, player: PlayerState, cost: number, cardColor?: string, sourceCard?: Card) {
+  botEffectPaymentExhaustsSource(effect: CardEffect) {
+    const text = `${effect.description || ''} ${effect.content || ''}`;
+    return /横置|妯疆|exhaust/i.test(text);
+  },
+
+  canBotPayPositiveCost(
+    gameState: GameState,
+    player: PlayerState,
+    cost: number,
+    cardColor?: string,
+    sourceCard?: Card,
+    options: { excludeUnitIds?: string[] } = {}
+  ) {
     if (cost <= 0) return true;
     const normalizedColor = cardColor === 'NONE' ? undefined : cardColor;
     const sourceCardId = sourceCard?.gamecardId;
+    const excludedUnitIds = new Set(options.excludeUnitIds || []);
 
     const hasSpecialSubstitute = player.hand.some(card =>
       ServerGameService.canUse204000145AsPaymentSubstitute(card, normalizedColor, cost, sourceCardId) ||
@@ -6268,7 +6283,7 @@ export const ServerGameService = {
     if (hasFeijing) remainingCost = Math.max(0, remainingCost - 3);
 
     const readyUnitPayment = player.unitZone
-      .filter((card): card is Card => !!card && !card.isExhausted && !(card as any).data?.cannotExhaustByEffect)
+      .filter((card): card is Card => !!card && !card.isExhausted && !(card as any).data?.cannotExhaustByEffect && !excludedUnitIds.has(card.gamecardId))
       .reduce((total, card) => {
         const data = (card as any).data || {};
         const accessMin = Math.max(1, Number(data.accessTapMinValue || 1));
@@ -6310,7 +6325,8 @@ export const ServerGameService = {
       player,
       paymentCost,
       paymentTarget?.color || query.paymentColor,
-      paymentTarget || sourceCard
+      paymentTarget || sourceCard,
+      { excludeUnitIds: query.context?.paymentOptions?.excludeExhaustUnitIds || [] }
     );
   },
 
@@ -6715,7 +6731,12 @@ export const ServerGameService = {
           const rules = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, card, effect, location);
           if (!rules.valid) return undefined;
           const paymentCost = ServerGameService.getBotEffectPaymentCost(effect);
-          if (paymentCost > 0 && !ServerGameService.canBotPayPositiveCost(gameState, player, paymentCost, card.color, card)) {
+          const paymentOptions = ServerGameService.botEffectPaymentExhaustsSource(effect)
+            ? { excludeExhaustUnitIds: [card.gamecardId] }
+            : undefined;
+          if (paymentCost > 0 && !ServerGameService.canBotPayPositiveCost(gameState, player, paymentCost, card.color, card, {
+            excludeUnitIds: paymentOptions?.excludeExhaustUnitIds,
+          })) {
             return undefined;
           }
           const projectedPayment = paymentCost > 0
@@ -6726,6 +6747,7 @@ export const ServerGameService = {
                 cardId: card.gamecardId,
                 sourceCardId: card.gamecardId,
                 paymentTargetId: card.gamecardId,
+                paymentOptions,
               },
             })
             : {};

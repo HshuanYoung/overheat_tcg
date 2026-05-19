@@ -209,6 +209,11 @@ function logToText(log: any) {
   return JSON.stringify(log);
 }
 
+function hasTimingWarningText(text: string) {
+  if (/prefers/i.test(text)) return true;
+  return text.split(/[、,|]/).some(part => /timing\s+[^、,|]*-[0-9]/i.test(part));
+}
+
 function describeCard(card: Card | null | undefined) {
   if (!card) return null;
   return {
@@ -343,7 +348,7 @@ function collectDecisionDiagnostics(logs: AiDecisionLog[]) {
     if (log.action === 'ACTIVATE_EFFECT_FAILED') metrics.EFFECT_FAILED++;
     if (log.action === 'ACTIVATE_EFFECT') {
       const notes = rawLogDetail(log, 'notes');
-      if (/prefers|timing .*-/i.test(notes)) metrics.BAD_EFFECT_TIMING++;
+      if (hasTimingWarningText(notes)) metrics.BAD_EFFECT_TIMING++;
     }
   }
 

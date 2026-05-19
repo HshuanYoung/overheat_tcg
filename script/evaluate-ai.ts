@@ -276,6 +276,8 @@ function collectDecisionDiagnostics(logs: AiDecisionLog[]) {
     exhaustedPayments: number;
     ended: boolean;
     comboActions: number;
+    firstAttackSeen: boolean;
+    playsBeforeFirstAttack: number;
   };
   const traces = new Map<string, TurnTrace>();
   const metrics: Record<string, number> = {
@@ -300,6 +302,8 @@ function collectDecisionDiagnostics(logs: AiDecisionLog[]) {
         exhaustedPayments: 0,
         ended: false,
         comboActions: 0,
+        firstAttackSeen: false,
+        playsBeforeFirstAttack: 0,
       });
     }
     return traces.get(key)!;
@@ -308,8 +312,14 @@ function collectDecisionDiagnostics(logs: AiDecisionLog[]) {
   for (const log of logs) {
     const trace = traceFor(log);
     if (log.action === 'TURN_PLAN') trace.plan = log;
-    if (log.action === 'ATTACK' || log.action === 'COMBO_ALLIANCE_ATTACK') trace.attacks++;
-    if (log.action === 'PLAY_CARD') trace.plays++;
+    if (log.action === 'ATTACK' || log.action === 'COMBO_ALLIANCE_ATTACK') {
+      trace.attacks++;
+      trace.firstAttackSeen = true;
+    }
+    if (log.action === 'PLAY_CARD') {
+      trace.plays++;
+      if (!trace.firstAttackSeen) trace.playsBeforeFirstAttack++;
+    }
     if (log.action === 'ACTIVATE_EFFECT' || log.action === 'PLAY_BATTLE_STORY') trace.effects++;
     if (log.action === 'PAYMENT') {
       trace.payments++;
@@ -342,11 +352,20 @@ function collectDecisionDiagnostics(logs: AiDecisionLog[]) {
     if (!plan) continue;
     const totalDamage = numericLogDetail(plan, 'totalDamage');
     const damageToCritical = Math.max(1, numericLogDetail(plan, 'damageToCritical'));
+    const hasLikelyDefenders = plan.details?.likelyDefenders !== undefined && plan.details?.likelyDefenders !== null;
+    const likelyDefenders = hasLikelyDefenders ? numericLogDetail(plan, 'likelyDefenders') : Number.POSITIVE_INFINITY;
+    const damageThroughLikelyDefenders = numericLogDetail(plan, 'damageThroughLikelyDefenders');
     const lethalPotential =
       truthyLogDetail(plan, 'lethalWindow') ||
       rawLogDetail(plan, 'tacticalLine') === 'lethal' ||
       rawLogDetail(plan, 'tacticalLine') === 'erosion-lethal' ||
-      totalDamage >= damageToCritical;
+      (likelyDefenders === 0 && totalDamage >= damageToCritical) ||
+      (damageThroughLikelyDefenders > 0 && damageThroughLikelyDefenders >= damageToCritical);
+    const forcingLethalPotential =
+      rawLogDetail(plan, 'tacticalLine') === 'lethal' ||
+      rawLogDetail(plan, 'tacticalLine') === 'erosion-lethal' ||
+      (likelyDefenders === 0 && totalDamage >= damageToCritical) ||
+      (damageThroughLikelyDefenders > 0 && damageThroughLikelyDefenders >= damageToCritical);
     const comboReady = truthyLogDetail(plan, 'comboReady') || truthyLogDetail(plan, 'comboPayoffPlayable');
     const incomingLethal = truthyLogDetail(plan, 'incomingLethal');
     const reserveDefenders = numericLogDetail(plan, 'reserveDefenders');
@@ -355,11 +374,11 @@ function collectDecisionDiagnostics(logs: AiDecisionLog[]) {
 
     if (lethalPotential && trace.attacks === 0 && trace.ended) metrics.MISSED_LETHAL++;
     if (comboReady && trace.comboActions === 0 && trace.ended) metrics.MISSED_COMBO++;
-    if (incomingLethal && !/defense|stabilize/i.test(mode)) metrics.UNDER_PRESSURE_NO_STABILIZE++;
+    if (incomingLethal && !lethalPotential && !/defense|stabilize/i.test(mode)) metrics.UNDER_PRESSURE_NO_STABILIZE++;
     if (trace.exhaustedPayments > 0 && (incomingLethal || reserveDefenders > 0 || defendersNeeded > 0)) {
       metrics.BAD_PAYMENT += trace.exhaustedPayments;
     }
-    if (lethalPotential && trace.plays >= 2 && trace.attacks > 0) metrics.OVER_DEVELOP++;
+    if (forcingLethalPotential && trace.playsBeforeFirstAttack >= 2 && trace.attacks > 0) metrics.OVER_DEVELOP++;
   }
 
   const tags = Object.entries(metrics)

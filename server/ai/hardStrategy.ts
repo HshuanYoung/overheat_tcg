@@ -21,6 +21,7 @@ import {
 } from './comboKnowledge';
 
 const getCardCost = (card: Card) => Math.max(0, card.baseAcValue ?? card.acValue ?? 0);
+const HARD_AI_HIGH_VALUE_BOARD_THRESHOLD = 58;
 
 export const countErosion = (player: PlayerState) =>
   player.erosionFront.filter(Boolean).length + player.erosionBack.filter(Boolean).length;
@@ -157,6 +158,7 @@ export interface HardAiTurnPlan {
   opponentErosion: number;
   attackers: number;
   totalAvailableDamage: number;
+  damageThroughLikelyDefenders: number;
   damageToCritical: number;
   lethalWindow: boolean;
   opponentArchetype?: string;
@@ -190,11 +192,13 @@ export function isClosingTurnPlan(plan: Pick<HardAiTurnPlan, 'mode' | 'lethalWin
   if (!plan) return false;
   if (plan.mode === 'defense' || plan.mode === 'stabilize' || plan.tacticalLine === 'stabilize') return false;
   const likelyDefenders = Number((plan as any).likelyDefenders || 0);
+  const damageThroughLikelyDefenders = Math.max(0, Number((plan as any).damageThroughLikelyDefenders || 0));
   return plan.lethalWindow ||
     plan.mode === 'lethal' ||
     plan.tacticalLine === 'lethal' ||
     plan.tacticalLine === 'erosion-lethal' ||
-    (likelyDefenders === 0 && plan.totalAvailableDamage >= Math.max(1, plan.damageToCritical));
+    (likelyDefenders === 0 && plan.totalAvailableDamage >= Math.max(1, plan.damageToCritical)) ||
+    (damageThroughLikelyDefenders >= Math.max(1, plan.damageToCritical));
 }
 
 export function battleDamageDeckImpact(damage: number, defender: PlayerState | null | undefined) {
@@ -686,6 +690,9 @@ export function buildTurnPlan(gameState: GameState, player: PlayerState, profile
   const ownErosion = countErosion(player);
   const opponentErosion = opponent ? countErosion(opponent) : 0;
   const totalAvailableDamage = attackers.reduce((sum, unit) => sum + (unit.damage || 0), 0);
+  const attackerDamage = attackers
+    .map(unit => Math.max(0, unit.damage || 0))
+    .sort((a, b) => b - a);
   const damageToCritical = damageToErosionCritical(opponent);
   const erosionPressureWindow = battleDamageCreatesErosionPressure(totalAvailableDamage, opponent);
   const lethalWindow = opponent ? battleDamageWouldDeckOut(totalAvailableDamage, opponent) : false;
@@ -847,6 +854,8 @@ export function buildTurnPlan(gameState: GameState, player: PlayerState, profile
     opponentErosion,
     attackers: attackers.length,
     totalAvailableDamage,
+    damageThroughLikelyDefenders: Math.max(0, totalAvailableDamage -
+      attackerDamage.slice(0, likelyDefenders).reduce((sum, damage) => sum + damage, 0)),
     likelyDefenders,
     opponentPotentialDamage,
     defendersNeededNextTurn: incomingThreat.defendersNeeded,
@@ -880,6 +889,8 @@ export function buildTurnPlan(gameState: GameState, player: PlayerState, profile
     if (typeof turnAdjustment.avoidSearch === 'boolean') avoidSearch = turnAdjustment.avoidSearch;
     if (turnAdjustment.notes?.length) notes.push(...turnAdjustment.notes);
   }
+  const finalDamageThroughLikelyDefenders = Math.max(0, totalAvailableDamage -
+    attackerDamage.slice(0, likelyDefenders).reduce((sum, damage) => sum + damage, 0));
   if (sequencing.shouldDevelopBeforeAttack && attackBeforeDeveloping) {
     attackBeforeDeveloping = false;
     minMainEffectScore = Math.min(minMainEffectScore, 5.5);
@@ -925,6 +936,7 @@ export function buildTurnPlan(gameState: GameState, player: PlayerState, profile
     opponentErosion,
     attackers: attackers.length,
     totalAvailableDamage,
+    damageThroughLikelyDefenders: finalDamageThroughLikelyDefenders,
     damageToCritical,
     lethalWindow,
     opponentArchetype: opponentDeckProfile?.archetype,
@@ -2202,6 +2214,27 @@ function getTempleHighValueResetOpportunity(
   };
 }
 
+function estimateRemainingDamageAfterCurrentBlock(gameState: GameState, defender: PlayerState, currentBattleDamage: number) {
+  if (!gameState.battleState?.attackers?.length) return 0;
+  const attackerUid = gameState.playerIds.find(uid => uid !== defender.uid);
+  const attacker = attackerUid ? gameState.players[attackerUid] : undefined;
+  if (!attacker) return 0;
+  const currentAttackers = new Set(gameState.battleState?.attackers || []);
+  return attacker.unitZone
+    .filter(unit => unit && !currentAttackers.has(unit.gamecardId) && canUnitAttack(gameState, unit))
+    .reduce((sum, unit) => sum + Math.max(0, unit?.damage || 0), 0);
+}
+
+function battleBlockStopsCurrentHitButStillDies(
+  gameState: GameState,
+  defender: PlayerState,
+  currentBattleDamage: number
+) {
+  if (!battleDamageWouldBeFatal(currentBattleDamage, defender)) return false;
+  const remainingDamage = estimateRemainingDamageAfterCurrentBlock(gameState, defender, currentBattleDamage);
+  return remainingDamage > 0 && battleDamageWouldBeFatal(remainingDamage, defender);
+}
+
 function getTempleMagicSpearBattleResetOpportunity(
   gameState: GameState,
   player: PlayerState,
@@ -2960,6 +2993,7 @@ export function chooseDefender(
   const deckPressure = defender.deck.length <= Math.max(deckImpact + 5, lowDeck);
   const incomingThreat = estimateIncomingThreat(gameState, defender, profile);
   const currentHitFatal = battleDamageWouldBeFatal(totalAttackerDamage, defender);
+  const doomedAfterCurrentBlock = battleBlockStopsCurrentHitButStillDies(gameState, defender, totalAttackerDamage);
   const highImpactHit = currentHitFatal || deckCritical || critical || danger || deckPressure || totalAttackerDamage >= 3;
   const attackerCombatValues = attackingUnits.map(unit => {
     const knowledge = getCardKnowledge(unit);
@@ -3097,6 +3131,17 @@ export function chooseDefender(
       if (sacrifice) score -= 18 + Math.min(28, boardPresenceValue * 0.28);
       else if (trades) score -= 10 + Math.min(18, boardPresenceValue * 0.18);
       if (card.godMark) score -= 16;
+    }
+    if (
+      doomedAfterCurrentBlock &&
+      (trades || sacrifice) &&
+      (
+        card.godMark ||
+        boardPresenceValue >= HARD_AI_HIGH_VALUE_BOARD_THRESHOLD ||
+        cardValue >= 55
+      )
+    ) {
+      score -= 420 + Math.min(90, boardPresenceValue * 0.6);
     }
     if (
       profile.id === 'white-temple' &&

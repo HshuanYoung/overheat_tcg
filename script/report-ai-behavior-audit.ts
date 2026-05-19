@@ -378,10 +378,13 @@ function analyzeTurnWindows(findings: BehaviorFinding[], result: any) {
     const planText = decisionText(plan, ['notes', 'comboNotes', 'tacticalNotes', 'tacticalLine']);
     const totalDamage = numericDetail(plan, 'totalDamage');
     const damageToCritical = numericDetail(plan, 'damageToCritical');
-    const likelyDefenders = numericDetail(plan, 'likelyDefenders');
+    const hasLikelyDefenders = plan.details?.likelyDefenders !== undefined && plan.details?.likelyDefenders !== null;
+    const likelyDefenders = hasLikelyDefenders ? numericDetail(plan, 'likelyDefenders') : Number.POSITIVE_INFINITY;
+    const damageThroughLikelyDefenders = numericDetail(plan, 'damageThroughLikelyDefenders');
     const lethalWindow =
       booleanDetail(plan, 'lethalWindow') ||
-      (likelyDefenders === 0 && damageToCritical > 0 && totalDamage >= damageToCritical && totalDamage > 0);
+      (likelyDefenders === 0 && damageToCritical > 0 && totalDamage >= damageToCritical && totalDamage > 0) ||
+      (damageThroughLikelyDefenders > 0 && damageToCritical > 0 && damageThroughLikelyDefenders >= damageToCritical);
     const attackBeforeDeveloping = booleanDetail(plan, 'attackBeforeDeveloping');
     const comboId = detail(plan, 'comboId');
     const comboReady =

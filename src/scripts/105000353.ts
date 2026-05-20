@@ -122,7 +122,7 @@ const card: Card = {
   isExhausted: false,
   isrush: false,
   canAttack: true,
-  feijingMark: true,
+  feijingMark: false,
   canResetCount: 0,
   effects: [effect_105000353_alchemy_power, effect_105000353_chain_copy],
   rarity: 'C',

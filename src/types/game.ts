@@ -255,6 +255,7 @@ export interface CardEffect {
   triggerEvent?: GameEventType | GameEventType[];
   isMandatory?: boolean;
   isGlobal?: boolean; // If true, the effect triggers for any card meeting the criteria (e.g. any card entering), not just self.
+  sourceSnapshotOnLeftField?: boolean; // Allows a left-field trigger to be queued from the source snapshot before refreshed instance IDs are applied.
   triggerPriority?: number; // Higher priority triggers are queued first for the same event.
   condition?: (gameState: GameState, playerState: PlayerState, card: Card, event?: GameEvent) => boolean;
   cost?: (gameState: GameState, playerState: PlayerState, card: Card) => boolean | Promise<boolean>;
@@ -325,6 +326,7 @@ export interface Card {
   temporaryHeroic?: boolean; // cleared at turn start
   temporaryCanAttackAny?: boolean; // cleared at turn start
   temporaryExtraColors?: CardColor[]; // cleared at turn start
+  persistentExtraColors?: CardColor[]; // kept while this instance remains on field
   effects?: CardEffect[];
   influencingEffects?: { sourceCardName: string; description: string }[];
   inAllianceGroup?: boolean;

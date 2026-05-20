@@ -620,7 +620,10 @@ export const ServerGameService = {
       } else if (c.color !== 'NONE') {
         availableColors[c.color] = (availableColors[c.color] || 0) + 1;
       }
-      const extraColors = (c as any).temporaryExtraColors;
+      const extraColors = [
+        ...((c as any).temporaryExtraColors || []),
+        ...((c as any).persistentExtraColors || [])
+      ];
       if (Array.isArray(extraColors)) {
         extraColors.forEach(color => {
           if (typeof color === 'string' && color !== c.color && color in availableColors) {
@@ -1032,6 +1035,13 @@ export const ServerGameService = {
       return;
     }
 
+    if (!ServerGameService.canUnitDefendInCurrentBattle(gameState, target)) {
+      delete gameState.battleState.forcedGuardTargetId;
+      delete gameState.battleState.defenseLockedToTargetId;
+      if (gameState.battleState.defender === target.gamecardId) delete gameState.battleState.defender;
+      if (gameState.battleState.unitTargetId === target.gamecardId) delete gameState.battleState.unitTargetId;
+      return;
+    }
     if (!ServerGameService.exhaustCard(target, gameState)) return;
     gameState.battleState.unitTargetId = target.gamecardId;
     gameState.battleState.defender = target.gamecardId;
@@ -1065,8 +1075,7 @@ export const ServerGameService = {
     const candidates = defenderPlayer.unitZone.filter((unit): unit is Card =>
       !!unit &&
       unit.id === '104020246' &&
-      !unit.isExhausted &&
-      !((unit as any).data?.cannotExhaustUntilTurn !== undefined && (unit as any).data.cannotExhaustUntilTurn >= gameState.turnCount)
+      ServerGameService.canUnitDefendInCurrentBattle(gameState, unit)
     );
 
     if (candidates.length !== 1) return false;
@@ -1116,6 +1125,7 @@ export const ServerGameService = {
     card.temporaryHeroic = false;
     card.temporaryCanAttackAny = false;
     delete (card as any).temporaryExtraColors;
+    delete (card as any).persistentExtraColors;
     card.temporaryBuffSources = {};
     card.temporaryBuffDetails = {};
     card.influencingEffects = [];
@@ -1402,10 +1412,6 @@ export const ServerGameService = {
       targetPlayer.unitFromGraveToFieldTurn = gameState.turnCount;
     }
 
-    if ((targetZone === 'HAND' || targetZone === 'DECK') && sourceZone !== 'HAND' && sourceZone !== 'DECK') {
-      ServerGameService.refreshCardAsNewInstance(card);
-    }
-
     // Movement Replacement logic (e.g. 104010484)
     if (options?.isEffect && (targetZone === 'HAND' || targetZone === 'DECK' || targetZone === 'EROSION_FRONT' || targetZone === 'EROSION_BACK')) {
       if (card.effects) {
@@ -1435,6 +1441,10 @@ export const ServerGameService = {
         onlyLeftFieldEvent: true
       });
       clearBattlefieldState(card);
+    }
+
+    if ((targetZone === 'HAND' || targetZone === 'DECK') && sourceZone !== 'HAND' && sourceZone !== 'DECK') {
+      ServerGameService.refreshCardAsNewInstance(card);
     }
 
     if (!(card as any).data) {
@@ -2745,7 +2755,10 @@ export const ServerGameService = {
     if (gameState.triggeredEffectsQueue && gameState.triggeredEffectsQueue.length > 0) {
       const trigger = gameState.triggeredEffectsQueue.shift()!;
       let { card, effect, effectIndex, playerUid, event } = trigger;
-      const liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
+      let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
+      if (!liveSource && event?.sourceCardId === card.gamecardId) {
+        liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
+      }
       if (!liveSource) {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
         return;
@@ -4227,6 +4240,7 @@ export const ServerGameService = {
       }
     } else {
       // Unit combat
+      EventEngine.recalculateContinuousEffects(gameState);
       const defendingUnitId = gameState.battleState!.defender;
       const defendingUnit = defender.unitZone.find(c => c?.gamecardId === defendingUnitId);
 
@@ -4749,6 +4763,32 @@ export const ServerGameService = {
       return false;
     }
 
+    if (
+      !isEffect &&
+      (unit as any).data?.preventNextBattleDestroy &&
+      (
+        (unit as any).data.preventNextBattleDestroyUntilTurn === undefined ||
+        (unit as any).data.preventNextBattleDestroyUntilTurn >= gameState.turnCount
+      )
+    ) {
+      const sourceName = (unit as any).data?.preventNextBattleDestroySourceName || '战斗破坏防止';
+      delete (unit as any).data.preventNextBattleDestroy;
+      delete (unit as any).data.preventNextBattleDestroySourceName;
+      delete (unit as any).data.preventNextBattleDestroyUntilTurn;
+      gameState.logs.push(`[${sourceName}] 防止了 [${unit.fullName}] 将要被战斗破坏。`);
+      return false;
+    }
+
+    if (
+      !isEffect &&
+      (unit as any).data?.preventFirstBattleDestroyEachTurnSourceName &&
+      (unit as any).data.preventFirstBattleDestroyEachTurnUsedTurn !== gameState.turnCount
+    ) {
+      (unit as any).data.preventFirstBattleDestroyEachTurnUsedTurn = gameState.turnCount;
+      gameState.logs.push(`[${(unit as any).data.preventFirstBattleDestroyEachTurnSourceName}] 防止了 [${unit.fullName}] 本回合第一次将被战斗破坏。`);
+      return false;
+    }
+
     if ((unit as any).data?.indestructibleByEffect) {
       gameState.logs.push(`[${unit.fullName}] 因效果不会被破坏。`);
       return false;
@@ -5218,6 +5258,11 @@ export const ServerGameService = {
             delete (card as any).data.preventNextDestroySourceName;
             delete (card as any).data.preventNextDestroyUntilTurn;
           }
+          if ((card as any).data?.preventNextBattleDestroyUntilTurn !== undefined && (card as any).data.preventNextBattleDestroyUntilTurn < gameState.turnCount) {
+            delete (card as any).data.preventNextBattleDestroy;
+            delete (card as any).data.preventNextBattleDestroySourceName;
+            delete (card as any).data.preventNextBattleDestroyUntilTurn;
+          }
           if ((card as any).data?.forbiddenAlchemyBanishTurn !== undefined && (card as any).data.forbiddenAlchemyBanishTurn < gameState.turnCount) {
             delete (card as any).data.forbiddenAlchemyBanishTurn;
             delete (card as any).data.forbiddenAlchemySourceName;
@@ -5408,7 +5453,10 @@ export const ServerGameService = {
   ) {
     const { card, effectIndex, event, skipCost } = trigger;
     const effect = trigger.effect || card.effects?.[effectIndex];
-    const liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
+    let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
+    if (!liveSource && event?.sourceCardId === card.gamecardId) {
+      liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
+    }
 
     if (!effect || !liveSource) {
       await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
@@ -7840,18 +7888,8 @@ export const ServerGameService = {
         const attackingUnits = (gameState.battleState?.attackers || []).map(id =>
           attacker.unitZone.find(c => c?.gamecardId === id)
         ).filter(Boolean) as Card[];
-        const lockedTargetId = gameState.battleState?.defenseLockedToTargetId;
-        const minPower = gameState.battleState?.defensePowerRestriction || 0;
-        const maxPower = gameState.battleState?.defenseMaxPowerRestriction;
         const availableDefenders = bot.unitZone.filter(c =>
-          c &&
-          !c.isExhausted &&
-          !(c as any).battleForbiddenByEffect &&
-          !((c as any).data?.cannotDefendTurn === gameState.turnCount) &&
-          !((c as any).data?.cannotAttackOrDefendUntilTurn && (c as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) &&
-          (!lockedTargetId || c.gamecardId === lockedTargetId) &&
-          (c.power || 0) >= minPower &&
-          (maxPower === undefined || (c.power || 0) < maxPower)
+          ServerGameService.canUnitDefendInCurrentBattle(gameState, c)
         );
 
         const defender = chooseDefender(

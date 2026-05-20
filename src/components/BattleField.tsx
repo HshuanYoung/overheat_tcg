@@ -3361,16 +3361,26 @@ export const BattleField: React.FC = () => {
         cardMeta={Object.fromEntries(
           pendingQueryOptions
             .filter(o => !!o.card)
-            .map(o => [
-              o.card!.gamecardId || o.card!.id,
-              {
-                ownerName: o.ownerName,
-                slotLabel: o.slotLabel,
-                zoneLabel: o.zoneLabel || o.source,
-                isMine: o.isMine,
-                isFaceDown: o.card!.displayState === 'FRONT_FACEDOWN'
-              }
-            ])
+            .map(o => {
+              const card = o.card!;
+              const zoneLabel = o.zoneLabel || o.source;
+              const sourceZone = String(o.source || card.cardlocation || '').toUpperCase();
+              const isHiddenExile = sourceZone === 'EXILE' && card.displayState === 'FRONT_FACEDOWN';
+              const isHiddenErosionBack =
+                sourceZone === 'EROSION_BACK' ||
+                zoneLabel === 'EROSION_BACK' ||
+                zoneLabel === '侵蚀区背面';
+              return [
+                card.gamecardId || card.id,
+                {
+                  ownerName: o.ownerName,
+                  slotLabel: o.slotLabel,
+                  zoneLabel,
+                  isMine: o.isMine,
+                  isFaceDown: isHiddenExile || isHiddenErosionBack
+                }
+              ];
+            })
         )}
         selectedIds={selectedQueryIds}
         minSelections={game.pendingQuery?.minSelections}

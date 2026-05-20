@@ -244,6 +244,7 @@ const WealthCounter: React.FC<{
 const PlayerHalf: React.FC<{
   player: PlayerState;
   isOpponent?: boolean;
+  wealthValue?: number;
   onCardClick?: (card: Card, zone: string, index?: number, e?: React.MouseEvent) => void;
   onPreviewCard?: (card: Card) => void;
   onHoverCard?: (card: Card | null) => void;
@@ -259,7 +260,7 @@ const PlayerHalf: React.FC<{
   setViewingZone?: (zone: { title: string, type: string, isOpponentZone?: boolean } | null) => void;
   highlightedCardIds?: Set<string>;
   isSpectator?: boolean;
-}> = ({ player, isOpponent, onCardClick, onPreviewCard, onHoverCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone, highlightedCardIds, isSpectator }) => {
+}> = ({ player, isOpponent, wealthValue = 0, onCardClick, onPreviewCard, onHoverCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone, highlightedCardIds, isSpectator }) => {
   if (!player) return null;
   const unitZoneOffsetClass = ""; // Removed horizontal offset to prevent blocking exile area
   const getMobileErosionCount = (playerState: PlayerState): number | string => {
@@ -330,6 +331,9 @@ const PlayerHalf: React.FC<{
               isHighlighted={highlightedCardIds?.has((player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined)?.gamecardId || '')}
               displayMode="erosion_item"
             />
+            <div className="pointer-events-none flex justify-center">
+              <WealthCounter value={wealthValue} />
+            </div>
             <CardSlot
               card={player.erosionFront?.filter(Boolean).slice(-1)[0] || player.erosionBack?.filter(Boolean).slice(-1)[0] || null}
               label="侵蚀区"
@@ -607,6 +611,9 @@ const PlayerHalf: React.FC<{
               isOpponent={isOpponent}
               displayMode="erosion_item"
             />
+            <div className={cn("pointer-events-none flex justify-center", isOpponent && "rotate-180")}>
+              <WealthCounter value={wealthValue} isOpponent={isOpponent} />
+            </div>
           </>
         ) : (
           // Player Right: Exile, Grave, Deck
@@ -760,6 +767,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
         <PlayerHalf
           player={opponent}
           isOpponent
+          wealthValue={opponentWealth}
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
           onHoverCard={setHoveredCard}
@@ -828,15 +836,6 @@ export const PlayField: React.FC<PlayFieldProps> = ({
                 </div>
               )}
             </div>
-
-            <div className="h-7 w-px bg-white/10 md:h-8" />
-
-            <div className="flex items-center gap-1">
-              <WealthCounter value={opponentWealth} isOpponent />
-              <WealthCounter value={playerWealth} />
-            </div>
-
-            <div className="h-7 w-px bg-white/10 md:h-8" />
 
             {/* Phase transition */}
             <div
@@ -948,6 +947,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
       <div className="flex-1 min-h-0">
         <PlayerHalf
           player={player}
+          wealthValue={playerWealth}
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
           onHoverCard={setHoveredCard}

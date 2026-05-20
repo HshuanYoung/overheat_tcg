@@ -707,7 +707,7 @@ export const ServerGameService = {
       if (!unit) return false;
       const forcedAttackTurn = (unit as any).data?.forcedAttackTurn;
       if (forcedAttackTurn !== gameState.turnCount) return false;
-      if (unit.isExhausted || unit.canAttack === false) return false;
+      if (!ServerGameService.canExhaustForDeclaration(unit, gameState) || unit.canAttack === false) return false;
       if ((unit as any).battleForbiddenByEffect) return false;
       if ((unit as any).data?.cannotAttackThisTurn === gameState.turnCount) return false;
       if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) return false;
@@ -977,6 +977,12 @@ export const ServerGameService = {
     }
     card.isExhausted = true;
     return true;
+  },
+
+  canExhaustForDeclaration(card: Card | null | undefined, gameState: GameState) {
+    if (!card || card.isExhausted) return false;
+    const untilTurn = (card as any).data?.cannotExhaustUntilTurn;
+    return untilTurn === undefined || untilTurn < gameState.turnCount;
   },
 
   readyCard(card: Card) {
@@ -3868,7 +3874,7 @@ export const ServerGameService = {
       if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotAttackOrDefendSourceName || '卡牌效果'}] 不能宣言攻击`);
       }
-      if ((unit as any).data?.cannotExhaustUntilTurn !== undefined && (unit as any).data.cannotExhaustUntilTurn >= gameState.turnCount) {
+      if (!ServerGameService.canExhaustForDeclaration(unit, gameState)) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotExhaustSourceName || '卡牌效果'}] 不能横置`);
       }
       if (isAlliance && (unit as any).data?.cannotAllianceByEffect) {
@@ -4036,7 +4042,7 @@ export const ServerGameService = {
       if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotAttackOrDefendSourceName || '卡牌效果'}] 不能宣言防御`);
       }
-      if ((unit as any).data?.cannotExhaustUntilTurn !== undefined && (unit as any).data.cannotExhaustUntilTurn >= gameState.turnCount) {
+      if (!ServerGameService.canExhaustForDeclaration(unit, gameState)) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotExhaustSourceName || '卡牌效果'}] 不能横置`);
       }
 
@@ -4116,7 +4122,7 @@ export const ServerGameService = {
       const mustDefend = attackingUnits.some(unit => (unit as any).data?.mustBeDefendedTurn === gameState.turnCount);
       const hasAvailableDefender = player.unitZone.some(unit =>
         unit &&
-        !unit.isExhausted &&
+        ServerGameService.canExhaustForDeclaration(unit, gameState) &&
         !(unit as any).battleForbiddenByEffect &&
         !((unit as any).data?.cannotDefendTurn === gameState.turnCount) &&
         !((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount)

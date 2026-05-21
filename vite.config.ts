@@ -17,8 +17,37 @@ export default defineConfig(({ mode }) => {
       include: ['react', 'react-dom', 'react-router-dom', 'motion/react'],
       exclude: ['framer-motion'],
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) {
+              if (id.includes('/src/scripts/') || id.includes('\\src\\scripts\\')) {
+                const fileName = path.basename(id);
+                if (fileName === 'BaseUtil.ts') return 'game-engine';
+                const prefix = fileName.slice(0, 3);
+                if (/^\d{3}$/.test(prefix)) return `card-scripts-${prefix}`;
+                return 'card-scripts-misc';
+              }
+              if (id.includes('/src/services/') || id.includes('\\src\\services\\')) return undefined;
+              return undefined;
+            }
+
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
+              return 'vendor-react';
+            }
+            if (id.includes('socket.io-client') || id.includes('engine.io-client') || id.includes('engine.io-parser')) {
+              return 'vendor-socket';
+            }
+            if (id.includes('motion')) return 'vendor-motion';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            return 'vendor';
+          },
+        },
+      },
+    },
     server: {
-      allowedHosts: ['hsyoung.com', 'www.hsyoung.com', 'frp-all.com'],
+      allowedHosts: ['hsyoung.icu', 'www.hsyoung.icu', 'frp-all.com'],
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
@@ -41,7 +70,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       hmr: process.env.DISABLE_HMR !== 'true' ? {
-        host: 'hsyoung.com',
+        host: 'hsyoung.icu',
       } : false,
     },
   };

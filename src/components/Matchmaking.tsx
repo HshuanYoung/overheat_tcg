@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 import { validateDeckForBattle } from '../lib/deckValidation';
 import { Deck } from '../types/game';
 import { PageFallback } from './PageFallback';
+import { useCardCatalog } from '../hooks/useCardCatalog';
 
 export const Matchmaking: React.FC = () => {
   const navigate = useNavigate();
@@ -25,8 +26,12 @@ export const Matchmaking: React.FC = () => {
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = getAuthToken();
+  const {
+    getCardByReference,
+    loading: cardsLoading
+  } = useCardCatalog({ includeEffects: false });
   const selectedDeck = myDecks.find(deck => deck.id === selectedDeckId) || null;
-  const selectedDeckValidation = validateDeckForBattle(selectedDeck);
+  const selectedDeckValidation = validateDeckForBattle(selectedDeck, cardsLoading ? undefined : getCardByReference);
 
   const clearSearchTimers = () => {
     if (timerRef.current) {
@@ -235,7 +240,7 @@ export const Matchmaking: React.FC = () => {
             className="absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl"
           >
             {myDecks.map((deck, index) => {
-              const validation = validateDeckForBattle(deck);
+              const validation = validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference);
               const active = selectedDeckId === deck.id;
               return (
                 <button
@@ -273,7 +278,7 @@ export const Matchmaking: React.FC = () => {
     </div>
   );
 
-  if (loading) {
+  if (loading || cardsLoading) {
     return (
       <PageFallback
         title="对战模式加载中"

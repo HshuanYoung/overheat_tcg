@@ -6,6 +6,7 @@ import { Deck } from '../types/game';
 import { cn } from '../lib/utils';
 import { validateDeckForBattle } from '../lib/deckValidation';
 import { getAuthToken, getAuthUser, socket } from '../socket';
+import { useCardCatalog } from '../hooks/useCardCatalog';
 
 interface BugCupCurrent {
   edition: number;
@@ -72,6 +73,10 @@ export const BugCup: React.FC = () => {
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = getAuthToken();
   const myUid = getAuthUser()?.uid?.toString();
+  const {
+    getCardByReference,
+    loading: cardsLoading
+  } = useCardCatalog({ includeEffects: false });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -96,7 +101,7 @@ export const BugCup: React.FC = () => {
   const selectedDecks = selectedDeckIds.map(id => myDecks.find(deck => deck.id === id) || null);
   const selectedDeckErrors = selectedDecks
     .filter(Boolean)
-    .map(deck => validateDeckForBattle(deck))
+    .map(deck => validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference))
     .filter(result => !result.valid)
     .map(result => result.error || '卡组不合法');
   const canSubmitDecks = selectedDeckIds.filter(Boolean).length >= 1 && selectedDeckErrors.length === 0 && !!current?.canEditDecks;
@@ -334,7 +339,7 @@ export const BugCup: React.FC = () => {
                 </button>
               )}
               {myDecks.map(deck => {
-                const validation = validateDeckForBattle(deck);
+                const validation = validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference);
                 return (
                   <button
                     key={deck.id}
@@ -359,7 +364,7 @@ export const BugCup: React.FC = () => {
     );
   };
 
-  if (loading) {
+  if (loading || cardsLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="h-8 w-8 animate-spin text-red-600" />
@@ -373,7 +378,7 @@ export const BugCup: React.FC = () => {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-1/4 -top-1/4 h-[800px] w-[800px] rounded-full bg-red-900/20 blur-[120px]" />
         <div className="absolute -right-1/4 bottom-1/4 h-[600px] w-[600px] rounded-full bg-purple-900/20 blur-[100px]" />
-        <div className="absolute inset-0 bg-[url('/assets/noise.png')] opacity-[0.03] mix-blend-overlay" />
+        <div className="absolute inset-0 bg-white/[0.03] mix-blend-overlay" />
       </div>
 
       <div className="relative mx-auto max-w-6xl space-y-6 sm:space-y-8">

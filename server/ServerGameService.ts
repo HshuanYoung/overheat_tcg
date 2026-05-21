@@ -1,5 +1,4 @@
 import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackItem, GamePhase, GAME_TIMEOUTS, GameEvent, DeclaredEffectTarget, EffectTargetCandidate, AiDecisionLog } from '../src/types/game';
-import { CARD_LIBRARY } from '../src/data/cards';
 import { EventEngine } from '../src/services/EventEngine';
 import { AtomicEffectExecutor } from '../src/services/AtomicEffectExecutor';
 import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../src/lib/cardState';

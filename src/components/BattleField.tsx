@@ -5,7 +5,7 @@ import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation, G
 import { socket, getAuthUser, onceAuthenticated, isSocketAuthenticated } from '../socket';
 
 import { GameService } from '../services/gameService';
-import { hydrateGameState } from '../services/cardLoader';
+import { hydrateGameState, loadCardLibrary } from '../services/cardLoader';
 import { CARD_BACKS, DEFAULT_CARD_BACK_URL } from '../data/customization';
 import { readJsonResponse } from '../lib/http';
 
@@ -594,8 +594,11 @@ export const BattleField: React.FC = () => {
     if (!gameId || gameId === 'undefined') return;
 
     console.log('[BattleField] Registering socket listeners for game:', gameId);
+    let active = true;
+    let cardLibraryReady = false;
+    let pendingState: any = null;
 
-    const onGameStateUpdate = (newState: any) => {
+    const applyGameState = (newState: any) => {
       if (newState.gameId !== gameId) return;
 
       hydrateGameState(newState);
@@ -607,6 +610,26 @@ export const BattleField: React.FC = () => {
         setSelectedQueryIds([]);
         setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
       }
+    };
+
+    loadCardLibrary().then(() => {
+      if (!active) return;
+      cardLibraryReady = true;
+      if (pendingState) {
+        applyGameState(pendingState);
+        pendingState = null;
+      }
+    }).catch(err => {
+      console.error('[BattleField] Failed to load card scripts:', err);
+    });
+
+    const onGameStateUpdate = (newState: any) => {
+      if (newState.gameId !== gameId) return;
+      if (!cardLibraryReady) {
+        pendingState = newState;
+        return;
+      }
+      applyGameState(newState);
     };
 
     const onGameTimerUpdate = (patch: any) => {
@@ -640,6 +663,7 @@ export const BattleField: React.FC = () => {
     socket.on('error', onSocketError);
 
     return () => {
+      active = false;
       console.log('[BattleField] Unregistering socket listeners for game:', gameId);
       socket.off('gameStateUpdate', onGameStateUpdate);
       socket.off('gameTimerUpdate', onGameTimerUpdate);

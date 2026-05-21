@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { validateDeckForBattle } from '../lib/deckValidation';
 import { getAuthToken, getAuthUser } from '../socket';
 import { Deck } from '../types/game';
+import { useCardCatalog } from '../hooks/useCardCatalog';
 
 type LobbySeat = 'player1' | 'player2' | 'spectator';
 
@@ -67,12 +68,16 @@ export const FriendMatch: React.FC = () => {
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = getAuthToken();
   const authUser = useMemo(() => getAuthUser(), []);
+  const {
+    getCardByReference,
+    loading: cardsLoading
+  } = useCardCatalog({ includeEffects: false });
   const myUid = authUser?.uid?.toString();
 
   const mySeat = lobby?.mySeat;
   const selectedDeckId = myUid && lobby?.friendDeckSelections ? lobby.friendDeckSelections[myUid] : undefined;
   const selectedDeck = myDecks.find(deck => deck.id === selectedDeckId) || null;
-  const selectedDeckValidation = validateDeckForBattle(selectedDeck);
+  const selectedDeckValidation = validateDeckForBattle(selectedDeck, cardsLoading ? undefined : getCardByReference);
   const isPlayerSeat = mySeat === 'player1' || mySeat === 'player2';
   const isReady = !!(myUid && lobby?.friendReady?.[myUid]);
   const isHost = !!(myUid && lobby?.hostUid?.toString() === myUid);
@@ -453,7 +458,7 @@ export const FriendMatch: React.FC = () => {
               className="absolute left-0 right-0 top-full z-20 mt-2 max-h-72 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl"
             >
               {myDecks.map(deck => {
-                const validation = validateDeckForBattle(deck);
+                const validation = validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference);
                 const active = selectedDeckId === deck.id;
                 return (
                   <button
@@ -549,7 +554,7 @@ export const FriendMatch: React.FC = () => {
     );
   };
 
-  if (loading) {
+  if (loading || cardsLoading) {
     return (
       <div className="pt-24 flex items-center justify-center min-h-screen bg-black">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />

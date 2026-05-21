@@ -7,6 +7,7 @@ import { validateDeckForBattle } from '../lib/deckValidation';
 import { getAuthUser } from '../socket';
 import { Deck } from '../types/game';
 import { PageFallback } from './PageFallback';
+import { useCardCatalog } from '../hooks/useCardCatalog';
 
 const AI_OPPONENT_DECKS = [
   { id: 'white-temple', name: '纯白殿堂', detail: '稳健防守与场面控制' },
@@ -28,8 +29,12 @@ export const PracticeSetup: React.FC = () => {
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = localStorage.getItem('token');
+  const {
+    getCardByReference,
+    loading: cardsLoading
+  } = useCardCatalog({ includeEffects: false });
   const selectedDeck = myDecks.find(deck => deck.id === selectedDeckId) || null;
-  const selectedDeckValidation = validateDeckForBattle(selectedDeck);
+  const selectedDeckValidation = validateDeckForBattle(selectedDeck, cardsLoading ? undefined : getCardByReference);
   const selectedOpponentDeck = AI_OPPONENT_DECKS.find(deck => deck.id === botDeckProfileId) || AI_OPPONENT_DECKS[0];
 
   useEffect(() => {
@@ -107,7 +112,7 @@ export const PracticeSetup: React.FC = () => {
             className="absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl"
           >
             {myDecks.map((deck, index) => {
-              const validation = validateDeckForBattle(deck);
+              const validation = validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference);
               const active = selectedDeckId === deck.id;
               return (
                 <button
@@ -145,7 +150,7 @@ export const PracticeSetup: React.FC = () => {
     </div>
   );
 
-  if (loading) {
+  if (loading || cardsLoading) {
     return (
       <PageFallback
         title="练习模式加载中"

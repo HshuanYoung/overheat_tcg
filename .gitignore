@@ -9,7 +9,6 @@ pics/*
 !pics/命名规则.txt
 admin/
 guest*/
-vite.config.ts
 android/
 .idea/
 deploy/nginx-overheat.conf

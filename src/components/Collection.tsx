@@ -221,7 +221,7 @@ export const Collection: React.FC = () => {
       return;
     }
 
-    const validation = validateDeckForBattle(deck);
+    const validation = validateDeckForBattle(deck, getCardByReference);
     if (!validation.valid) {
       alert(validation.error || '只有合法卡组才能分享');
       return;
@@ -245,7 +245,7 @@ export const Collection: React.FC = () => {
   };
 
   const publishDeck = async (deck: Deck) => {
-    const validation = validateDeckForBattle(deck);
+    const validation = validateDeckForBattle(deck, getCardByReference);
     if (!validation.valid) {
       alert(validation.error || '只有合法卡组才能发布');
       return;

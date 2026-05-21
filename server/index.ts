@@ -31,6 +31,7 @@ import { EventEngine } from '../src/services/EventEngine';
 import { addBattleLog, battleLogText, normalizeBattleLogs } from '../src/lib/battleLog';
 import fs from 'fs';
 import path from 'path';
+import { expressStaticCompressed } from '../src/lib/staticCompression';
 
 // Initialize Game Library
 // Initialize Game Library will be awaited below.
@@ -56,7 +57,25 @@ const lastTimerBroadcast = new Map<string, number>();
 const STARTER_COINS = 100000;
 const STARTER_CARD_CRYSTALS = 100000;
 const TIMER_BROADCAST_INTERVAL_MS = Number(process.env.TIMER_BROADCAST_INTERVAL_MS || 1000);
+const ACTIVE_GAME_SCAN_WINDOW_MS = Number(process.env.ACTIVE_GAME_SCAN_WINDOW_MS || 6 * 60 * 60 * 1000);
 const FORCE_LOGOUT_REASON = '账号已在其他设备登录';
+
+async function insertGame(gameId: string, gameState: any, status = 0) {
+    const now = Date.now();
+    await pool.query(
+        'INSERT INTO games (id, state, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [gameId, JSON.stringify(gameState), status, now, now]
+    );
+}
+
+async function persistGameState(gameId: string, gameState: any, status?: number) {
+    const now = Date.now();
+    if (status === undefined) {
+        await pool.query('UPDATE games SET state = ?, updated_at = ? WHERE id = ?', [JSON.stringify(gameState), now, gameId]);
+        return;
+    }
+    await pool.query('UPDATE games SET state = ?, status = ?, updated_at = ? WHERE id = ?', [JSON.stringify(gameState), status, now, gameId]);
+}
 
 function getDefaultTurnTime(gameState: any) {
     return gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : 300000;
@@ -859,7 +878,7 @@ async function saveMatchLog(gameState: any, gameId?: string): Promise<boolean> {
     }
 
     gameState.logs = history;
-    await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), matchNumber]);
+    await persistGameState(matchNumber, gameState);
     return false;
 }
 
@@ -915,7 +934,7 @@ async function syncAndSaveState(gameId: string, gameState: any) {
     }
 
     // 5. Persist the pruned state to MariaDB
-    await pool.query('UPDATE games SET state = ? WHERE id = ?', [JSON.stringify(gameState), gameId]);
+    await persistGameState(gameId, gameState, gameState.gameStatus === 2 ? 2 : undefined);
 
     // 6. If game ended, write full history to file
     if (gameState.gameStatus === 2) {
@@ -959,6 +978,15 @@ async function advancePhase(gameState: any, gameId: string, playerId?: string, s
 }
 
 app.use(cors());
+app.use(expressStaticCompressed(path.join(process.cwd(), 'dist')));
+app.use(express.static(path.join(process.cwd(), 'dist'), {
+    maxAge: '1h',
+    setHeaders(res, filePath) {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    }
+}));
 app.use('/assets', express.static(path.join(process.cwd(), 'assets'), {
     maxAge: '30d'
 }));
@@ -970,7 +998,15 @@ app.use('/pics', express.static(path.join(process.cwd(), 'pics'), {
 setInterval(async () => {
     try {
         await ensureBugCupSchedule();
-        const games = await pool.query('SELECT id FROM games WHERE status = 0');
+        const activeRoomIds = Array.from(io.sockets.adapter.rooms.keys())
+            .filter(roomId => /^(match|practice|friend|bugcup)_/.test(roomId));
+        const activeRoomParams = activeRoomIds.length > 0
+            ? ` OR id IN (${activeRoomIds.map(() => '?').join(',')})`
+            : '';
+        const games = await pool.query(
+            `SELECT id FROM games WHERE status = 0 AND (updated_at IS NULL OR updated_at >= ?${activeRoomParams})`,
+            [Date.now() - ACTIVE_GAME_SCAN_WINDOW_MS, ...activeRoomIds]
+        );
         for (const row of games) {
             const gameId = row.id;
 
@@ -1319,7 +1355,7 @@ app.post('/api/games/practice', async (req, res): Promise<void> => {
         gameState.gameId = gameId;
         ServerGameService.applyHardAiSoftOpeningCompensation(gameState, 'BOT_PLAYER');
 
-        await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
+        await insertGame(gameId, gameState);
         res.json({ gameId, botDeckProfileId: aiOpponentDeck?.profileId, botDeckName: aiOpponentDeck?.displayName });
     } catch (err) {
         console.error('Create practice game error:', err);
@@ -1361,7 +1397,7 @@ app.post('/api/games/friend', async (req, res): Promise<void> => {
             turnTimerLimit: normalizeTurnTimerLimit(req.body?.turnTimerLimit)
         };
 
-        await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(initialState)]);
+        await insertGame(gameId, initialState);
         res.json(buildFriendLobbyResponse(gameId, initialState, userIdStr));
     } catch (err) {
         console.error('Create friend game error:', err);
@@ -1727,7 +1763,7 @@ app.post('/api/games/matchmaking', async (req, res): Promise<void> => {
             const gameState = await ServerGameService.createMatchGameState(opponent.userId, opponent.deck!, userIdStr, validation.cards!, turnTimerLimit || opponent.turnTimerLimit);
             gameState.gameId = gameId;
 
-            await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
+            await insertGame(gameId, gameState);
 
             // Store results for both players to allow discovery via polling
             matchmakingResults.set(userIdStr, gameId);
@@ -1812,7 +1848,7 @@ app.post('/api/games', async (req, res): Promise<void> => {
             isCountering: 0,
             effectUsage: {}
         };
-        await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(initialState)]);
+        await insertGame(gameId, initialState);
         res.json({ gameId });
     } catch (err) {
         console.error('Create game error:', err);
@@ -2307,7 +2343,7 @@ async function createBugCupGame(match: any, player1DeckIndex: number, player2Dec
     gameState.players[match.player2_id].displayName = p2Reg.displayName || '玩家2';
     gameState.logs = [`${BUG_CUP_NAME} ${match.phase === 'PRELIM' ? '预赛' : match.phase === 'SWISS' ? `瑞士轮第 ${match.round} 轮` : match.round === 1 ? '半决赛' : '决赛'}开始。`];
 
-    await pool.query('INSERT INTO games (id, state, status) VALUES (?, ?, 0)', [gameId, JSON.stringify(gameState)]);
+    await insertGame(gameId, gameState);
     return { gameId, gameState };
 }
 

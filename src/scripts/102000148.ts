@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '102000148_enter_destroy_item',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   erosionBackLimit: [5, 7],
   description: '5~7：入场时，若我方有2个以上红色单位，选择战场上1张道具卡破坏。',

@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '从手牌进入战场时，破坏战场上所有道具。若破坏3张以上，可以选择战场1张卡破坏。',
   condition: (_gameState, _playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&

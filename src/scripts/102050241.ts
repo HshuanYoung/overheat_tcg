@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   limitCount: 1,
   description: '你的回合结束时，可以选择你的1个横置的<伊列宇王国>神蚀单位，将其重置。',
   condition: (_gameState, playerState, _instance, event) =>

@@ -18,6 +18,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'PHASE_CHANGED',
+  isMandatory: false,
   erosionTotalLimit: [2, 7],
   cost: paymentCost(1),
   description: '2~7：这个单位参与的战斗伤害判定步骤开始时，可以支付1费中断这次战斗。',

@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130438_reset_recruit',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ROTATED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,

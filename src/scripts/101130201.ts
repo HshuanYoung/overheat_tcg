@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130201_recruit',
   type: 'TRIGGER',
   triggerEvent: 'CARD_DESTROYED_BATTLE',
+  isMandatory: false,
   triggerLocation: ['GRAVE'],
   description: '被战斗破坏并送入墓地时，若你的<圣王国>单位有2个以上，可以从卡组横置放置1张《南征军的步兵》。',
   condition: (_gameState, playerState, instance, event) =>

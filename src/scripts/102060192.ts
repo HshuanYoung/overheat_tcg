@@ -18,6 +18,7 @@ const cardEffects: CardEffect[] = [highPowerRush, {
   id: '102060192_enter_boost',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '入场时，可以支付2费，使你的所有单位本回合力量+1000。',
   condition: (gameState, playerState, instance, event) =>

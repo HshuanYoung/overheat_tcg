@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '101140097_grave_to_deck_buff',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     isGlobal: true,
     description: '你的卡从墓地进入卡组时，选择你的1个单位，伤害+1、力量+500。',

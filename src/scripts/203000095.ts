@@ -68,6 +68,7 @@ const cardEffects: CardEffect[] = [{
   id: '203000095_exiled_by_resonance_attack',
   type: 'TRIGGER',
   triggerEvent: 'CARD_EXILED',
+  isMandatory: false,
   triggerLocation: ['EXILE'],
   description: '你的主要阶段，墓地中的这张卡被放逐时，选择对手战场上1个非神蚀单位。本回合中，你的<瑟诺布>单位可以攻击被选择的单位。',
   condition: (gameState, playerState, instance, event) =>

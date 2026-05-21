@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['ITEM'],
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   limitCount: 1,
   description: '对手的回合结束时，可以支付1费，选择墓地中1张菲晶卡加入手牌。',
   condition: (gameState, playerState, _instance, event) =>

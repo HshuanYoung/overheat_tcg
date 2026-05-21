@@ -24,6 +24,7 @@ const cardEffects: CardEffect[] = [{
     id: '101100096_reset_after_attack',
     type: 'TRIGGER',
     triggerEvent: 'BATTLE_ENDED',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     limitCount: 1,
     description: '此单位参与的攻击结束后，支付1费：将你的所有参战单位重置。',

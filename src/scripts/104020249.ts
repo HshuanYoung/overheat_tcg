@@ -14,7 +14,6 @@ const trigger_104020249_draw: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: ['CARD_ENTERED_ZONE', 'TURN_END' as any],
-  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '【诱发】【卡名一回合一次】这个单位进入战场或者你的回合结束时，如果你的单位区有4个或者以上卡名包含“牛头人”的单位：你可以选择发动：将你墓地的2张卡名含有“牛头人”的卡放逐：抽1张卡。',
@@ -35,7 +34,8 @@ const trigger_104020249_draw: CardEffect = {
   execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
     const options = getGraveMinotaurCards(playerState);
     if (options.length < 2) {
-      gameState.logs.push(`[${instance.fullName}] 墓地中没有足够的“牛头人”卡，效果中止。`);
+      gameState.logs.push(`[${instance.fullName}]
+  isMandatory: false, 墓地中没有足够的“牛头人”卡，效果中止。`);
       return;
     }
 

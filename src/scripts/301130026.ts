@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '301130026_exile_draw',
   type: 'TRIGGER',
   triggerEvent: ['CARD_ATTACK_DECLARED', 'CARD_DEFENSE_DECLARED'],
+  isMandatory: false,
   triggerLocation: ['ITEM'],
   description: '你的单位组成联军时，或你的单位宣言防御时，可以选择最多3张正面侵蚀放逐。若放逐白色神蚀卡，可以抽1张卡。',
   condition: (_gameState, playerState, _instance, event) => {

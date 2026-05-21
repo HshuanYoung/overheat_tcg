@@ -54,6 +54,7 @@ const effect_101100342_story_cheat_unit: CardEffect = {
   id: '101100342_story_cheat_unit',
   type: 'TRIGGER',
   triggerEvent: 'CARD_PLAYED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   limitCount: 1,

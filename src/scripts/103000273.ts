@@ -62,6 +62,7 @@ const effect_103000273_enter_boost: CardEffect = {
   id: '103000273_enter_boost',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,

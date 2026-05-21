@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103100179_return',
   type: 'TRIGGER',
   triggerEvent: 'CARD_LEFT_FIELD',
+  isMandatory: false,
   triggerLocation: ['GRAVE'],
   limitCount: 1,
   limitNameType: true,

@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'PHASE_CHANGED',
+  isMandatory: false,
   description: '与ACCESS值4以上的单位进行战斗时，这个单位力量+2000。',
   condition: (gameState, _playerState, instance, event) => {
     if (event?.data?.phase !== 'DAMAGE_CALCULATION') return false;

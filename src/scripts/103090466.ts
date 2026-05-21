@@ -22,6 +22,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '从手牌进入单位区时，将墓地中卡名不同的卡名含有《银乐器》的卡尽可能多地放置到战场上。',
   condition: (_gameState, playerState, instance, event?: GameEvent) =>
     event?.sourceCardId === instance.gamecardId &&

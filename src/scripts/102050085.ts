@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '102050085_alliance_damage',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ATTACK_DECLARED',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     isGlobal: true,
     limitCount: 1,

@@ -12,6 +12,7 @@ const cardEffects: CardEffect[] = [{
   id: '102140364_destroyed_put_bats',
   type: 'TRIGGER',
   triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  isMandatory: false,
   triggerLocation: ['GRAVE'],
   description: '这张卡被破坏时，可以将手牌或卡组中最多2张《异界狂蝠》横置放置到战场。',
   condition: (_gameState, playerState, instance, event) =>

@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'COMBAT_DAMAGE_CAUSED',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '这个单位造成战斗伤害时，可以将卡组或墓地中1张菲晶非神蚀卡加入手牌。',

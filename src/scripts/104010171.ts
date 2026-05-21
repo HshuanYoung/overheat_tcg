@@ -6,6 +6,7 @@ const trigger_104010171_power_up: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_FIELD_TO_HAND',
+  isMandatory: false,
   isGlobal: true,
   limitCount: 1,
   limitNameType: true,

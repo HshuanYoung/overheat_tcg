@@ -28,6 +28,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'COMBAT_DAMAGE_CAUSED',
   triggerLocation: ['UNIT'],
+  isMandatory: false,
   erosionTotalLimit: [10, 10],
   description: '10+：这个单位给予对手战斗伤害时，选择那名玩家侵蚀区2张正面卡翻面。',
   condition: (_gameState, _playerState, instance, event) =>

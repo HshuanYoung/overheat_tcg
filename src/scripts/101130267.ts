@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ROTATED',
+  isMandatory: false,
   limitCount: 1,
   description: '1回合1次：这个单位由于卡的效果重置时，将对手卡组顶1张卡放逐。',
   condition: (_gameState, _playerState, instance, event) =>

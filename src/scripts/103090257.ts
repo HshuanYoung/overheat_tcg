@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '进入战场时，若使用费用通过【菲晶】能力支付，可以选择墓地中1张非神蚀单位卡放置到战场上。',
   condition: (_gameState, playerState, instance, event?: GameEvent) =>
     event?.sourceCardId === instance.gamecardId &&

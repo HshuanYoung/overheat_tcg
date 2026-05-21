@@ -39,6 +39,7 @@ const effect_103000272_enter_search: CardEffect = {
   id: '103000272_enter_search',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '【诱】这个单位进入战场时，横置并舍弃1张手牌：你可以将卡组中1张具有异彩的卡加入手牌。',
   condition: (_gameState, playerState, instance, event) =>

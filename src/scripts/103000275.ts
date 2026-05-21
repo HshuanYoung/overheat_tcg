@@ -87,6 +87,7 @@ const effect_103000275_attack_tap: CardEffect = {
   id: '103000275_attack_tap',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ATTACK_DECLARED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '【诱】你的战场上有蓝色单位，这个单位宣言攻击时，选择对手的1个非神蚀单位：将其横置。',
   condition: (gameState, playerState, instance, event) => {

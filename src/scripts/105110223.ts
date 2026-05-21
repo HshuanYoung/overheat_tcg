@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE'],
   triggerEvent: ['CARD_ENTERED_ZONE', 'CARD_LEFT_FIELD'],
+  isMandatory: false,
   sourceSnapshotOnLeftField: true,
   limitCount: 1,
   limitNameType: true,

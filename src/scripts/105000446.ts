@@ -13,6 +13,7 @@ const effect_105000446_trigger: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['DECK'],
   triggerEvent: 'REVEAL_DECK',
+  isMandatory: false,
   description: '这张卡因你的卡名含有《魔偶》的卡的效果从卡组顶展示时，你可以将其放置到战场。',
   condition: (_gameState, playerState, instance, event?: GameEvent) =>
     instance.cardlocation === 'DECK' &&

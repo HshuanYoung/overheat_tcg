@@ -20,6 +20,7 @@ const cardEffects: CardEffect[] = [{
     id: '101130102_alliance_bottom',
     type: 'TRIGGER',
     triggerEvent: 'CARD_DESTROYED_BATTLE',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     isGlobal: true,
     description: '此单位参与的联军攻击中战斗破坏对手单位时，可以将墓地1张卡放到卡组底。',

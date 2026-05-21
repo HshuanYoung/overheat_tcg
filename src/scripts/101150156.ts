@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101150156_search_snow_god',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '进入战场时，舍弃1张手牌，选择卡组中1张<仙雪原>神蚀单位卡加入手牌。',
   condition: (_gameState, playerState, instance, event) =>

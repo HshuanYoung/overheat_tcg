@@ -2192,6 +2192,149 @@ async function testSameBucketTriggerOrderChoice(): Promise<ScenarioResult> {
     : fail(name, `asked=${askedOrder}, resolved=${resolved.join(',')}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
 }
 
+async function testNonEndTriggerBucketsUseUnifiedOrder(): Promise<ScenarioResult> {
+  const name = 'Non-end triggers use unified bucket order';
+  const turnOptional = testCard({ id: 'TURN_OPTIONAL', fullName: 'turn_optional', cardlocation: 'UNIT' });
+  const opponentOptional = testCard({ id: 'OPPONENT_OPTIONAL', fullName: 'opponent_optional', cardlocation: 'UNIT' });
+  const state = game({
+    unitZone: [turnOptional, null, null, null, null, null],
+  }, {
+    unitZone: [opponentOptional, null, null, null, null, null],
+  }, { phase: 'MAIN' });
+  const resolved: string[] = [];
+  const makeRecord = (queueId: string, playerUid: 'BOT' | 'P1', mandatory: boolean, eventType: any) => {
+    const card = playerUid === 'BOT' ? turnOptional : opponentOptional;
+    return {
+      queueId,
+      card,
+      playerUid,
+      effectIndex: -1,
+      event: { type: eventType, playerUid },
+      effect: {
+        id: queueId,
+        type: 'TRIGGER',
+        isMandatory: mandatory,
+        description: queueId,
+        execute: async () => { resolved.push(queueId); }
+      }
+    };
+  };
+  state.triggeredEffectsQueue.push(
+    makeRecord('turn_optional', 'BOT', false, 'CARD_ATTACK_DECLARED'),
+    makeRecord('opponent_optional', 'P1', false, 'CARD_ATTACK_DECLARED'),
+    makeRecord('opponent_mandatory', 'P1', true, 'CARD_ATTACK_DECLARED'),
+    makeRecord('turn_mandatory', 'BOT', true, 'CARD_ATTACK_DECLARED')
+  );
+
+  await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'BOT', ['YES']);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'P1', ['YES']);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'BOT', ['YES']);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'P1', ['YES']);
+
+  const ordered = resolved.join(',') === 'turn_mandatory,opponent_mandatory,turn_optional,opponent_optional';
+  return ordered
+    ? pass(name, resolved.join(','))
+    : fail(name, `resolved=${resolved.join(',')}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testMainPhaseStartTriggersBeforeActions(): Promise<ScenarioResult> {
+  const name = 'Main phase start triggers before actions';
+  const source = testCard({
+    id: 'MAIN_START_TRIGGER',
+    fullName: 'Main Start Trigger',
+    cardlocation: 'UNIT',
+    effects: [{
+      id: 'main_start_optional',
+      type: 'TRIGGER',
+      triggerEvent: 'PHASE_CHANGED' as any,
+      isMandatory: false,
+      description: '主要阶段开始选发',
+      condition: (_gameState: any, _player: any, _card: Card, event?: any) =>
+        event?.type === 'PHASE_CHANGED' && event.data?.phase === 'MAIN',
+      execute: async (_card: Card, gameState: any) => {
+        (gameState as any).mainStartResolved = true;
+      }
+    } as any]
+  });
+  const state = game({
+    unitZone: [source, null, null, null, null, null],
+  }, {}, { phase: 'EROSION' });
+
+  await ServerGameService.proceedAfterErosion(state, 'BOT');
+  const asked = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.context?.sourceCardId === source.gamecardId;
+  await answerPendingQuery(state, 'BOT', ['YES']);
+  const resolved = (state as any).mainStartResolved === true;
+
+  return asked && resolved && state.phase === 'MAIN'
+    ? pass(name, `asked=${asked}, resolved=${resolved}`)
+    : fail(name, `asked=${asked}, resolved=${resolved}, phase=${state.phase}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testAttackAndDamageTriggersUseUnifiedFlow(): Promise<ScenarioResult> {
+  const name = 'Attack and combat damage triggers use unified flow';
+  const attacker = testCard({
+    id: 'ATTACK_FLOW_ATTACKER',
+    fullName: 'Attack Flow Attacker',
+    color: 'YELLOW',
+    cardlocation: 'UNIT',
+    damage: 1,
+    baseDamage: 1,
+    playedTurn: 1,
+    effects: [{
+      id: 'attack_declared_optional',
+      type: 'TRIGGER',
+      triggerEvent: 'CARD_ATTACK_DECLARED' as any,
+      isMandatory: false,
+      description: '攻击宣言选发',
+      condition: (_gameState: any, _player: any, card: Card, event?: any) =>
+        event?.type === 'CARD_ATTACK_DECLARED' && event.sourceCardId === card.gamecardId,
+      execute: async (_card: Card, gameState: any) => {
+        (gameState as any).attackTriggerResolved = true;
+      }
+    }, {
+      id: 'combat_damage_optional',
+      type: 'TRIGGER',
+      triggerEvent: 'COMBAT_DAMAGE_CAUSED' as any,
+      isMandatory: false,
+      description: '战斗伤害选发',
+      isGlobal: true,
+      condition: (_gameState: any, _player: any, card: Card, event?: any) =>
+        event?.type === 'COMBAT_DAMAGE_CAUSED' && event.data?.attackerIds?.includes(card.gamecardId),
+      execute: async (_card: Card, gameState: any) => {
+        (gameState as any).damageTriggerResolved = true;
+      }
+    } as any]
+  });
+  const state = game({
+    unitZone: [attacker, null, null, null, null, null],
+  }, {}, { phase: 'BATTLE_DECLARATION', turnCount: 6 });
+
+  await ServerGameService.declareAttack(state, 'BOT', [attacker.gamecardId], false);
+  if (!state.pendingQuery && state.phase === 'COUNTERING') {
+    await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  }
+  const askedAttack = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.context?.sourceCardId === attacker.gamecardId;
+  await answerPendingQuery(state, 'BOT', ['YES']);
+  const attackResolved = (state as any).attackTriggerResolved === true;
+  if (state.phase === 'COUNTERING') {
+    await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  }
+  await ServerGameService.declareDefense(state, 'P1');
+  state.phase = 'DAMAGE_CALCULATION';
+  await ServerGameService.resolveDamage(state);
+  const askedDamage = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.context?.sourceCardId === attacker.gamecardId;
+  await answerPendingQuery(state, 'BOT', ['YES']);
+  const damageResolved = (state as any).damageTriggerResolved === true;
+
+  return askedAttack && attackResolved && askedDamage && damageResolved
+    ? pass(name, `attack=${attackResolved}, damage=${damageResolved}`)
+    : fail(name, `askedAttack=${askedAttack}, attack=${attackResolved}, askedDamage=${askedDamage}, damage=${damageResolved}, phase=${state.phase}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
 async function testMandatoryEndTurnOrderWithValkyrieAndGreatAlchemist(): Promise<ScenarioResult> {
   const name = 'Mandatory end triggers ask order for Valkyrie Zero Forbidden Alchemy and Great Alchemist loss';
   const zero = cloneScriptCard(valkyrieZero as Card, 'UNIT');
@@ -2352,6 +2495,9 @@ const scenarios: ScenarioRun[] = [
   testYellowChocolate,
   testEndTurnTriggerBucketOrder,
   testSameBucketTriggerOrderChoice,
+  testNonEndTriggerBucketsUseUnifiedOrder,
+  testMainPhaseStartTriggersBeforeActions,
+  testAttackAndDamageTriggersUseUnifiedFlow,
   testMandatoryEndTurnOrderWithValkyrieAndGreatAlchemist,
   testTriggerOrderAcceptsDisplayedCardIds,
   testSerializedVirtualEndTriggersResolve,

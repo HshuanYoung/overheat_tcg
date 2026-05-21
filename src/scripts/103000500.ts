@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103000500_grave_to_deck_mill',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   limitCount: 1,

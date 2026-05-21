@@ -7,6 +7,7 @@ const effect_105000460_enter_discard: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   erosionBackLimit: [2, 10],

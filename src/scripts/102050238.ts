@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: ['COMBAT_DAMAGE_CAUSED', 'EFFECT_DAMAGE_CAUSED'],
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '你的<伊列宇王国>单位对对手造成伤害时，可以选择1名对手，给予他2点伤害。',

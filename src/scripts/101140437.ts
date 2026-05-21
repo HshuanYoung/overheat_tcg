@@ -32,6 +32,7 @@ const cardEffects: CardEffect[] = [{
   id: '101140437_end_search',
   type: 'TRIGGER',
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '你的回合结束时，若你的战场上仅有白色单位，可以将卡组中1张ACCESS+2的白色故事卡加入手牌。',
   condition: (_gameState, playerState) => {

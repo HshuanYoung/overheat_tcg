@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_EQUIPPED',
+  isMandatory: false,
   limitCount: 1,
   description: '你的回合中，这个单位被道具卡装备时，可以抽1张卡。',
   condition: (_gameState, playerState, instance, event) =>

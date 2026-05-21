@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '进入战场时，可以选择对手1个神蚀单位，舍弃2张菲晶手牌，将其放逐。',

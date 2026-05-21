@@ -608,6 +608,11 @@ export const ServerGameService = {
     return true;
   },
 
+  async dispatchEventAndDrainTriggers(gameState: GameState, event: GameEvent, onUpdate?: (state: GameState) => Promise<void>) {
+    EventEngine.dispatchEvent(gameState, event);
+    await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+  },
+
   getColorRequirementResult(player: PlayerState, req: Record<string, number> = {}) {
     const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
     let omniColorCount = 0;
@@ -789,13 +794,14 @@ export const ServerGameService = {
 
     if (forcedAttackUnits.length === 1) {
       const unit = forcedAttackUnits[0];
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason } }, onUpdate);
       gameState.logs.push(`[强制攻击] ${player.displayName} 必须用 [${unit.fullName}] 攻击。`);
+      if (gameState.pendingQuery || gameState.phase !== 'BATTLE_DECLARATION') return true;
       await ServerGameService.declareAttack(gameState, playerId, [unit.gamecardId], false, undefined, undefined, onUpdate);
       return true;
     }
 
-    EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: `${reason}_CHOICE` } });
+    await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: `${reason}_CHOICE` } }, onUpdate);
     gameState.logs.push(`[强制攻击] ${player.displayName} 有多个必须攻击的单位，进入攻击宣言阶段请选择其中1个攻击。`);
     return true;
   },
@@ -2600,7 +2606,7 @@ export const ServerGameService = {
       if (onUpdate) await onUpdate(gameState);
 
       if (nextPhase) {
-        return ServerGameService.advancePhase(gameState, nextPhase);
+        return ServerGameService.advancePhase(gameState, nextPhase, undefined, onUpdate);
       }
       return gameState;
     }
@@ -2771,11 +2777,11 @@ export const ServerGameService = {
           // Re-calculate effects to ensure 302050013's defensePowerRestriction is applied to the new battleState
           EventEngine.recalculateContinuousEffects(gameState);
           if (stackItem.skipDefense) {
-            EventEngine.dispatchEvent(gameState, {
+            await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
               type: 'PHASE_CHANGED',
               playerUid: stackItem.ownerUid,
               data: { phase: 'BATTLE_FREE', reason: 'ATTACK_DECLARED_SKIP_DEFENSE' }
-            });
+            }, onUpdate);
           }
           break;
       }
@@ -2843,7 +2849,7 @@ export const ServerGameService = {
       gameState.previousPhase = undefined;
       gameState.battleState = undefined;
       gameState.phaseTimerStart = Date.now();
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_INTERRUPTED' } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_INTERRUPTED' } }, onUpdate);
       gameState.logs.push(`[阶段切换] 战斗已中止，返回主要阶段`);
     }
 
@@ -2993,7 +2999,16 @@ export const ServerGameService = {
       minSelections: 1,
       maxSelections: 1,
       callbackKey: 'TRIGGER_CHOICE',
-      context: { effectIndex, sourceCardId: card.gamecardId, event }
+      context: {
+        triggerQueueId: ServerGameService.getTriggerQueueId(trigger),
+        effectIndex,
+        effectId: effect.id,
+        queuedEffect: effect,
+        effectDescription: effect.description,
+        sourceCardId: card.gamecardId,
+        sourceCardSnapshot: { ...card, effects: undefined },
+        event
+      }
     };
   },
 
@@ -3474,12 +3489,49 @@ export const ServerGameService = {
     // 2. Trigger Option Processing
     if (query.callbackKey === 'TRIGGER_CHOICE') {
       if (currentSelections[0] === 'YES') {
-        await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
-          effectIndex: query.context.effectIndex,
-          card: sourceCard!,
-          effect: sourceCard!.effects![query.context.effectIndex],
-          event: query.context.event
-        }, onUpdate);
+        const effectIndex = query.context?.effectIndex;
+        const effectId = query.context?.effectId;
+        const snapshot = query.context?.sourceCardSnapshot as Card | undefined;
+        const isSyntheticTrigger = effectIndex === undefined || effectIndex < 0;
+        const effect = effectIndex !== undefined && effectIndex >= 0
+          ? sourceCard?.effects?.[effectIndex]
+          : effectId
+            ? sourceCard?.effects?.find(e => e.id === effectId)
+            : undefined;
+        const queuedEffect = query.context?.queuedEffect as CardEffect | undefined;
+        if (sourceCard && effect) {
+          await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+            effectIndex,
+            card: sourceCard,
+            effect,
+            event: query.context.event
+          }, onUpdate);
+        } else if (sourceCard && queuedEffect) {
+          await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+            effectIndex: isSyntheticTrigger ? -1 : effectIndex,
+            card: sourceCard,
+            effect: queuedEffect,
+            event: query.context.event
+          }, onUpdate);
+        } else if (isSyntheticTrigger && sourceCard) {
+          const queuedLikeEffect: CardEffect = {
+            id: effectId || query.context?.triggerQueueId || 'synthetic_optional_trigger',
+            type: 'TRIGGER',
+            isMandatory: false,
+            description: query.context?.effectDescription || '选发诱发效果',
+            execute: async () => undefined
+          };
+          await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+            effectIndex: -1,
+            card: sourceCard,
+            effect: queuedLikeEffect,
+            event: query.context.event
+          }, onUpdate);
+        } else {
+          const fallbackCard = snapshot || sourceCard;
+          gameState.logs.push(`[诱发跳过] 找不到选发诱发来源或效果，已跳过：${fallbackCard?.fullName || sourceCardId || '未知来源'}。`);
+          await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+        }
       } else {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
       }
@@ -3985,8 +4037,9 @@ export const ServerGameService = {
         throw new Error('先手玩家第一回合不能进入战斗阶段');
       }
       gameState.phase = 'BATTLE_DECLARATION';
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: 'DECLARE_ATTACK_FROM_MAIN' } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: 'DECLARE_ATTACK_FROM_MAIN' } }, onUpdate);
       gameState.logs.push(`[阶段切换] ${player.displayName} 进入战斗阶段`);
+      if (gameState.pendingQuery || gameState.phase !== 'BATTLE_DECLARATION') return gameState;
     }
     if (gameState.phase !== 'BATTLE_DECLARATION') throw new Error('Not in battle declaration phase');
     if (ServerGameService.isPlayerAttackLockedThisTurn(gameState, playerId)) {
@@ -4287,6 +4340,8 @@ export const ServerGameService = {
       skipDefense: effectiveSkipDefense
     });
 
+    await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+
     return gameState;
   },
 
@@ -4367,13 +4422,14 @@ export const ServerGameService = {
         unit.temporaryBuffSources = { ...(unit.temporaryBuffSources || {}), damage: (player as any).snowstormSourceName || '暴风雪', power: (player as any).snowstormSourceName || '暴风雪' };
       }
       gameState.battleState.defender = defenderId;
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'CARD_DEFENSE_DECLARED',
         sourceCard: unit,
         sourceCardId: unit.gamecardId,
         playerUid: playerId,
         data: { defenderId: unit.gamecardId }
       });
+      if (gameState.pendingQuery) return gameState;
       addBattleLog(gameState, {
         category: 'BATTLE',
         actorUid: playerId,
@@ -4406,13 +4462,12 @@ export const ServerGameService = {
     // Transition to counter check (for now just move to battle free)
     gameState.phase = 'BATTLE_FREE';
     gameState.phaseTimerStart = Date.now();
-    EventEngine.dispatchEvent(gameState, {
+    await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
       type: 'PHASE_CHANGED',
       playerUid: playerId,
       data: { phase: 'BATTLE_FREE', reason: 'DEFENSE_DECLARED' }
     });
-
-    await ServerGameService.checkTriggeredEffects(gameState);
+    if (gameState.pendingQuery) return gameState;
 
     return gameState;
   },
@@ -4478,7 +4533,7 @@ export const ServerGameService = {
           text: `${attacker.displayName} 对 ${defender.displayName} 造成了 ${dealtDamage} 点战斗伤害`,
           metadata: { result: 'DIRECT_DAMAGE', damage: dealtDamage, defenderId }
         });
-        EventEngine.dispatchEvent(gameState, {
+        await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
           type: 'COMBAT_DAMAGE_CAUSED',
           playerUid: defenderId,
           data: {
@@ -4488,6 +4543,7 @@ export const ServerGameService = {
             isAlliance: !!gameState.battleState.isAlliance
           }
         });
+        if (gameState.pendingQuery) return gameState;
       }
     } else {
       // Unit combat
@@ -4728,7 +4784,7 @@ export const ServerGameService = {
 
     // Now set phase back to MAIN or SHENYI if triggered
     if (gameState.phase !== 'SHENYI_CHOICE') {
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'BATTLE_ENDED',
         sourceCard: attackingUnits[0],
         sourceCardId: attackingUnits[0]?.gamecardId,
@@ -4739,9 +4795,11 @@ export const ServerGameService = {
           isAlliance: !!gameState.battleState.isAlliance
         }
       });
+      if (gameState.pendingQuery) return gameState;
       gameState.phase = 'MAIN';
       gameState.phaseTimerStart = Date.now();
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_END' } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_END' } });
+      if (gameState.pendingQuery) return gameState;
       gameState.logs.push(`${attacker.displayName} 进入主要阶段 (战斗结算后)`);
     }
 
@@ -5264,14 +5322,14 @@ export const ServerGameService = {
     });
 
     if (isEffect) {
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'CARD_DESTROYED_EFFECT',
         targetCardId: gamecardId,
         playerUid: playerId,
         data: { sourcePlayerId }
       });
     } else {
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'CARD_DESTROYED_BATTLE',
         targetCardId: gamecardId,
         playerUid: playerId,
@@ -5282,7 +5340,6 @@ export const ServerGameService = {
         }
       });
     }
-    await ServerGameService.checkTriggeredEffects(gameState);
     return true; // Successfully destroyed
   },
 
@@ -5693,8 +5750,7 @@ export const ServerGameService = {
       EventEngine.recalculateContinuousEffects(gameState);
 
       // 4. Start the next phase
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', playerUid: nextPlayerId, data: { phase: 'START' } });
-      await ServerGameService.checkTriggeredEffects(gameState);
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', playerUid: nextPlayerId, data: { phase: 'START' } });
       if (gameState.pendingQuery || gameState.phase !== 'START') return;
       await ServerGameService.executeStartPhase(gameState, nextPlayer);
 
@@ -5993,8 +6049,7 @@ export const ServerGameService = {
         gameState.phase = 'START';
         gameState.turnCount = 1;
         gameState.logs.push(`[阶段切换] 进入开始阶段`);
-        EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } });
-        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+        await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } }, onUpdate);
         if (gameState.pendingQuery || gameState.phase !== 'START') return gameState;
         await ServerGameService.executeStartPhase(gameState, turnPlayer);
         break;
@@ -6024,8 +6079,9 @@ export const ServerGameService = {
           }
           if (action === 'BATTLE_DECLARATION' || action === 'DECLARE_BATTLE') {
             gameState.phase = 'BATTLE_DECLARATION';
-            EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION' } });
+            await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION' } }, onUpdate);
             gameState.logs.push(`[阶段切换] ${actingPlayer.displayName} 进入战斗阶段`);
+            if (gameState.pendingQuery || gameState.phase !== 'BATTLE_DECLARATION') return gameState;
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求进入战斗阶段`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -6071,8 +6127,9 @@ export const ServerGameService = {
         } else if (action === 'RETURN_MAIN' || action === 'MAIN') {
           if (action === 'MAIN' || action === 'RETURN_MAIN') {
             gameState.phase = 'MAIN';
-            EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } });
+            await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } }, onUpdate);
             gameState.logs.push(`[阶段切换] ${actingPlayer.displayName} 返回主要阶段`);
+            if (gameState.pendingQuery || gameState.phase !== 'MAIN') return gameState;
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求返回主要阶段`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -6109,13 +6166,14 @@ export const ServerGameService = {
           gameState.phase = 'MAIN';
           ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState?.attackers);
           gameState.battleState = undefined;
-          EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } });
+          await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } }, onUpdate);
           gameState.logs.push(`[阶段切换] 战斗中止，返回主要阶段`);
+          if (gameState.pendingQuery || gameState.phase !== 'MAIN') return gameState;
         }
         break;
       case 'BATTLE_END':
         gameState.phase = 'MAIN';
-        EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } });
+        await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } }, onUpdate);
         ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState?.attackers);
         gameState.battleState = undefined;
         gameState.logs.push(`[阶段切换] 战斗结束，返回主要阶段`);
@@ -6374,7 +6432,7 @@ export const ServerGameService = {
     gameState.phase = 'MAIN';
     gameState.phaseTimerStart = Date.now();
     gameState.logs.push(`${player.displayName} 进入主要阶段`);
-    EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'MAIN_PHASE_START' } });
+    await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'MAIN_PHASE_START' } }, onUpdate);
     return gameState;
   },
 

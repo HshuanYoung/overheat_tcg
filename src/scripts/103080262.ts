@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103080262_enter_access_boost',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '从手牌放置到战场时，若你的单位比对手少2个以上，将2张正面侵蚀送墓，本回合这张卡横置支付绿色卡ACCESS时可当+3。',
   condition: (gameState, playerState, instance, event?: GameEvent) => {

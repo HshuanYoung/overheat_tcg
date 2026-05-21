@@ -17,6 +17,7 @@ const cardEffects: CardEffect[] = [{
   id: '102050259_goddess_enter',
   type: 'TRIGGER',
   triggerEvent: 'GODDESS_TRANSFORMATION',
+  isMandatory: false,
   triggerLocation: ['HAND'],
   erosionTotalLimit: [10, 10],
   limitCount: 1,

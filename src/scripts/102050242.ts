@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '进入战场时，可以选择手牌中1张ACCESS+3以下的菲晶单位卡放置到战场上。',

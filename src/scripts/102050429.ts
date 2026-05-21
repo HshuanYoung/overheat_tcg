@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '102050429_ten_recycle',
   type: 'TRIGGER',
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   erosionTotalLimit: [10, 10],
   limitCount: 1,

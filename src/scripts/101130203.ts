@@ -11,6 +11,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130203_goddess_enter',
   type: 'TRIGGER',
   triggerEvent: 'GODDESS_TRANSFORMATION',
+  isMandatory: false,
   triggerLocation: ['HAND'],
   limitCount: 1,
   limitGlobal: true,

@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '102000150_enter_exhaust',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '从手牌进入战场时，选择对手最多2个单位横置。',
   condition: (gameState, playerState, instance, event) => {

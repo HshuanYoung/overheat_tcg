@@ -8,6 +8,7 @@ const cardEffects: CardEffect[] = [{
   id: '103100131_redirect_attack',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ATTACK_DECLARED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   limitCount: 1,

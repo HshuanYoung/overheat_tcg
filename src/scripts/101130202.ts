@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130202_hand_to_field',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '入场时，可以选择手牌中这张卡以外的AC+3以下<圣王国>非神蚀单位放置到战场。',
   condition: (_gameState, playerState, instance, event) =>

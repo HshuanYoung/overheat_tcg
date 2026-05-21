@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130440_reset_boost',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ROTATED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   description: '1回合1次：这个单位因为卡的效果被重置时，可以选择你的1个<圣王国>单位，本回合伤害+1、力量+1000并获得【英勇】。',

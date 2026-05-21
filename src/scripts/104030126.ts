@@ -17,6 +17,7 @@ const effect_104030126_kill_trigger: CardEffect = {
   id: 'cocoa_kill_trigger',
   type: 'TRIGGER',
   triggerEvent: 'CARD_DESTROYED_BATTLE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   description: '【诱发】当此单位在战斗中破坏对手的单位时，选择对手的一个横置状态的非神迹单位并破坏。',

@@ -1486,6 +1486,7 @@ export const searchDeckEffect = (id: string, description: string, predicate: (ca
   id,
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description,
   condition: (_gameState, _playerState, instance, event) =>
@@ -1540,6 +1541,7 @@ export const appendEndResolution = (
     effect: {
       id,
       type: 'TRIGGER',
+      isMandatory: false,
       description: '回合结束时处理延迟效果。',
       resolve
     }

@@ -17,6 +17,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130378_enter_put_item',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '进入战场时，将墓地1张神蚀卡放逐，可以将卡组或手牌1张ACCESS值+3以下的非神蚀道具卡放置到战场。',
   condition: (_gameState, playerState, instance, event) =>

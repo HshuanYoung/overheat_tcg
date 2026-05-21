@@ -7,6 +7,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '进入战场时，放逐战场上1张其他卡，对手回合结束时横置回场。',

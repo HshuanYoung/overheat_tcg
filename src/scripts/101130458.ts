@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130458_reset_silence',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ROTATED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   description: '1回合1次：这个单位由于卡的效果被重置时，选择对手1个非神蚀单位，直到下一次你的回合开始不能发动能力，不能宣言攻击和防御。',

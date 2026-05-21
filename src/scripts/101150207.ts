@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101150207_combat_boost',
   type: 'TRIGGER',
   triggerEvent: ['CARD_ATTACK_DECLARED', 'CARD_DEFENSE_DECLARED'],
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '宣言攻击或防御时，可以选择2张正面侵蚀放逐，这次战斗中伤害+1、力量+1000。',
   condition: (_gameState, playerState, instance, event) => {

@@ -8,6 +8,7 @@ const cardEffects: CardEffect[] = [
     id: '103090327_draw_discard',
     type: 'TRIGGER',
     triggerEvent: 'CARD_EXILED',
+    isMandatory: false,
     triggerLocation: ['UNIT'],
     limitCount: 1,
     limitNameType: true,

@@ -57,6 +57,7 @@ const effect_105110355_end_put: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   limitCount: 1,
   erosionBackLimit: [1, 99],
   description: '创痕1，你战场有蓝色单位时，你的回合结束时，将卡组或墓地1张没有颜色限制的单位放置到战场，其非基本能力无效，伤害1力量0。',

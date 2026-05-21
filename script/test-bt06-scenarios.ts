@@ -56,7 +56,11 @@ import bt06Y10 from '../src/scripts/305000055';
 import bt06Y11 from '../src/scripts/105110355';
 import academyFeijingMerchant from '../src/scripts/105110223';
 import greatAlchemist from '../src/scripts/105120167';
+import alchemyKnightElmont from '../src/scripts/105120168';
 import divineAlchemy from '../src/scripts/205000136';
+import forbiddenAlchemy from '../src/scripts/205000064';
+import escort from '../src/scripts/101140151';
+import valkyrieZero from '../src/scripts/105110114';
 import chocolate from '../src/scripts/205000149';
 import devotion from '../src/scripts/201100099';
 import prayer from '../src/scripts/201000102';
@@ -224,6 +228,10 @@ async function activateAndResolveByOpponentPass(state: any, playerUid: string, c
 
 async function activateTriggerAndAnswerYes(state: any, playerUid: string) {
   await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    const optionId = state.pendingQuery.options?.[0]?.id;
+    if (optionId) await answerPendingQuery(state, state.pendingQuery.playerUid, [optionId]);
+  }
   if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
     await answerPendingQuery(state, playerUid, ['YES']);
   }
@@ -1822,6 +1830,10 @@ async function testGreatAlchemistLoseAtEndOfTurn(): Promise<ScenarioResult> {
   await activateAndResolveByOpponentPass(state, 'BOT', alchemist, 1);
   const markerSet = (state.players.BOT as any).loseAtEndOfTurn === state.turnCount;
   await ServerGameService.executeEndPhase(state, state.players.BOT);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    const loseOption = state.pendingQuery.options?.find((option: any) => String(option.id || '').startsWith('lose_at_end_'));
+    await answerPendingQuery(state, state.pendingQuery.playerUid, [loseOption?.id || state.pendingQuery.options?.[0]?.id]);
+  }
 
   const lost = state.gameStatus === 2 && state.winnerId === 'P1';
   const graveBottomed = graveCards.every(card => state.players.BOT.deck.some((deckCard: Card) => deckCard.gamecardId === card.gamecardId));
@@ -1829,6 +1841,115 @@ async function testGreatAlchemistLoseAtEndOfTurn(): Promise<ScenarioResult> {
   return markerSet && lost && graveBottomed
     ? pass(name, `lost=${lost}, graveBottomed=${graveBottomed}`)
     : fail(name, `marker=${markerSet}, lost=${lost}, winner=${state.winnerId || 'none'}, graveBottomed=${graveBottomed}`);
+}
+
+async function testGreatAlchemistLoseAfterLeavingField(): Promise<ScenarioResult> {
+  const name = 'BT02 Great Alchemist end loss still triggers after leaving field';
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const graveCards = deckCards(2, 'GREAT_ALCHEMIST_LEAVE_GRAVE', 'YELLOW').map(card => ({ ...card, cardlocation: 'GRAVE' as TriggerLocation }));
+  const erosion = deckCards(10, 'GREAT_ALCHEMIST_LEAVE_EROSION', 'YELLOW').map(card => ({ ...card, cardlocation: 'EROSION_FRONT' as TriggerLocation }));
+  const state = game({
+    deck: deckCards(5, 'GREAT_ALCHEMIST_LEAVE_DECK', 'YELLOW'),
+    grave: graveCards,
+    unitZone: [alchemist, null, null, null, null, null],
+    erosionFront: erosion,
+    isGoddessMode: true,
+  });
+
+  await activateAndResolveByOpponentPass(state, 'BOT', alchemist, 1);
+  const markerSet = (state.players.BOT as any).loseAtEndOfTurn === state.turnCount;
+  ServerGameService.moveCard(state, 'BOT', 'UNIT', 'BOT', 'GRAVE', alchemist.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'BOT',
+    effectSourceCardId: alchemist.gamecardId
+  });
+
+  await ServerGameService.executeEndPhase(state, state.players.BOT);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    const loseOption = state.pendingQuery.options?.find((option: any) => String(option.id || '').startsWith('lose_at_end_'));
+    await answerPendingQuery(state, state.pendingQuery.playerUid, [loseOption?.card?.gamecardId || loseOption?.id || state.pendingQuery.options?.[0]?.id]);
+  }
+
+  const lost = state.gameStatus === 2 && state.winnerId === 'P1';
+  const sourceCardShown = state.logs.some((log: any) => String(log?.text || log).includes('大炼金术士「伊丽瑟薇」')) ||
+    state.winSourceCardName === alchemist.fullName;
+
+  return markerSet && lost && sourceCardShown
+    ? pass(name, `lost=${lost}, source=${state.winSourceCardName}`)
+    : fail(name, `marker=${markerSet}, lost=${lost}, winner=${state.winnerId || 'none'}, source=${state.winSourceCardName || 'none'}, phase=${state.phase}`);
+}
+
+async function testElmontEnterTriggerIsOptional(): Promise<ScenarioResult> {
+  const name = 'BT02 Alchemy Knight Elmont enter trigger is optional';
+  const buildState = () => {
+    const elmont = cloneScriptCard(alchemyKnightElmont as Card, 'UNIT');
+    const graveA = testCard({
+      id: 'ELMONT_GRAVE_A',
+      fullName: '炼金素材 A',
+      specialName: '素材A',
+      type: 'UNIT',
+      color: 'YELLOW',
+      cardlocation: 'GRAVE',
+    });
+    const graveB = testCard({
+      id: 'ELMONT_GRAVE_B',
+      fullName: '炼金素材 B',
+      specialName: '素材B',
+      type: 'UNIT',
+      color: 'YELLOW',
+      cardlocation: 'GRAVE',
+    });
+    const drawCard = testCard({
+      id: 'ELMONT_DRAW',
+      fullName: 'Elmont draw card',
+      type: 'UNIT',
+      color: 'YELLOW',
+      cardlocation: 'DECK',
+    });
+    const state = game({
+      deck: [drawCard, ...deckCards(2, 'ELMONT_DECK', 'YELLOW')],
+      grave: [graveA, graveB],
+      unitZone: [elmont, null, null, null, null, null],
+    });
+    EventEngine.dispatchEvent(state, {
+      type: 'CARD_ENTERED_ZONE' as any,
+      playerUid: 'BOT',
+      sourceCardId: elmont.gamecardId,
+      data: { zone: 'UNIT' },
+    });
+    return { state, elmont, graveA, graveB };
+  };
+
+  const noState = buildState();
+  await ServerGameService.checkTriggeredEffects(noState.state);
+  const asksOptional = noState.state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    noState.state.pendingQuery.playerUid === 'BOT' &&
+    noState.state.pendingQuery.context?.sourceCardId === noState.elmont.gamecardId;
+  const noBeforeGrave = noState.state.players.BOT.grave.length;
+  const noBeforeDeck = noState.state.players.BOT.deck.length;
+  const noBeforeHand = noState.state.players.BOT.hand.length;
+  await answerPendingQuery(noState.state, 'BOT', ['NO']);
+  const noSkipped = noState.state.players.BOT.grave.length === noBeforeGrave &&
+    noState.state.players.BOT.deck.length === noBeforeDeck &&
+    noState.state.players.BOT.hand.length === noBeforeHand &&
+    !noState.state.pendingQuery;
+
+  const yesState = buildState();
+  await ServerGameService.checkTriggeredEffects(yesState.state);
+  await answerPendingQuery(yesState.state, 'BOT', ['YES']);
+  const asksSelection = yesState.state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
+    yesState.state.pendingQuery.context?.effectId === '105120168_enter' &&
+    yesState.state.pendingQuery.options?.length === 2;
+  await answerPendingQuery(yesState.state, 'BOT', [yesState.graveA.gamecardId, yesState.graveB.gamecardId]);
+  const graveBottomed = [yesState.graveA, yesState.graveB].every(card =>
+    yesState.state.players.BOT.deck.some((deckCard: Card) => deckCard.gamecardId === card.gamecardId)
+  );
+  const drewCard = yesState.state.players.BOT.hand.length === 1;
+  const yesResolved = graveBottomed && drewCard && !yesState.state.pendingQuery;
+
+  return asksOptional && noSkipped && asksSelection && yesResolved
+    ? pass(name, `optional=${asksOptional}, no=${noSkipped}, yes=${yesResolved}`)
+    : fail(name, `optional=${asksOptional}, no=${noSkipped}, select=${asksSelection}, yes=${yesResolved}, pending=${yesState.state.pendingQuery?.callbackKey || 'none'}`);
 }
 
 async function testYellowDailyBlueprintTruthAndIly(): Promise<ScenarioResult> {
@@ -1975,6 +2096,223 @@ async function testYellowChocolate(): Promise<ScenarioResult> {
     : fail(name, `enemySmall=${enemySmallDestroyed}, enemyLargeAlive=${enemyLargeAlive}, ownSmallAlive=${ownSmallAlive}`);
 }
 
+async function testEndTurnTriggerBucketOrder(): Promise<ScenarioResult> {
+  const name = 'End turn trigger buckets resolve mandatory turn player before opponent then optional';
+  const ily = cloneScriptCard(bt06Y05 as Card, 'UNIT');
+  const materialA = cloneScriptCard(bt06Y01 as Card, 'UNIT');
+  const materialB = testCard({ id: 'ILY_MAT_B', type: 'ITEM', color: 'YELLOW', cardlocation: 'ITEM' });
+  const ilyDeckTarget = testCard({ id: 'ILY_DECK_TARGET', type: 'UNIT', color: 'GREEN', cardlocation: 'DECK', colorReq: {}, power: 3000, basePower: 3000 });
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_TARGET', fullName: 'Forbidden non alchemy target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  const escortCard = cloneScriptCard(escort as Card, 'UNIT');
+  const escortedTarget = testCard({ id: 'ESCORTED_TARGET', fullName: 'Escorted target', type: 'UNIT', color: 'BLUE', cardlocation: 'EXILE', colorReq: {}, power: 2000, basePower: 2000 });
+
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT'
+  };
+
+  const state = game({
+    deck: [ilyDeckTarget, ...deckCards(4, 'END_ORDER_FILL', 'YELLOW')],
+    grave: [forbiddenSource],
+    unitZone: [ily, materialA, forbiddenTarget, null, null, null],
+    itemZone: [materialB],
+  }, {
+    unitZone: [escortCard, null, null, null, null, null],
+    exile: [escortedTarget],
+    escortReturns: [{ cardId: escortedTarget.gamecardId, ownerUid: 'P1', zone: 'UNIT', afterTurn: 6 }],
+  }, { phase: 'END', turnCount: 6 });
+
+  EventEngine.dispatchEvent(state, { type: 'TURN_END' as any, playerUid: 'BOT' });
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const firstWasForbidden = state.players.BOT.exile.some((card: Card) => card.gamecardId === forbiddenTarget.gamecardId);
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const returnedByEscort = state.players.P1.unitZone.some((card: Card | null) => card?.gamecardId === escortedTarget.gamecardId);
+  const optionalIlyPending = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.context?.sourceCardId === ily.gamecardId;
+
+  return firstWasForbidden && returnedByEscort && optionalIlyPending
+    ? pass(name, `forbidden=${firstWasForbidden}, escort=${returnedByEscort}, optional=${optionalIlyPending}`)
+    : fail(name, `forbidden=${firstWasForbidden}, escort=${returnedByEscort}, pending=${state.pendingQuery?.callbackKey || 'none'}/${state.pendingQuery?.context?.sourceCardId || 'none'}`);
+}
+
+async function testSameBucketTriggerOrderChoice(): Promise<ScenarioResult> {
+  const name = 'Same bucket trigger order asks player to choose next trigger';
+  const sourceA = testCard({ id: 'MAND_A', fullName: 'Mandatory A', type: 'UNIT', color: 'YELLOW', cardlocation: 'UNIT' });
+  const sourceB = testCard({ id: 'MAND_B', fullName: 'Mandatory B', type: 'UNIT', color: 'YELLOW', cardlocation: 'UNIT' });
+  const state = game({
+    unitZone: [sourceA, sourceB, null, null, null, null],
+  }, {}, { phase: 'END' });
+  const resolved: string[] = [];
+  state.triggeredEffectsQueue.push(
+    {
+      queueId: 'mandatory_a',
+      card: sourceA,
+      playerUid: 'BOT',
+      effectIndex: -1,
+      event: { type: 'TURN_END' as any, playerUid: 'BOT' },
+      effect: {
+        id: 'mandatory_a',
+        type: 'TRIGGER',
+        isMandatory: true,
+        description: '必发 A',
+        execute: async () => { resolved.push('A'); }
+      }
+    },
+    {
+      queueId: 'mandatory_b',
+      card: sourceB,
+      playerUid: 'BOT',
+      effectIndex: -1,
+      event: { type: 'TURN_END' as any, playerUid: 'BOT' },
+      effect: {
+        id: 'mandatory_b',
+        type: 'TRIGGER',
+        isMandatory: true,
+        description: '必发 B',
+        execute: async () => { resolved.push('B'); }
+      }
+    }
+  );
+
+  await ServerGameService.checkTriggeredEffects(state);
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.options?.length === 2;
+  await answerPendingQuery(state, 'BOT', ['mandatory_b']);
+
+  return askedOrder && resolved.join(',') === 'B,A'
+    ? pass(name, `resolved=${resolved.join(',')}`)
+    : fail(name, `asked=${askedOrder}, resolved=${resolved.join(',')}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testMandatoryEndTurnOrderWithValkyrieAndGreatAlchemist(): Promise<ScenarioResult> {
+  const name = 'Mandatory end triggers ask order for Valkyrie Zero Forbidden Alchemy and Great Alchemist loss';
+  const zero = cloneScriptCard(valkyrieZero as Card, 'UNIT');
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_ZERO_TARGET', fullName: 'Forbidden Zero target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  (zero as any).data = { enteredGoddessTurn_105110114: 6 };
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT'
+  };
+  const state = game({
+    grave: [forbiddenSource],
+    unitZone: [zero, alchemist, forbiddenTarget, null, null, null],
+    isGoddessMode: true,
+    loseAtEndOfTurn: 6,
+    loseAtEndOfTurnSourceName: alchemist.fullName,
+    loseAtEndOfTurnSourceCardId: alchemist.gamecardId,
+  }, {}, { phase: 'END', turnCount: 6 });
+
+  EventEngine.dispatchEvent(state, { type: 'TURN_END' as any, playerUid: 'BOT' });
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.context?.mandatory === true;
+  const optionDetails = (state.pendingQuery?.options || []).map((option: any) => `${option.id}:${option.label}:${option.detail}`).join('|');
+  const hasZero = /瓦尔基里/.test(optionDetails);
+  const hasForbidden = /禁忌炼金/.test(optionDetails);
+  const hasLoss = /大炼金术士/.test(optionDetails);
+
+  return askedOrder && hasZero && hasForbidden && hasLoss
+    ? pass(name, optionDetails)
+    : fail(name, `asked=${askedOrder}, options=${optionDetails}`);
+}
+
+async function testTriggerOrderAcceptsDisplayedCardIds(): Promise<ScenarioResult> {
+  const name = 'Trigger order accepts displayed card ids for Forbidden Alchemy and Great Alchemist';
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_DISPLAY_TARGET', fullName: 'Forbidden display target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT'
+  };
+  const state = game({
+    grave: [forbiddenSource],
+    unitZone: [alchemist, forbiddenTarget, null, null, null, null],
+    loseAtEndOfTurn: 6,
+    loseAtEndOfTurnSourceName: alchemist.fullName,
+    loseAtEndOfTurnSourceCardId: alchemist.gamecardId,
+  }, {}, { phase: 'END', turnCount: 6 });
+
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE';
+  await answerPendingQuery(state, 'BOT', [forbiddenSource.gamecardId]);
+  const forbiddenResolved = state.players.BOT.exile.some((card: Card) => card.gamecardId === forbiddenTarget.gamecardId);
+
+  await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    await answerPendingQuery(state, 'BOT', [alchemist.gamecardId]);
+  }
+  const lossResolved = state.gameStatus === 2 && state.winnerId === 'P1';
+
+  return askedOrder && forbiddenResolved && lossResolved
+    ? pass(name, `forbidden=${forbiddenResolved}, loss=${lossResolved}`)
+    : fail(name, `asked=${askedOrder}, forbidden=${forbiddenResolved}, loss=${lossResolved}, pending=${state.pendingQuery?.callbackKey || 'none'}, logs=${state.logs.slice(-5).join(' / ')}`);
+}
+
+async function testSerializedVirtualEndTriggersResolve(): Promise<ScenarioResult> {
+  const name = 'Serialized virtual end triggers still resolve Forbidden Alchemy and Great Alchemist';
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_SERIALIZED_TARGET', fullName: 'Forbidden serialized target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT',
+    returnToExileAtEndPredicateKey: 'STILL_IN_UNIT'
+  };
+  const state = game({
+    grave: [forbiddenSource],
+    unitZone: [alchemist, forbiddenTarget, null, null, null, null],
+    loseAtEndOfTurn: 6,
+    loseAtEndOfTurnSourceName: alchemist.fullName,
+    loseAtEndOfTurnSourceCardId: alchemist.gamecardId,
+    loseAtEndOfTurnSourceCardSnapshot: { ...alchemist },
+  }, {}, { phase: 'END', turnCount: 6 });
+
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE';
+
+  const rehydrated = JSON.parse(JSON.stringify(state));
+  ServerGameService.hydrateGameState(rehydrated);
+  await answerPendingQuery(rehydrated, 'BOT', [forbiddenSource.gamecardId]);
+  const exiledForbidden = rehydrated.players.BOT.exile.find((card: Card) => card.gamecardId === forbiddenTarget.gamecardId);
+  const forbiddenResolved = !!exiledForbidden && exiledForbidden.displayState === 'FRONT_UPRIGHT';
+
+  await ServerGameService.checkTriggeredEffects(rehydrated);
+  const rehydratedAgain = JSON.parse(JSON.stringify(rehydrated));
+  ServerGameService.hydrateGameState(rehydratedAgain);
+  if (rehydratedAgain.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    await answerPendingQuery(rehydratedAgain, 'BOT', [alchemist.gamecardId]);
+  }
+  const lossResolved = rehydratedAgain.gameStatus === 2 && rehydratedAgain.winnerId === 'P1';
+  const sourceNameKept = rehydratedAgain.winSourceCardName === alchemist.fullName;
+
+  return askedOrder && forbiddenResolved && lossResolved && sourceNameKept
+    ? pass(name, `forbidden=${forbiddenResolved}/${exiledForbidden?.displayState}, loss=${lossResolved}, source=${rehydratedAgain.winSourceCardName}`)
+    : fail(name, `asked=${askedOrder}, forbidden=${forbiddenResolved}/${exiledForbidden?.displayState || 'none'}, loss=${lossResolved}, source=${rehydratedAgain.winSourceCardName || 'none'}, pending=${rehydratedAgain.pendingQuery?.callbackKey || 'none'}`);
+}
+
 const scenarios: ScenarioRun[] = [
   testCorielEndSearch,
   testCorielStoryCheatUnit,
@@ -2008,8 +2346,15 @@ const scenarios: ScenarioRun[] = [
   testAcademyFeijingMerchantLeaveTrigger,
   testDivineAlchemyDamageAndEndsTurn,
   testGreatAlchemistLoseAtEndOfTurn,
+  testGreatAlchemistLoseAfterLeavingField,
+  testElmontEnterTriggerIsOptional,
   testYellowDailyBlueprintTruthAndIly,
   testYellowChocolate,
+  testEndTurnTriggerBucketOrder,
+  testSameBucketTriggerOrderChoice,
+  testMandatoryEndTurnOrderWithValkyrieAndGreatAlchemist,
+  testTriggerOrderAcceptsDisplayedCardIds,
+  testSerializedVirtualEndTriggersResolve,
 ];
 
 async function main() {

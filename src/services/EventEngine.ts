@@ -189,7 +189,14 @@ export class EventEngine {
       }
 
       if (!gameState.triggeredEffectsQueue) gameState.triggeredEffectsQueue = [];
-      gameState.triggeredEffectsQueue.push({ card, effect, effectIndex, playerUid, event });
+      gameState.triggeredEffectsQueue.push({
+        queueId: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        card,
+        effect,
+        effectIndex,
+        playerUid,
+        event
+      });
       const identity = getCardIdentity(gameState, playerUid, card);
       gameState.logs.push(`[诱发入队] ${identity} ${card.fullName} 的效果已入队，待系统处理。`);
     }

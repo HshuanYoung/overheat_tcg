@@ -2,7 +2,7 @@ import { getAuthUser, getAuthToken, socket } from '../socket';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Swords, X, ChevronDown, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { validateDeckForBattle } from '../lib/deckValidation';
 import { Deck } from '../types/game';

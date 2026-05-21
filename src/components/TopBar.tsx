@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { BookOpen, Check, Coins, Gem, Layers3, Loader2, LogOut, Menu, Settings, Trophy, UserRound, UsersRound, X } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { readJsonResponse } from '../lib/http';
 
 export const TopBar: React.FC<{ onOpenRulebook: () => void; onlinePlayerCount?: number; onToggleOnlinePlayers?: () => void }> = ({ onOpenRulebook, onlinePlayerCount = 0, onToggleOnlinePlayers }) => {

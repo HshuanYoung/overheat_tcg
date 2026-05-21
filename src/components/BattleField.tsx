@@ -1012,7 +1012,7 @@ export const BattleField: React.FC = () => {
       return rawPendingQueryOptions;
     }
   }, [game, pendingQuery, rawPendingQueryOptions, normalizedPendingQueryType]);
-  const getPendingOptionId = (option?: any) => option?.card?.gamecardId || option?.card?.id || option?.id || '';
+  const getPendingOptionId = (option?: any) => option?.selectionId || option?.card?.gamecardId || option?.card?.id || option?.id || '';
   const getPendingOptionText = (option?: any) =>
     `${option?.value || ''} ${option?.id || ''} ${option?.label || ''}`.toUpperCase();
   const isPositiveBinaryOption = (option?: any) => {
@@ -1063,9 +1063,9 @@ export const BattleField: React.FC = () => {
   const isInspectOnlyPendingQuery = isSelectCardPendingQuery &&
     (pendingQuery?.minSelections ?? 0) === 0 &&
     selectablePendingQueryOptions.length === 0;
-  const querySubmitLabel = isSelectCardPendingQuery
-    ? (isInspectOnlyPendingQuery ? '确认' : '确认选择')
-    : '确认支付';
+  const querySubmitLabel = normalizedPendingQueryType === 'SELECT_PAYMENT'
+    ? '确认支付'
+    : (isInspectOnlyPendingQuery ? '确认' : '确认选择');
 
   const highlightedCardIds = useMemo(() => {
     const ids = new Set<string>();
@@ -3391,7 +3391,7 @@ export const BattleField: React.FC = () => {
         maxSelections={game.pendingQuery?.maxSelections}
         onCardClick={(card) => {
           const optionId = card.gamecardId || card.id;
-          const option = pendingQueryOptions.find(o => (o.card?.gamecardId || o.card?.id || o.id) === optionId);
+          const option = pendingQueryOptions.find(o => getPendingOptionId(o) === optionId);
           if (option?.disabled) return;
 
           setSelectedQueryIds(prev => {
@@ -3412,7 +3412,7 @@ export const BattleField: React.FC = () => {
             : paymentSelection.erosionFrontIds.length
         }
         squarePanel={normalizedPendingQueryType === 'ASK_TRIGGER'}
-        confirmText={binaryConfirmText}
+        confirmText={pendingQueryPopupMode === 'double_selection' ? binaryConfirmText : querySubmitLabel}
         cancelText={binaryCancelText}
         onConfirm={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryConfirmOption) || 'YES'])}
         onCancel={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryCancelOption) || 'NO'])}

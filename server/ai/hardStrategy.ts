@@ -3846,6 +3846,9 @@ export function chooseQuerySelections(
   const maxSelectionCount = Math.max(requiredSelectionCount, Math.min(maxSelections, selectableOptions.length));
 
   if (query.callbackKey === 'TRIGGER_CHOICE') return ['YES'];
+  if (query.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    return selectableOptions[0]?.id ? [selectableOptions[0].id] : [];
+  }
   if (maxSelectionCount === 0) return [];
   if (difficulty !== 'hard') {
     return selectableOptions

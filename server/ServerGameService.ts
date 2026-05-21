@@ -878,6 +878,92 @@ export const ServerGameService = {
     }
   },
 
+  hydrateVirtualTriggerRecord(record: any) {
+    if (!record || record.effectIndex >= 0 || !record.virtualTriggerType) return record;
+    const payload = record.virtualPayload || {};
+    const queueId = record.queueId || record.effect?.id || `${record.virtualTriggerType}_${payload.targetCardId || record.playerUid || 'effect'}`;
+    const sourceName = payload.sourceName || record.card?.fullName || '卡牌效果';
+    record.effect = {
+      ...(record.effect || {}),
+      id: record.effect?.id || queueId,
+      type: 'TRIGGER',
+      triggerEvent: 'TURN_END' as any,
+      isMandatory: true,
+      execute: async (_source: Card, state: GameState, player: PlayerState) => {
+        await ServerGameService.executeVirtualTriggerRecord(state, player, record);
+      }
+    };
+    if (!record.effect.description) {
+      if (record.virtualTriggerType === 'RETURN_TO_EXILE_AT_END') {
+        record.effect.description = `[${sourceName}] 回合结束时将 [${record.card?.fullName || '目标'}] 放逐。`;
+      } else if (record.virtualTriggerType === 'RETURN_TO_DECK_BOTTOM_AT_END') {
+        record.effect.description = `[${sourceName}] 回合结束时将 [${record.card?.fullName || '目标'}] 放置到卡组底。`;
+      } else if (record.virtualTriggerType === 'LOSE_AT_END') {
+        record.effect.description = `[${sourceName}] 回合结束时你输掉游戏。`;
+      } else {
+        record.effect.description = '回合结束时处理延迟效果。';
+      }
+    }
+    return record;
+  },
+
+  async executeVirtualTriggerRecord(state: GameState, player: PlayerState, record: any) {
+    const payload = record.virtualPayload || {};
+    const sourceName = payload.sourceName || record.card?.fullName || '卡牌效果';
+    const sourceCardId = payload.sourceCardId;
+    const targetCardId = payload.targetCardId || record.card?.gamecardId;
+
+    if (record.virtualTriggerType === 'RETURN_TO_EXILE_AT_END') {
+      const live = ServerGameService.findCardLocation(state, targetCardId);
+      if (!live || (live.card as any).data?.returnToExileAtEndTurn !== state.turnCount) return;
+      const predicateKey = (live.card as any).data.returnToExileAtEndPredicateKey || payload.predicateKey || 'STILL_IN_UNIT';
+      if (predicateKey === 'STILL_IN_UNIT' && live.zone !== 'UNIT') return;
+      delete (live.card as any).data.returnToExileAtEndTurn;
+      delete (live.card as any).data.returnToExileSourceName;
+      delete (live.card as any).data.returnToExileSourceCardId;
+      delete (live.card as any).data.returnToExileEffectOwnerUid;
+      delete (live.card as any).data.returnToExileAtEndPredicate;
+      delete (live.card as any).data.returnToExileAtEndPredicateKey;
+      ServerGameService.moveCard(state, live.ownerUid, live.zone, live.ownerUid, 'EXILE', live.card.gamecardId, {
+        isEffect: true,
+        faceDown: false,
+        effectSourcePlayerUid: payload.effectOwnerUid || live.ownerUid,
+        effectSourceCardId: sourceCardId
+      });
+      state.logs.push(`[${sourceName}] 回合结束时将 [${live.card.fullName}] 放逐。`);
+      return;
+    }
+
+    if (record.virtualTriggerType === 'RETURN_TO_DECK_BOTTOM_AT_END') {
+      const live = ServerGameService.findCardLocation(state, targetCardId);
+      if (!live || (live.card as any).data?.returnToDeckBottomAtTurnEnd !== state.turnCount) return;
+      delete (live.card as any).data.returnToDeckBottomAtTurnEnd;
+      delete (live.card as any).data.returnToDeckBottomSourceName;
+      delete (live.card as any).data.returnToDeckBottomSourceCardId;
+      delete (live.card as any).data.returnToDeckBottomOwnerUid;
+      ServerGameService.moveCard(state, live.ownerUid, live.zone, live.ownerUid, 'DECK', live.card.gamecardId, {
+        insertAtBottom: true,
+        isEffect: true,
+        effectSourcePlayerUid: payload.effectOwnerUid || live.ownerUid,
+        effectSourceCardId: sourceCardId
+      });
+      state.logs.push(`[${sourceName}] 将 [${live.card.fullName}] 放置到卡组底。`);
+      return;
+    }
+
+    if (record.virtualTriggerType === 'LOSE_AT_END') {
+      delete (player as any).loseAtEndOfTurn;
+      delete (player as any).loseAtEndOfTurnSourceName;
+      delete (player as any).loseAtEndOfTurnSourceCardId;
+      delete (player as any).loseAtEndOfTurnSourceCardSnapshot;
+      state.gameStatus = 2;
+      state.winReason = 'CARD_EFFECT_SPECIAL_WIN';
+      state.winnerId = state.playerIds.find(id => id !== player.uid);
+      state.winSourceCardName = sourceName;
+      state.logs.push(`[游戏结束] ${player.displayName} 因 [${sourceName}] 的效果在回合结束时判负。`);
+    }
+  },
+
   hydrateGameState(gameState: GameState) {
     if (!gameState || !gameState.players) return;
     Object.values(gameState.players).forEach(player => {
@@ -951,8 +1037,10 @@ export const ServerGameService = {
         if (!record || !record.card) return record;
 
         ServerGameService.hydrateCard(record.card);
+        if (record.sourceCard) ServerGameService.hydrateCard(record.sourceCard);
+        ServerGameService.hydrateVirtualTriggerRecord(record);
 
-        if (record.card.effects) {
+        if (record.effectIndex >= 0 && record.card.effects) {
           const masterEffect = record.card.effects[record.effectIndex];
           if (masterEffect) {
             record.effect = { ...record.effect, ...masterEffect };
@@ -968,9 +1056,11 @@ export const ServerGameService = {
         if (!record || !record.card) return record;
 
         ServerGameService.hydrateCard(record.card);
+        if (record.sourceCard) ServerGameService.hydrateCard(record.sourceCard);
+        ServerGameService.hydrateVirtualTriggerRecord(record);
 
         // Find the matching effect in the library and restore it entirely
-        if (record.card.effects) {
+        if (record.effectIndex >= 0 && record.card.effects) {
           const masterEffect = record.card.effects[record.effectIndex];
           if (masterEffect) {
             // Merge all properties from the library to restore functions and metadata
@@ -2650,6 +2740,7 @@ export const ServerGameService = {
                 gameState.pendingResolutions.push({
                   card: liveEffectCard,
                   effect,
+                  effectIndex,
                   playerUid: stackItem.ownerUid
                 });
               }
@@ -2765,7 +2856,7 @@ export const ServerGameService = {
       currentPlayer.isTurn
     ) {
       delete (currentPlayer as any).forceEndTurnRequested;
-      await ServerGameService.executeEndPhase(gameState, currentPlayer);
+      await ServerGameService.executeEndPhase(gameState, currentPlayer, false, onUpdate);
       return;
     }
 
@@ -2774,6 +2865,136 @@ export const ServerGameService = {
     if (ServerGameService.checkBattleInterruption(gameState)) {
       await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
     }
+  },
+
+  getTriggerQueueId(record: any) {
+    if (!record.queueId) {
+      record.queueId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return record.queueId;
+  },
+
+  getTriggerBucketOrder(gameState: GameState) {
+    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+    const nonTurnPlayerId = gameState.playerIds.find(uid => uid !== turnPlayerId);
+    return [
+      { ownerUid: turnPlayerId, mandatory: true },
+      { ownerUid: nonTurnPlayerId, mandatory: true },
+      { ownerUid: turnPlayerId, mandatory: false },
+      { ownerUid: nonTurnPlayerId, mandatory: false }
+    ].filter(bucket => !!bucket.ownerUid) as { ownerUid: string; mandatory: boolean }[];
+  },
+
+  removeTriggerRecordById(gameState: GameState, queueId?: string) {
+    if (!queueId || !gameState.triggeredEffectsQueue) return undefined;
+    const index = gameState.triggeredEffectsQueue.findIndex(record => ServerGameService.getTriggerQueueId(record) === queueId);
+    if (index === -1) return undefined;
+    return gameState.triggeredEffectsQueue.splice(index, 1)[0];
+  },
+
+  getTriggerBucket(gameState: GameState) {
+    const queue = gameState.triggeredEffectsQueue || [];
+    for (const bucket of ServerGameService.getTriggerBucketOrder(gameState)) {
+      const records = queue
+        .filter(record => record.playerUid === bucket.ownerUid && !!record.effect?.isMandatory === bucket.mandatory)
+        .sort((a, b) => (b.effect?.triggerPriority || 0) - (a.effect?.triggerPriority || 0));
+      if (records.length > 0) {
+        return { ...bucket, records };
+      }
+    }
+    return undefined;
+  },
+
+  createTriggerOrderQuery(gameState: GameState, playerUid: string, records: any[], mandatory: boolean) {
+    gameState.pendingQuery = {
+      id: Math.random().toString(36).substring(7),
+      type: 'SELECT_CHOICE',
+      playerUid,
+      options: records.map(record => {
+        const queueId = ServerGameService.getTriggerQueueId(record);
+        const sourceCard = record.sourceCard || record.effectSourceCard || record.card;
+        const sourceName = sourceCard?.fullName || record.card?.fullName || record.effect?.id || '未知来源';
+        const identity = sourceCard ? getCardIdentity(gameState, record.playerUid, sourceCard) : '';
+        return {
+          id: queueId,
+          selectionId: queueId,
+          value: queueId,
+          label: `${identity ? `${identity} ` : ''}${sourceName}`,
+          detail: `${mandatory ? '必发' : '选发'}：${record.effect.description}`,
+          icon: mandatory ? 'trigger' : 'choice',
+          card: sourceCard
+        };
+      }),
+      title: '选择诱发效果',
+      description: `请选择下一个要结算的${mandatory ? '必发' : '选发'}诱发效果。`,
+      minSelections: 1,
+      maxSelections: 1,
+      callbackKey: 'TRIGGER_ORDER_CHOICE',
+      context: { mandatory }
+    };
+  },
+
+  resolveTriggerOrderSelection(query: GameState['pendingQuery'], selection?: string) {
+    if (!selection) return selection;
+    const options = query?.options || [];
+    const option = options.find((opt: any) =>
+      opt.id === selection ||
+      opt.selectionId === selection ||
+      opt.value === selection ||
+      opt.card?.gamecardId === selection ||
+      opt.card?.id === selection
+    );
+    return (option as any)?.selectionId || option?.id || option?.value || selection;
+  },
+
+  async processSelectedTriggerRecord(gameState: GameState, trigger: any, onUpdate?: (state: GameState) => Promise<void>) {
+    ServerGameService.hydrateVirtualTriggerRecord(trigger);
+    let { card, effect, effectIndex, playerUid, event } = trigger;
+    let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
+    if (!liveSource && event?.sourceCardId === card.gamecardId) {
+      liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
+    }
+    const isVirtualTrigger = effectIndex < 0;
+    if (!liveSource) {
+      if (isVirtualTrigger) {
+        liveSource = { card, ownerUid: playerUid, zone: card.cardlocation || 'PLAY' };
+      }
+    }
+    if (!liveSource) {
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      return;
+    }
+    card = liveSource.card;
+    const triggerLocation = (event?.type === 'REVEAL_DECK' && effect.triggerLocation?.includes('DECK'))
+      ? 'DECK'
+      : card.cardlocation as TriggerLocation;
+    if (!isVirtualTrigger && !ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, card, effect, triggerLocation, event).valid) {
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      return;
+    }
+
+    if (effect.isMandatory) {
+      await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+        effectIndex,
+        card,
+        effect,
+        event
+      }, onUpdate);
+      return;
+    }
+
+    gameState.pendingQuery = {
+      id: Math.random().toString(36).substring(7),
+      type: 'ASK_TRIGGER',
+      playerUid,
+      options: [],
+      title: '发动提示',
+      description: `是否发动 ${getCardIdentity(gameState, playerUid, card)} [${card.fullName}] 的诱发效果：${effect.description}`,
+      minSelections: 1,
+      maxSelections: 1,
+      callbackKey: 'TRIGGER_CHOICE',
+      context: { effectIndex, sourceCardId: card.gamecardId, event }
+    };
   },
 
   async checkTriggeredEffects(gameState: GameState, onUpdate?: (state: GameState) => Promise<void>) {
@@ -2789,47 +3010,18 @@ export const ServerGameService = {
     }
 
     if (gameState.triggeredEffectsQueue && gameState.triggeredEffectsQueue.length > 0) {
-      const trigger = gameState.triggeredEffectsQueue.shift()!;
-      let { card, effect, effectIndex, playerUid, event } = trigger;
-      let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
-      if (!liveSource && event?.sourceCardId === card.gamecardId) {
-        liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
+      const bucket = ServerGameService.getTriggerBucket(gameState);
+      if (!bucket) return;
+      if (bucket.records.length > 1) {
+        ServerGameService.createTriggerOrderQuery(gameState, bucket.ownerUid, bucket.records, bucket.mandatory);
+        return;
       }
-      if (!liveSource) {
+      const trigger = ServerGameService.removeTriggerRecordById(gameState, ServerGameService.getTriggerQueueId(bucket.records[0]));
+      if (!trigger) {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
         return;
       }
-      card = liveSource.card;
-      const triggerLocation = (event?.type === 'REVEAL_DECK' && effect.triggerLocation?.includes('DECK'))
-        ? 'DECK'
-        : card.cardlocation as TriggerLocation;
-      if (!ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, card, effect, triggerLocation, event).valid) {
-        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
-        return;
-      }
-      const isMandatory = effect.isMandatory;
-
-      if (isMandatory) {
-        await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
-          effectIndex: effectIndex,
-          card,
-          effect,
-          event
-        }, onUpdate);
-      } else {
-        gameState.pendingQuery = {
-          id: Math.random().toString(36).substring(7),
-          type: 'ASK_TRIGGER',
-          playerUid: playerUid,
-          options: [],
-          title: '发动提示',
-          description: `是否发动 ${getCardIdentity(gameState, playerUid, card)} [${card.fullName}] 的诱发效果：${effect.description}`,
-          minSelections: 1,
-          maxSelections: 1,
-          callbackKey: 'TRIGGER_CHOICE',
-          context: { effectIndex, sourceCardId: card.gamecardId, event }
-        };
-      }
+      await ServerGameService.processSelectedTriggerRecord(gameState, trigger, onUpdate);
     } else {
       // Queue is empty, settlement is truly complete
       const queueLengthBeforeInterrupt = gameState.triggeredEffectsQueue?.length || 0;
@@ -2853,7 +3045,7 @@ export const ServerGameService = {
         const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
         const currentPlayer = gameState.players[currentPlayerId];
         if (currentPlayer) {
-          await ServerGameService.executeEndPhase(gameState, currentPlayer, true);
+          await ServerGameService.executeEndPhase(gameState, currentPlayer, true, onUpdate);
         }
       }
 
@@ -2871,7 +3063,7 @@ export const ServerGameService = {
         currentPlayer.isTurn
       ) {
         delete (currentPlayer as any).forceEndTurnRequested;
-        await ServerGameService.executeEndPhase(gameState, currentPlayer);
+        await ServerGameService.executeEndPhase(gameState, currentPlayer, false, onUpdate);
       }
     }
   },
@@ -3285,9 +3477,22 @@ export const ServerGameService = {
         await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
           effectIndex: query.context.effectIndex,
           card: sourceCard!,
+          effect: sourceCard!.effects![query.context.effectIndex],
           event: query.context.event
         }, onUpdate);
       } else {
+        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      }
+      return gameState;
+    }
+
+    if (query.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+      const selectedQueueId = ServerGameService.resolveTriggerOrderSelection(query, currentSelections[0]);
+      const trigger = ServerGameService.removeTriggerRecordById(gameState, selectedQueueId);
+      if (trigger) {
+        await ServerGameService.processSelectedTriggerRecord(gameState, trigger, onUpdate);
+      } else {
+        gameState.logs.push(`[错误] 找不到选择的诱发效果: ${currentSelections[0] || 'none'}。`);
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
       }
       return gameState;
@@ -3529,6 +3734,7 @@ export const ServerGameService = {
       if (query.context?.isTrigger) {
         await ServerGameService.executeTriggeredEffect(gameState, activationPlayerUid, {
           card: sourceCard,
+          effect,
           effectIndex,
           event: query.context.event,
           skipCost: true
@@ -5144,100 +5350,188 @@ export const ServerGameService = {
     });
   },
 
+  enqueueMandatoryEndTurnDelayedEffects(gameState: GameState, turnPlayerUid: string) {
+    const queue = gameState.triggeredEffectsQueue || [];
+    gameState.triggeredEffectsQueue = queue;
+    const enqueue = (record: any) => {
+      if (queue.some(existing => existing.queueId === record.queueId)) return;
+      queue.push(record);
+    };
+
+    Object.entries(gameState.players).forEach(([uid, player]) => {
+      const fieldCards = [
+        ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
+        ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
+      ];
+
+      fieldCards.forEach(({ card, zone }) => {
+        if (!card || (card as any).data?.returnToDeckBottomAtTurnEnd !== gameState.turnCount) return;
+        const sourceName = (card as any).data.returnToDeckBottomSourceName || '卡牌效果';
+        const sourceCardId = (card as any).data.returnToDeckBottomSourceCardId;
+        const effectOwnerUid = (card as any).data.returnToDeckBottomOwnerUid ||
+          (sourceCardId ? ServerGameService.findCardLocation(gameState, sourceCardId)?.ownerUid : undefined) ||
+          uid;
+        const queueId = `return_deck_${card.gamecardId}_${gameState.turnCount}`;
+        enqueue({
+          queueId,
+          card,
+          sourceCard: sourceCardId ? ServerGameService.findCardById(gameState, sourceCardId) : undefined,
+          playerUid: effectOwnerUid,
+          effectIndex: -1,
+          virtualTriggerType: 'RETURN_TO_DECK_BOTTOM_AT_END',
+          virtualPayload: {
+            targetCardId: card.gamecardId,
+            sourceCardId,
+            sourceName,
+            effectOwnerUid,
+            turnCount: gameState.turnCount,
+            targetZone: zone
+          },
+          event: { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+          effect: {
+            id: queueId,
+            type: 'TRIGGER',
+            triggerEvent: 'TURN_END' as any,
+            triggerLocation: [zone],
+            isMandatory: true,
+            description: `[${sourceName}] 回合结束时将 [${card.fullName}] 放置到卡组底。`
+          }
+        });
+      });
+    });
+
+    Object.entries(gameState.players).forEach(([uid, player]) => {
+      const fieldCards = [
+        ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
+        ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
+      ];
+
+      fieldCards.forEach(({ card, zone }) => {
+        if (!card || (card as any).data?.returnToExileAtEndTurn !== gameState.turnCount) return;
+        const sourceName = (card as any).data.returnToExileSourceName || '卡牌效果';
+        const sourceCardId = (card as any).data.returnToExileSourceCardId;
+        const effectOwnerUid = (card as any).data.returnToExileEffectOwnerUid ||
+          (sourceCardId ? ServerGameService.findCardLocation(gameState, sourceCardId)?.ownerUid : undefined) ||
+          uid;
+        const queueId = `return_exile_${card.gamecardId}_${gameState.turnCount}`;
+        enqueue({
+          queueId,
+          card,
+          sourceCard: sourceCardId ? ServerGameService.findCardById(gameState, sourceCardId) : undefined,
+          playerUid: effectOwnerUid,
+          effectIndex: -1,
+          virtualTriggerType: 'RETURN_TO_EXILE_AT_END',
+          virtualPayload: {
+            targetCardId: card.gamecardId,
+            sourceCardId,
+            sourceName,
+            effectOwnerUid,
+            turnCount: gameState.turnCount,
+            targetZone: zone,
+            predicateKey: (card as any).data.returnToExileAtEndPredicateKey || 'STILL_IN_UNIT'
+          },
+          event: { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+          effect: {
+            id: queueId,
+            type: 'TRIGGER',
+            triggerEvent: 'TURN_END' as any,
+            triggerLocation: [zone],
+            isMandatory: true,
+            description: `[${sourceName}] 回合结束时将 [${card.fullName}] 放逐。`
+          }
+        });
+      });
+    });
+
+    if (gameState.pendingResolutions && gameState.pendingResolutions.length > 0) {
+      const resolutions = [...gameState.pendingResolutions];
+      gameState.pendingResolutions = [];
+      resolutions.forEach((record, index) => {
+        if (!record.effect?.resolve) return;
+        const queueId = `pending_resolution_${gameState.turnCount}_${index}_${record.effect.id || record.card?.gamecardId || 'effect'}`;
+        enqueue({
+          ...record,
+          queueId,
+          playerUid: record.playerUid,
+          event: record.event || { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+          effectIndex: record.effectIndex ?? -1,
+          effect: {
+            ...record.effect,
+            id: record.effect.id || queueId,
+            type: 'TRIGGER',
+            triggerEvent: 'TURN_END' as any,
+            isMandatory: true,
+            execute: async (source: Card, state: GameState, player: PlayerState, event?: any) => {
+              try {
+                const resolvePromise = (record.effect.resolve as any)(source, state, player, event);
+                await Promise.race([
+                  resolvePromise,
+                  new Promise((_, reject) => setTimeout(() => reject(new Error("Effect resolution timeout (5s)")), 5000))
+                ]);
+              } catch (err: any) {
+                state.logs.push(`[效果错误] ${source?.fullName || '未知来源'} 的阶段结束效果处理失败: ${err.message}`);
+              }
+            }
+          }
+        });
+      });
+    }
+
+    const currentPlayer = gameState.players[turnPlayerUid];
+    if ((currentPlayer as any)?.loseAtEndOfTurn === gameState.turnCount) {
+      const sourceName = (currentPlayer as any).loseAtEndOfTurnSourceName || '卡牌效果';
+      const sourceCardId = (currentPlayer as any).loseAtEndOfTurnSourceCardId;
+      const sourceCardSnapshot = (currentPlayer as any).loseAtEndOfTurnSourceCardSnapshot as Card | undefined;
+      const sourceCard = sourceCardId
+        ? ServerGameService.findCardById(gameState, sourceCardId)
+        : currentPlayer.unitZone.find(card => card?.fullName === sourceName);
+      const displaySourceCard = sourceCard || sourceCardSnapshot;
+      const queueId = `lose_at_end_${turnPlayerUid}_${gameState.turnCount}`;
+        enqueue({
+          queueId,
+          card: displaySourceCard || {
+          id: queueId,
+          uniqueId: queueId,
+          gamecardId: queueId,
+          fullName: sourceName,
+          type: 'STORY',
+          color: 'NONE',
+          colorReq: {},
+          acValue: 0,
+          godMark: false,
+          displayState: 'FRONT_UPRIGHT',
+          feijingMark: false,
+          canResetCount: 0,
+          faction: '无'
+        } as Card,
+        playerUid: turnPlayerUid,
+        effectIndex: -1,
+        virtualTriggerType: 'LOSE_AT_END',
+        virtualPayload: {
+          sourceCardId,
+          sourceName,
+          effectOwnerUid: turnPlayerUid,
+          turnCount: gameState.turnCount
+        },
+        event: { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+        effect: {
+          id: queueId,
+          type: 'TRIGGER',
+          triggerEvent: 'TURN_END' as any,
+          isMandatory: true,
+          description: `[${sourceName}] 回合结束时你输掉游戏。`
+        }
+      });
+    }
+  },
+
   async finishTurnTransition(gameState: GameState) {
     try {
 
       const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
       const currentPlayer = gameState.players[currentPlayerId];
 
-      if ((currentPlayer as any).loseAtEndOfTurn === gameState.turnCount) {
-        gameState.gameStatus = 2;
-        gameState.winReason = 'CARD_EFFECT_SPECIAL_WIN';
-        gameState.winnerId = gameState.playerIds.find(id => id !== currentPlayerId);
-        gameState.winSourceCardName = (currentPlayer as any).loseAtEndOfTurnSourceName || '卡牌效果';
-        gameState.logs.push(`[游戏结束] ${currentPlayer.displayName} 因 [${gameState.winSourceCardName}] 的效果在回合结束时判负。`);
-        return;
-      }
-
-      Object.entries(gameState.players).forEach(([uid, player]) => {
-        const fieldCards = [
-          ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
-          ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
-        ];
-
-        fieldCards.forEach(({ card, zone }) => {
-          if (!card || (card as any).data?.returnToDeckBottomAtTurnEnd !== gameState.turnCount) return;
-          const sourceName = (card as any).data.returnToDeckBottomSourceName || '卡牌效果';
-          const sourceCardId = (card as any).data.returnToDeckBottomSourceCardId;
-          delete (card as any).data.returnToDeckBottomAtTurnEnd;
-          delete (card as any).data.returnToDeckBottomSourceName;
-          delete (card as any).data.returnToDeckBottomSourceCardId;
-          delete (card as any).data.returnToDeckBottomOwnerUid;
-          ServerGameService.moveCard(gameState, uid, zone, uid, 'DECK', card.gamecardId, {
-            insertAtBottom: true,
-            isEffect: true,
-            effectSourcePlayerUid: uid,
-            effectSourceCardId: sourceCardId
-          });
-          gameState.logs.push(`[${sourceName}] 将 [${card.fullName}] 放置到卡组底。`);
-        });
-      });
-
-      Object.entries(gameState.players).forEach(([uid, player]) => {
-        const fieldCards = [
-          ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
-          ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
-        ];
-
-        fieldCards.forEach(({ card, zone }) => {
-          if (!card || (card as any).data?.returnToExileAtEndTurn !== gameState.turnCount) return;
-          const sourceName = (card as any).data.returnToExileSourceName || '卡牌效果';
-          const sourceCardId = (card as any).data.returnToExileSourceCardId;
-          delete (card as any).data.returnToExileAtEndTurn;
-          delete (card as any).data.returnToExileSourceName;
-          delete (card as any).data.returnToExileSourceCardId;
-          ServerGameService.moveCard(gameState, uid, zone, uid, 'EXILE', card.gamecardId, {
-            isEffect: true,
-            effectSourcePlayerUid: uid,
-            effectSourceCardId: sourceCardId
-          });
-          gameState.logs.push(`[${sourceName}] 回合结束时将 [${card.fullName}] 放逐。`);
-        });
-      });
-
-      // End-of-turn delayed effects must resolve before the turn counter/player changes.
-      if (gameState.pendingResolutions && gameState.pendingResolutions.length > 0) {
-        const resolutions = [...gameState.pendingResolutions];
-        gameState.pendingResolutions = [];
-
-        for (const record of resolutions) {
-          if (!record.effect || !record.effect.resolve) {
-            continue;
-          }
-
-          try {
-            const player = gameState.players[record.playerUid];
-            if (player) {
-              const resolvePromise = (record.effect.resolve as any)(record.card, gameState, player, record.event);
-              await Promise.race([
-                resolvePromise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Effect resolution timeout (5s)")), 5000))
-              ]);
-            }
-          } catch (err: any) {
-            gameState.logs.push(`[效果错误] ${record.card?.fullName || '未知来源'} 的阶段结束效果处理失败: ${err.message}`);
-          }
-        }
-      }
-
-      if ((currentPlayer as any).loseAtEndOfTurn === gameState.turnCount) {
-        gameState.gameStatus = 2;
-        gameState.winReason = 'CARD_EFFECT_SPECIAL_WIN';
-        gameState.winnerId = gameState.playerIds.find(id => id !== currentPlayerId);
-        gameState.winSourceCardName = (currentPlayer as any).loseAtEndOfTurnSourceName || '鍗＄墝鏁堟灉';
-        gameState.logs.push(`[Game End] ${currentPlayer.displayName} loses at end of turn due to [${gameState.winSourceCardName}].`);
-        return;
-      }
+      if (gameState.gameStatus === 2) return;
 
       gameState.currentTurnPlayer = gameState.currentTurnPlayer === 0 ? 1 : 0;
       ServerGameService.applyExtraTurnIfQueued(gameState, currentPlayerId);
@@ -5523,11 +5817,15 @@ export const ServerGameService = {
     trigger: { card: Card; effect: CardEffect; effectIndex: number; event?: any; skipCost?: boolean },
     onUpdate?: (state: GameState) => Promise<void>
   ) {
+    ServerGameService.hydrateVirtualTriggerRecord(trigger);
     const { card, effectIndex, event, skipCost } = trigger;
     const effect = trigger.effect || card.effects?.[effectIndex];
     let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
     if (!liveSource && event?.sourceCardId === card.gamecardId) {
       liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
+    }
+    if (!liveSource && effectIndex < 0) {
+      liveSource = { card, ownerUid: playerUid, zone: card.cardlocation || 'PLAY' };
     }
 
     if (!effect || !liveSource) {
@@ -5540,7 +5838,7 @@ export const ServerGameService = {
       ? 'DECK'
       : liveCard.cardlocation as TriggerLocation;
     const movementTriggerEvents = new Set(['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT']);
-    if (!movementTriggerEvents.has(event?.type)) {
+    if (effectIndex >= 0 && !movementTriggerEvents.has(event?.type)) {
       const triggerCheck = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, liveCard, effect, triggerLocation, event);
       if (!triggerCheck.valid) {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
@@ -5649,6 +5947,7 @@ export const ServerGameService = {
       gameState.pendingResolutions.push({
         card: liveCard,
         effect,
+        effectIndex,
         playerUid
       });
     }
@@ -5739,7 +6038,7 @@ export const ServerGameService = {
         } else if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
             gameState.logs.push(`[阶段切换] 进入弃牌阶段`);
-            await ServerGameService.executeEndPhase(gameState, actingPlayer);
+            await ServerGameService.executeEndPhase(gameState, actingPlayer, false, onUpdate);
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求结束回合`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -5759,7 +6058,7 @@ export const ServerGameService = {
         if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
             gameState.logs.push(`[阶段切换] 进入弃牌阶段`);
-            await ServerGameService.executeEndPhase(gameState, actingPlayer);
+            await ServerGameService.executeEndPhase(gameState, actingPlayer, false, onUpdate);
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求结束回合`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -6185,7 +6484,7 @@ export const ServerGameService = {
     }
   },
 
-  async executeEndPhase(gameState: GameState, player: PlayerState, skipEvents: boolean = false) {
+  async executeEndPhase(gameState: GameState, player: PlayerState, skipEvents: boolean = false, onUpdate?: (state: GameState) => Promise<void>) {
     if (!skipEvents) {
       gameState.phase = 'END';
       gameState.logs.push(`${player.displayName} 的结束阶段`);
@@ -6204,10 +6503,11 @@ export const ServerGameService = {
         type: 'TURN_END' as any,
         playerUid: player.uid
       });
+      ServerGameService.enqueueMandatoryEndTurnDelayedEffects(gameState, player.uid);
 
       // Check if any triggers were added to the queue
       if (gameState.triggeredEffectsQueue && gameState.triggeredEffectsQueue.length > 0) {
-        await ServerGameService.checkTriggeredEffects(gameState);
+        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
         // If we now have a pending query, don't proceed to turn transition yet
         if (gameState.pendingQuery) return;
         if (gameState.phase !== 'END' || !gameState.players[player.uid]?.isTurn) return;
@@ -6295,7 +6595,9 @@ export const ServerGameService = {
       players: {
         [({ uid: "temp", displayName: "temp" } as any).uid]: initialPlayerState
       },
-      phaseTimerStart: 0
+      phaseTimerStart: 0,
+      triggeredEffectsQueue: [],
+      pendingResolutions: []
     };
     return gameState;
   },
@@ -6400,7 +6702,9 @@ export const ServerGameService = {
         [({ uid: "temp", displayName: "temp" } as any).uid]: myState,
         'BOT_PLAYER': botState
       },
-      phaseTimerStart: 0
+      phaseTimerStart: 0,
+      triggeredEffectsQueue: [],
+      pendingResolutions: []
     };
     return gameState;
   },
@@ -7834,6 +8138,18 @@ export const ServerGameService = {
             callback: query.callbackKey,
             type: query.type,
             selection: 'YES',
+          },
+        });
+      } else if (query.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+        selections = (query.options || []).filter((option: any) => !option.disabled).slice(0, 1).map((option: any) => option.id).filter(Boolean);
+        ServerGameService.recordAiDecision(gameState, playerUid, {
+          action: 'TRIGGER_ORDER_CHOICE',
+          subject: query.title || '选择诱发效果',
+          reason: '自动选择当前优先级组中的第一个诱发效果继续结算。',
+          details: {
+            callback: query.callbackKey,
+            type: query.type,
+            selection: selections[0] || 'none',
           },
         });
       } else if (query.options && query.options.length > 0) {

@@ -416,6 +416,7 @@ export interface EffectQuery {
   playerUid: string;
   options: {
     id?: string;
+    selectionId?: string;
     value?: string;
     sourceCardNo?: string;
     optionCode?: string;
@@ -486,11 +487,24 @@ export interface AiDecisionLog {
 }
 
 export interface TriggeredEffectRecord {
+  queueId?: string;
   card: Card;
+  sourceCard?: Card;
   effect: CardEffect;
   effectIndex: number;
   playerUid: string;
   event?: GameEvent;
+  virtualTriggerType?: 'RETURN_TO_EXILE_AT_END' | 'RETURN_TO_DECK_BOTTOM_AT_END' | 'LOSE_AT_END' | 'PENDING_RESOLUTION';
+  virtualPayload?: {
+    targetCardId?: string;
+    sourceCardId?: string;
+    sourceName?: string;
+    effectOwnerUid?: string;
+    turnCount?: number;
+    targetZone?: TriggerLocation;
+    predicateKey?: 'STILL_IN_UNIT';
+    pendingResolutionIndex?: number;
+  };
 }
 
 export interface PendingShenyi {

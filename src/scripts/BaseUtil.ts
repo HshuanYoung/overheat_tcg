@@ -1552,20 +1552,15 @@ export const markExileAtEndOfTurn = (
   target: Card,
   source: Card,
   id: string,
-  shouldExile: (card: Card, state: GameState) => boolean = card => card.cardlocation === 'UNIT'
+  _shouldExile: (card: Card, state: GameState) => boolean = card => card.cardlocation === 'UNIT'
 ) => {
   const targetId = target.gamecardId;
   const data = ensureData(target);
   data.returnToExileAtEndTurn = gameState.turnCount;
   data.returnToExileSourceName = source.fullName;
   data.returnToExileSourceCardId = source.gamecardId;
+  data.returnToExileEffectOwnerUid = playerUid;
+  data.returnToExileAtEndPredicateKey = 'STILL_IN_UNIT';
+  delete data.returnToExileAtEndPredicate;
   addInfluence(target, source, '回合结束时放逐');
-
-  appendEndResolution(gameState, playerUid, source, id, (resolveSource, state) => {
-    const current = AtomicEffectExecutor.findCardById(state, targetId);
-    if (current?.cardlocation === 'UNIT' && shouldExile(current, state)) {
-      state.logs.push(`[${resolveSource.fullName}] 回合结束时将 [${current.fullName}] 放逐。`);
-      exileByEffect(state, current, resolveSource);
-    }
-  });
 };

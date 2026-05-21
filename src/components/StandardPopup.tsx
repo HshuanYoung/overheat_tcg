@@ -26,6 +26,7 @@ import { CardComponent } from './Card';
 
 type PopupOption = {
   id?: string;
+  selectionId?: string;
   value?: string;
   sourceCardNo?: string;
   optionCode?: string;
@@ -156,7 +157,7 @@ interface StandardPopupProps {
   squarePanel?: boolean;
 }
 
-const getOptionId = (option: PopupOption) => option.card?.gamecardId || option.card?.id || option.id || '';
+const getOptionId = (option: PopupOption) => option.selectionId || option.card?.gamecardId || option.card?.id || option.id || '';
 
 const isPlayerOption = (option: PopupOption) => {
   const id = option.card?.id || option.card?.gamecardId || option.id;
@@ -409,7 +410,8 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
   const handleOptionClick = (option: PopupOption, e?: React.MouseEvent) => {
     if (option.disabled) return;
     if (option.card) {
-      onCardClick?.(option.card, e);
+      const optionId = getOptionId(option);
+      onCardClick?.({ ...option.card, gamecardId: optionId, id: optionId } as Card, e);
       return;
     }
     const optionId = getOptionId(option);
@@ -546,7 +548,7 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                   const isSelected = selectedIds.includes(optionId);
                   const selectionOrder = selectedIds.indexOf(optionId) + 1;
                   const meta = card ? (cardMeta[card.gamecardId || card.id] || option || {}) : option;
-                  const shouldDrawOption = mode === 'choice_selection' || mode === 'player_selection' || isPlayerOption(option) || !card;
+                  const shouldDrawOption = mode === 'player_selection' || isPlayerOption(option) || !card;
 
                   if (shouldDrawOption) {
                     return (
@@ -595,7 +597,7 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                       )}
                       
                       {/* Selection Order Badge */}
-                      {isSelected && mode === 'card_selection' && (
+                      {isSelected && (mode === 'card_selection' || mode === 'choice_selection') && (
                         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
                           <div className="w-12 h-12 rounded-full bg-[#f27d26] text-black flex items-center justify-center shadow-2xl relative">
                             <span className="text-2xl font-black italic leading-none">{selectionOrder}</span>
@@ -624,7 +626,7 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                 disabled={(mode === 'card_selection' || mode === 'player_selection' || mode === 'choice_selection') && selectedIds.length < minSelections}
                 className="px-12 py-4 bg-[#f27d26] text-white font-black italic uppercase tracking-[0.2em] rounded-xl hover:bg-[#f27d26]/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-xl shadow-[#f27d26]/20 hover:scale-105 active:scale-95"
               >
-                {mode === 'payment_selection' ? '确认支付' : '确认选择'}
+                {mode === 'payment_selection' ? '确认支付' : confirmText}
               </button>
               <div className="flex items-center gap-2 text-zinc-600 uppercase text-[10px] font-black tracking-widest">
                 <Loader2 className="w-3 h-3 animate-spin" />

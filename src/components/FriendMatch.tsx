@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, LogIn, Loader2, Copy, Check, Eye, Swords, ChevronDown, UserRound, UsersRound, Clock3, RefreshCw } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { validateDeckForBattle } from '../lib/deckValidation';
 import { getAuthToken, getAuthUser } from '../socket';

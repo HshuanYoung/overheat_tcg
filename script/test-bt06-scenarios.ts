@@ -545,11 +545,12 @@ async function testAngelAdventPlacesShingiMarkedUnit(): Promise<ScenarioResult> 
   const name = 'BT06-W08 Angel Advent places AC5+ white unit with Shingi marker';
   const storyCard = cloneScriptCard(bt06W08 as Card, 'HAND');
   const fodder = [0, 1, 2].map(index => testCard({ id: `W08_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
+  const extraFodder = [3, 4, 5].map(index => testCard({ id: `W08_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
   const target = cloneScriptCard(bt06W11 as Card, 'DECK');
   const state = game({
     hand: [storyCard],
     deck: [target, ...deckCards(5, 'BOT_FILL')],
-    unitZone: [fodder[0], fodder[1], fodder[2], null, null, null],
+    unitZone: [fodder[0], fodder[1], fodder[2], extraFodder[0], extraFodder[1], extraFodder[2]],
   });
 
   await playStoryAndResolve(state, 'BOT', storyCard);
@@ -572,6 +573,7 @@ async function testDawnRitualPlacesGoddessChurchAc3(): Promise<ScenarioResult> {
   const name = 'BT06-W09 Dawn Ritual places Betis or Goddess Church AC3 unit';
   const storyCard = cloneScriptCard(bt06W09 as Card, 'HAND');
   const fodder = [0, 1, 2].map(index => testCard({ id: `W09_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
+  const extraFodder = [3, 4, 5].map(index => testCard({ id: `W09_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
   const target = testCard({
     id: 'W09_TARGET',
     fullName: '女神教会目标',
@@ -584,7 +586,7 @@ async function testDawnRitualPlacesGoddessChurchAc3(): Promise<ScenarioResult> {
   const state = game({
     hand: [storyCard],
     deck: [target, ...deckCards(5, 'BOT_FILL')],
-    unitZone: [fodder[0], fodder[1], fodder[2], null, null, null],
+    unitZone: [fodder[0], fodder[1], fodder[2], extraFodder[0], extraFodder[1], extraFodder[2]],
   });
 
   await playStoryAndResolve(state, 'BOT', storyCard);
@@ -1630,6 +1632,7 @@ async function testYellowHighAlchemyChipAndGiant(): Promise<ScenarioResult> {
   const chipPowered = chipLive?.power === 3000;
   const chipCostExiled = state.players.BOT.exile.some((card: Card) => card.gamecardId === feijingCost.gamecardId);
   const chipCopyExhausted = !!chipCopyLive?.isExhausted;
+  const chipCopyFromDeck = chipCopyLive?.cardlocation === 'UNIT';
   const storyResolved = state.players.BOT.grave.some((card: Card) => card.gamecardId === storyCard.gamecardId);
 
   const giantSource = cloneScriptCard(bt06Y09 as Card, 'GRAVE');
@@ -1652,9 +1655,9 @@ async function testYellowHighAlchemyChipAndGiant(): Promise<ScenarioResult> {
   EventEngine.recalculateContinuousEffects(giantState);
   const giantBoosted = liveGiant?.power === 4000 && !!liveGiant?.isHeroic;
 
-  return chipPowered && chipCostExiled && chipCopyExhausted && storyResolved && giantBoosted
+  return chipPowered && chipCostExiled && chipCopyExhausted && chipCopyFromDeck && storyResolved && giantBoosted
     ? pass(name, `chip=${chipPowered}, copy=${chipCopyExhausted}, giant=${giantBoosted}`)
-    : fail(name, `chip=${chipPowered}, cost=${chipCostExiled}, copy=${chipCopyExhausted}, story=${storyResolved}, giant=${giantBoosted}`);
+    : fail(name, `chip=${chipPowered}, cost=${chipCostExiled}, copy=${chipCopyExhausted}/${chipCopyFromDeck}, story=${storyResolved}, giant=${giantBoosted}`);
 }
 
 async function testYellowDailyBlueprintTruthAndIly(): Promise<ScenarioResult> {

@@ -1011,6 +1011,31 @@ export const ServerGameService = {
     return untilTurn === undefined || untilTurn < gameState.turnCount;
   },
 
+  canUnitDefendInCurrentBattle(gameState: GameState, unit: Card | null | undefined) {
+    if (!unit || !gameState.battleState) return false;
+    if (unit.isExhausted) return false;
+    if ((unit as any).battleForbiddenByEffect) return false;
+    if ((unit as any).data?.cannotDefendTurn === gameState.turnCount) return false;
+    if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) return false;
+    if (!ServerGameService.canExhaustForDeclaration(unit, gameState)) return false;
+
+    const lockedTargetId = gameState.battleState.defenseLockedToTargetId;
+    if (lockedTargetId && unit.gamecardId !== lockedTargetId) return false;
+
+    const minPower = gameState.battleState.defensePowerRestriction || 0;
+    if (minPower > 0 && (unit.power || 0) < minPower) return false;
+
+    const maxPower = gameState.battleState.defenseMaxPowerRestriction;
+    if (maxPower !== undefined && (unit.power || 0) >= maxPower) return false;
+
+    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+    const attackers = (gameState.battleState.attackers || [])
+      .map(id => gameState.players[turnPlayerId]?.unitZone.find(attacker => attacker?.gamecardId === id))
+      .filter((attacker): attacker is Card => !!attacker);
+    const minExclusive = Math.max(0, ...attackers.map(attacker => (attacker as any).data?.defenseMinPower || 0));
+    return minExclusive <= 0 || (unit.power || 0) > minExclusive;
+  },
+
   readyCard(card: Card) {
     if (card) {
       card.isExhausted = false;
@@ -4157,11 +4182,7 @@ export const ServerGameService = {
         .filter((unit): unit is Card => !!unit);
       const mustDefend = attackingUnits.some(unit => (unit as any).data?.mustBeDefendedTurn === gameState.turnCount);
       const hasAvailableDefender = player.unitZone.some(unit =>
-        unit &&
-        ServerGameService.canExhaustForDeclaration(unit, gameState) &&
-        !(unit as any).battleForbiddenByEffect &&
-        !((unit as any).data?.cannotDefendTurn === gameState.turnCount) &&
-        !((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount)
+        ServerGameService.canUnitDefendInCurrentBattle(gameState, unit)
       );
       if (mustDefend && hasAvailableDefender) {
         throw new Error('由于效果限制，必须选择1个单位宣言防御');

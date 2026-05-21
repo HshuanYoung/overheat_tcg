@@ -1162,14 +1162,35 @@ async function testGreenBirdSalalaAndAccordion(): Promise<ScenarioResult> {
   const liveFeather = birdState.players.BOT.unitZone.find((unit: Card | null) => unit?.id === bt06G05.id);
   const featherPlaced = !!liveFeather && liveFeather.isExhausted && !(liveFeather as any).data?.returnToDeckBottomAtTurnEnd;
   const featherColorBeforeTurnEnd = !!(liveFeather as any)?.persistentExtraColors?.includes('RED');
-  if (liveFeather) {
-    await ServerGameService.executeEndPhase(birdState, birdState.players.BOT);
-  }
-  const featherColorAfterTurnEnd = !!(liveFeather as any)?.persistentExtraColors?.includes('RED');
   const featherPaysRedRequirement = !!liveFeather && ServerGameService.getColorRequirementResult(
     birdState.players.BOT,
     { RED: 1 }
   ).valid;
+  const redRequirementCard = testCard({
+    id: 'G05_RED_REQ',
+    fullName: 'Feather Red Requirement',
+    type: 'STORY',
+    color: 'RED',
+    colorReq: { RED: 1 },
+    baseColorReq: { RED: 1 },
+    acValue: 0,
+    baseAcValue: 0,
+    cardlocation: 'HAND',
+    effects: [],
+  });
+  birdState.players.BOT.hand.push(redRequirementCard);
+  let featherCanPlayRedRequirement = false;
+  try {
+    await ServerGameService.playCard(birdState, 'BOT', redRequirementCard.gamecardId, {});
+    await ServerGameService.passConfrontation(birdState, birdState.priorityPlayerId);
+    featherCanPlayRedRequirement = birdState.players.BOT.grave.some((card: Card) => card.gamecardId === redRequirementCard.gamecardId);
+  } catch {
+    featherCanPlayRedRequirement = false;
+  }
+  if (liveFeather) {
+    await ServerGameService.executeEndPhase(birdState, birdState.players.BOT);
+  }
+  const featherColorAfterTurnEnd = !!(liveFeather as any)?.persistentExtraColors?.includes('RED');
 
   const salala = cloneScriptCard(bt06G07 as Card, 'UNIT');
   const chimeraCost = cloneScriptCard(bt06G11 as Card, 'GRAVE');
@@ -1220,9 +1241,9 @@ async function testGreenBirdSalalaAndAccordion(): Promise<ScenarioResult> {
   }
   const silenced = target.silencedEffectIds?.includes('G10_DUMMY_ACTIVATE') === true;
 
-  return featherPlaced && featherColorBeforeTurnEnd && featherColorAfterTurnEnd && featherPaysRedRequirement && lockedAndRecovered && silenced
-    ? pass(name, `feather=${featherPlaced}, color=${featherColorAfterTurnEnd}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`)
-    : fail(name, `feather=${featherPlaced}, colorBefore=${featherColorBeforeTurnEnd}, colorAfter=${featherColorAfterTurnEnd}, pays=${featherPaysRedRequirement}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`);
+  return featherPlaced && featherColorBeforeTurnEnd && featherColorAfterTurnEnd && featherPaysRedRequirement && featherCanPlayRedRequirement && lockedAndRecovered && silenced
+    ? pass(name, `feather=${featherPlaced}, color=${featherColorAfterTurnEnd}, play=${featherCanPlayRedRequirement}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`)
+    : fail(name, `feather=${featherPlaced}, colorBefore=${featherColorBeforeTurnEnd}, colorAfter=${featherColorAfterTurnEnd}, pays=${featherPaysRedRequirement}, play=${featherCanPlayRedRequirement}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`);
 }
 
 async function testCannotExhaustUnitIsNotAvailableDefender(): Promise<ScenarioResult> {

@@ -1,6 +1,5 @@
 // VERSION: 2026-04-07-IND-FIX-01
 import express from 'express';
-console.log('[Server] index.ts is starting up...');
 import { createServer } from 'http';
 
 import { Server } from 'socket.io';
@@ -58,6 +57,7 @@ const STARTER_COINS = 100000;
 const STARTER_CARD_CRYSTALS = 100000;
 const TIMER_BROADCAST_INTERVAL_MS = Number(process.env.TIMER_BROADCAST_INTERVAL_MS || 1000);
 const ACTIVE_GAME_SCAN_WINDOW_MS = Number(process.env.ACTIVE_GAME_SCAN_WINDOW_MS || 6 * 60 * 60 * 1000);
+const ENABLE_PERF_LOGS = process.env.ENABLE_PERF_LOGS === '1';
 const SLOW_GAME_ACTION_MS = Number(process.env.SLOW_GAME_ACTION_MS || 500);
 const SLOW_STATE_SYNC_MS = Number(process.env.SLOW_STATE_SYNC_MS || 250);
 const FORCE_LOGOUT_REASON = '账号已在其他设备登录';
@@ -954,7 +954,7 @@ async function syncAndSaveState(gameId: string, gameState: any, options: SyncSta
 
     if (options.persist === false) {
         const totalMs = elapsedMs(totalStart);
-        if (totalMs >= SLOW_STATE_SYNC_MS) {
+        if (ENABLE_PERF_LOGS && totalMs >= SLOW_STATE_SYNC_MS) {
             console.warn('[Perf] slow state sync', {
                 gameId,
                 source: options.source || 'unknown',
@@ -1005,7 +1005,7 @@ async function syncAndSaveState(gameId: string, gameState: any, options: SyncSta
     }
 
     const totalMs = elapsedMs(totalStart);
-    if (totalMs >= SLOW_STATE_SYNC_MS) {
+    if (ENABLE_PERF_LOGS && totalMs >= SLOW_STATE_SYNC_MS) {
         console.warn('[Perf] slow state sync', {
             gameId,
             source: options.source || 'unknown',
@@ -3888,7 +3888,7 @@ io.on('connection', (socket) => {
                 socket.emit('error', { message: err.message || 'Unknown game error' });
             } finally {
                 const totalMs = elapsedMs(actionStart);
-                if (totalMs >= SLOW_GAME_ACTION_MS) {
+                if (ENABLE_PERF_LOGS && totalMs >= SLOW_GAME_ACTION_MS) {
                     console.warn('[Perf] slow game action', {
                         gameId,
                         action,

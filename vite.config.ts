@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.ENABLE_PERF_LOGS': JSON.stringify(env.ENABLE_PERF_LOGS || process.env.ENABLE_PERF_LOGS || ''),
+    },
     resolve: {
       dedupe: ['react', 'react-dom'],
       alias: {

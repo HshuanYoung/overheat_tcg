@@ -564,24 +564,6 @@ export const BattleField: React.FC = () => {
   }, [game?.phase, game?.priorityPlayerId, game?.counterStack.length, game?.isResolvingStack]);
 
 
-  useEffect(() => {
-    const audio = new Audio('/assets/music_bg.wav');
-    audio.loop = true;
-    audio.volume = 0.3;
-
-    const playAudio = () => {
-      audio.play().catch(e => console.log("Audio play blocked by browser", e));
-      window.removeEventListener('click', playAudio);
-    };
-
-    window.addEventListener('click', playAudio);
-
-    return () => {
-      audio.pause();
-      window.removeEventListener('click', playAudio);
-    };
-  }, []);
-
   // deckId calculation removed, now memoized above
 
   useEffect(() => {
@@ -1660,11 +1642,13 @@ export const BattleField: React.FC = () => {
   const handleQuerySubmit = async () => {
     if (!gameId || !game?.pendingQuery) return;
 
-    console.log(`[Query] Submitting choice for ${game.pendingQuery.type}:`, {
-      id: game.pendingQuery.id,
-      selectedIds: selectedQueryIds,
-      payment: paymentSelection
-    });
+    if (import.meta.env.ENABLE_PERF_LOGS === '1') {
+      console.log(`[Query] Submitting choice for ${game.pendingQuery.type}:`, {
+        id: game.pendingQuery.id,
+        selectedIds: selectedQueryIds,
+        payment: paymentSelection
+      });
+    }
 
     try {
       let selections = selectedQueryIds;

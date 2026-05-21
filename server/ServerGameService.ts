@@ -1707,6 +1707,15 @@ export const ServerGameService = {
       } else if (c.color !== 'NONE') {
         availableColors[c.color] = (availableColors[c.color] || 0) + 1;
       }
+      const extraColors = [
+        ...((c as any).temporaryExtraColors || []),
+        ...((c as any).persistentExtraColors || [])
+      ];
+      extraColors.forEach(color => {
+        if (typeof color === 'string' && color !== c.color && color in availableColors) {
+          availableColors[color] = (availableColors[color] || 0) + 1;
+        }
+      });
     });
 
     const colorReqOptions = [card.colorReq || {}];

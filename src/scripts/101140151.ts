@@ -9,6 +9,12 @@ const getFieldSlotIndex = (gameState: any, ownerUid: string, card: Card) => {
   return Array.isArray(zoneCards) ? zoneCards.findIndex((slot: Card | null) => slot?.gamecardId === card.gamecardId) : -1;
 };
 
+const getEscortReturnTurn = (entry: any) =>
+  entry.returnTurn ?? entry.afterTurn ?? entry.returnOnOpponentEndTurn ?? Number.POSITIVE_INFINITY;
+
+const isEscortReturnForInstance = (entry: any, instance: Card) =>
+  !entry.sourceCardId || entry.sourceCardId === instance.gamecardId;
+
 const cardEffects: CardEffect[] = [{
   id: '101140151_enter_exile',
   type: 'TRIGGER',
@@ -65,16 +71,16 @@ const cardEffects: CardEffect[] = [{
   condition: (gameState, playerState, instance, event) =>
     event?.playerUid !== playerState.uid &&
     ((playerState as any).escortReturns || []).some((entry: any) =>
-      entry.sourceCardId === instance.gamecardId &&
-      gameState.turnCount >= (entry.returnTurn ?? Number.POSITIVE_INFINITY)
+      isEscortReturnForInstance(entry, instance) &&
+      gameState.turnCount >= getEscortReturnTurn(entry)
     ),
   execute: async (instance, gameState, playerState) => {
     const returns = ((playerState as any).escortReturns || []) as any[];
     if (returns.length === 0) return;
     const remaining: any[] = [];
     for (const entry of returns) {
-      const returnTurn = entry.returnTurn ?? Number.POSITIVE_INFINITY;
-      if (entry.sourceCardId !== instance.gamecardId || gameState.turnCount < returnTurn) {
+      const returnTurn = getEscortReturnTurn(entry);
+      if (!isEscortReturnForInstance(entry, instance) || gameState.turnCount < returnTurn) {
         remaining.push(entry);
         continue;
       }

@@ -25,13 +25,14 @@ const enteredFromDeckByEffect = (instance: Card, gameState: any, event?: any) =>
 
 const enteredFromDeckByAlchemy = (instance: Card, gameState: any, event?: any) =>
   (instance as any).data?.enteredFromDeckByAlchemyTurn === gameState.turnCount ||
-  (
-    enteredFromDeckByEffect(instance, gameState, event) &&
-    !!AtomicEffectExecutor.findCardById(
+  (() => {
+    if (!enteredFromDeckByEffect(instance, gameState, event)) return false;
+    const source = AtomicEffectExecutor.findCardById(
       gameState,
       event?.data?.effectSourceCardId || (instance as any).data?.lastMoveEffectSourceCardId
-    )?.fullName?.includes('炼金')
-  );
+    );
+    return !!source && isAlchemyCard(source);
+  })();
 
 const wasSentToGraveByAlchemyThisTurn = (gameState: any, card: Card) => {
   const data = (card as any).data || {};

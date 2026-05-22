@@ -206,6 +206,20 @@ async function answerPendingQuery(state: any, playerUid: string, selections: str
   await ServerGameService.handleQueryChoice(state, playerUid, state.pendingQuery.id, selections);
 }
 
+async function chooseQueuedTrigger(state: any, effectId: string) {
+  if (state.pendingQuery?.callbackKey !== 'TRIGGER_ORDER_CHOICE') return false;
+  const option = (state.pendingQuery.options || []).find((candidate: any) => {
+    const queueId = candidate.id || candidate.selectionId || candidate.value;
+    const record = (state.triggeredEffectsQueue || []).find((entry: any) =>
+      ServerGameService.getTriggerQueueId(entry) === queueId
+    );
+    return record?.effect?.id === effectId;
+  });
+  if (!option) return false;
+  await answerPendingQuery(state, state.pendingQuery.playerUid, [option.id || option.selectionId || option.value]);
+  return true;
+}
+
 async function playStoryAndResolve(state: any, playerUid: string, card: Card) {
   await ServerGameService.playCard(state, playerUid, card.gamecardId, {});
   if (state.phase !== 'COUNTERING') throw new Error(`Expected COUNTERING after story play, got ${state.phase}`);
@@ -1143,6 +1157,7 @@ async function testGreenResonanceDrawBoostAndSearch(): Promise<ScenarioResult> {
   }
   await answerPendingQuery(organistState, 'BOT', [silverCost.gamecardId]);
   await ServerGameService.checkTriggeredEffects(organistState);
+  await chooseQueuedTrigger(organistState, '103090327_draw_discard');
   if (organistState.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
     await answerPendingQuery(organistState, 'BOT', ['YES']);
   }
@@ -1162,6 +1177,7 @@ async function testGreenResonanceDrawBoostAndSearch(): Promise<ScenarioResult> {
   await activateAndResolveByOpponentPass(boostState, 'BOT', poet, 0);
   await answerPendingQuery(boostState, 'BOT', [boostCost.gamecardId]);
   await ServerGameService.checkTriggeredEffects(boostState);
+  await chooseQueuedTrigger(boostState, '103090328_boost');
   if (boostState.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
     await answerPendingQuery(boostState, 'BOT', ['YES']);
   }
@@ -1413,6 +1429,11 @@ async function testGreenStoriesAndChimera(): Promise<ScenarioResult> {
       await ServerGameService.checkTriggeredEffects(resonanceState);
     }
     if (!resonanceState.pendingQuery) break;
+
+    if (resonanceState.pendingQuery.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+      await chooseQueuedTrigger(resonanceState, '203000095_exiled_by_resonance_attack');
+      continue;
+    }
 
     if (resonanceState.pendingQuery.callbackKey === 'TRIGGER_CHOICE') {
       const isSilverSpellTrigger = resonanceState.pendingQuery.context?.sourceCardId === resonanceSpell.gamecardId;
@@ -1804,6 +1825,7 @@ async function testYellowHighAlchemyChipAndGiant(): Promise<ScenarioResult> {
   if (state.pendingQuery?.context?.step !== 'PUT_CARD') return fail(name, `expected PUT_CARD, got ${state.pendingQuery?.context?.step || 'none'}`);
   await answerPendingQuery(state, 'BOT', [chip.gamecardId]);
   await ServerGameService.checkTriggeredEffects(state);
+  await chooseQueuedTrigger(state, '105000353_alchemy_power');
   if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
     await answerPendingQuery(state, 'BOT', ['YES']);
   }

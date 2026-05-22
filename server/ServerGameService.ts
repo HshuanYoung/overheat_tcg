@@ -6,7 +6,7 @@ import { getCardIdentity, getLocationLabel } from '../src/lib/utils';
 import { addBattleLog, cardToBattleLogRef, describeBattleLogTarget } from '../src/lib/battleLog';
 import { SERVER_CARD_LIBRARY } from './card_loader';
 import { GameService } from '../src/services/gameService';
-import { grantedTotemReviveFromGrave, isOpponentAcAtMost, isProtectedGraveCardFromOpponentEffect, standardizeChoiceOptions } from '../src/scripts/BaseUtil';
+import { grantedTotemReviveFromGrave, isAlchemyCard, isOpponentAcAtMost, isProtectedGraveCardFromOpponentEffect, standardizeChoiceOptions } from '../src/scripts/BaseUtil';
 import { BotDifficulty, DeckAiProfile } from './ai/types';
 import { getDeckAiProfile } from './ai/deckProfiles';
 import { inferPlayerDeckProfile } from './ai/playerDeckProfile';
@@ -1696,7 +1696,7 @@ export const ServerGameService = {
       options.effectSourceCardId
     ) {
       const sourceCard = ServerGameService.findCardById(gameState, options.effectSourceCardId);
-      if (sourceCard?.fullName?.includes('炼金')) {
+      if (sourceCard && isAlchemyCard(sourceCard)) {
         (card as any).data.enteredFromDeckByAlchemyTurn = gameState.turnCount;
         (card as any).data.enteredFromDeckByAlchemySourceCardId = sourceCard.gamecardId;
       }
@@ -6107,7 +6107,7 @@ export const ServerGameService = {
       : (event?.type === 'CARD_LEFT_FIELD' && effect.sourceSnapshotOnLeftField === true && event.data?.sourceZone)
         ? event.data.sourceZone as TriggerLocation
         : liveCard.cardlocation as TriggerLocation;
-    const movementTriggerEvents = new Set(['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT']);
+    const movementTriggerEvents = new Set(['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_EXILED', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT']);
     if (effectIndex >= 0 && !movementTriggerEvents.has(event?.type)) {
       const triggerCheck = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, liveCard, effect, triggerLocation, event);
       if (!triggerCheck.valid) {

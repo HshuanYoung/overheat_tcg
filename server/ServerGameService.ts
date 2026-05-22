@@ -614,9 +614,7 @@ export const ServerGameService = {
     }
 
     if (effect.atomicEffects && effect.atomicEffects.length > 0) {
-      for (const atomic of effect.atomicEffects) {
-        await AtomicEffectExecutor.execute(gameState, playerUid, atomic, sourceCard, event, declaredSelectionIds);
-      }
+      await AtomicEffectExecutor.executeBatch(gameState, playerUid, effect.atomicEffects, sourceCard, event, declaredSelectionIds);
     }
 
     if (effect.execute) {
@@ -2671,6 +2669,16 @@ export const ServerGameService = {
     if (gameState.counterStack.length === 0) return;
     if (gameState.pendingQuery) return gameState;
 
+    const emitVisualUpdate = async () => {
+      if (!onUpdate) return;
+      (gameState as any).__visualOnlySync = true;
+      try {
+        await onUpdate(gameState);
+      } finally {
+        delete (gameState as any).__visualOnlySync;
+      }
+    };
+
     gameState.isResolvingStack = true;
     (gameState as any).deferTriggeredEffectsUntilCounterStackEnds = true;
     gameState.priorityPlayerId = undefined;
@@ -2699,7 +2707,7 @@ export const ServerGameService = {
       return gameState;
     }
 
-    if (onUpdate) await onUpdate(gameState);
+    await emitVisualUpdate();
 
     // Resolve the entire stack from top to bottom (LIFO)
     while (gameState.counterStack.length > 0) {
@@ -2707,7 +2715,7 @@ export const ServerGameService = {
 
       // 1. Visual Highlight: Show which item is being processed
       gameState.currentProcessingItem = topItem;
-      if (onUpdate) await onUpdate(gameState);
+      await emitVisualUpdate();
 
       // Keep the visual highlight readable after it has been broadcast to clients.
       await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getStackVisualDelayMs());
@@ -2818,9 +2826,7 @@ export const ServerGameService = {
           }
           const data = stackItem.data as any;
           if (data && data.afterSelectionEffects) {
-            for (const atomic of data.afterSelectionEffects) {
-              await AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, liveEffectCard, undefined, data.selections);
-            }
+            await AtomicEffectExecutor.executeBatch(gameState, stackItem.ownerUid, data.afterSelectionEffects, liveEffectCard, undefined, data.selections);
           } else {
             const effectIndex = stackItem.effectIndex ?? 0;
             const effect = liveEffectCard.effects?.[effectIndex];
@@ -2878,7 +2884,7 @@ export const ServerGameService = {
 
       // 2. Clear Highlight: Item has been processed and removed from stack
       gameState.currentProcessingItem = null;
-      if (onUpdate) await onUpdate(gameState);
+      await emitVisualUpdate();
 
       // PAUSE RESOLUTION: If an effect triggered a user choice, stop here.
       // We will resume once handleQueryChoice is called and finished.
@@ -4059,57 +4065,62 @@ export const ServerGameService = {
 
 
     if (afterEffects.length > 0) {
-      for (let i = 0; i < afterEffects.length; i++) {
-        const effect = afterEffects[i];
+      AtomicEffectExecutor.beginRecalcBatch(gameState);
+      try {
+        for (let i = 0; i < afterEffects.length; i++) {
+          const effect = afterEffects[i];
 
-        // INTERCEPT: If we need payment, "pause" and issue a SELECT_PAYMENT query
-        if (effect.type === 'PAY_CARD_COST') {
-          const targetId = currentSelections[0];
-          const targetCard = ServerGameService.findCardById(gameState, targetId);
-          const targetCost = targetCard
-            ? ServerGameService.getEffectivePlayCost(gameState.players[playerUid], targetCard, gameState)
-            : 0;
-          if (targetCard && targetCost !== 0) {
-            gameState.pendingQuery = {
-              id: Math.random().toString(36).substring(7),
-              type: 'SELECT_PAYMENT',
-              playerUid,
-              options: [], // Not used for payment
-              title: `支付费用: ${targetCard.fullName}`,
-              description: `请选择如何支付 ${targetCost} 点费用。`,
-              minSelections: 1,
-              maxSelections: 1,
-              callbackKey: 'GENERIC_RESOLVE',
-              paymentCost: targetCost,
-              paymentColor: targetCard.color,
-              context: {
-                ...query.context,
-                targetCardId: targetId,
-                targetSelections: currentSelections,
-                remainingEffects: afterEffects.slice(i + 1)
-              }
-            };
-            return gameState; // Exit handleQueryChoice, waiting for payment
+          // INTERCEPT: If we need payment, "pause" and issue a SELECT_PAYMENT query
+          if (effect.type === 'PAY_CARD_COST') {
+            const targetId = currentSelections[0];
+            const targetCard = ServerGameService.findCardById(gameState, targetId);
+            const targetCost = targetCard
+              ? ServerGameService.getEffectivePlayCost(gameState.players[playerUid], targetCard, gameState)
+              : 0;
+            if (targetCard && targetCost !== 0) {
+              gameState.pendingQuery = {
+                id: Math.random().toString(36).substring(7),
+                type: 'SELECT_PAYMENT',
+                playerUid,
+                options: [], // Not used for payment
+                title: `支付费用: ${targetCard.fullName}`,
+                description: `请选择如何支付 ${targetCost} 点费用。`,
+                minSelections: 1,
+                maxSelections: 1,
+                callbackKey: 'GENERIC_RESOLVE',
+                paymentCost: targetCost,
+                paymentColor: targetCard.color,
+                context: {
+                  ...query.context,
+                  targetCardId: targetId,
+                  targetSelections: currentSelections,
+                  remainingEffects: afterEffects.slice(i + 1)
+                }
+              };
+              return gameState; // Exit handleQueryChoice, waiting for payment
+            }
+            continue; // No cost to pay
           }
-          continue; // No cost to pay
-        }
 
-        if (query.executionMode === 'ON_STACK') {
-          const queryCard = sourceCard || query.options[0]?.card;
-          ServerGameService.enterCountering(gameState, playerUid, {
-            ownerUid: playerUid,
-            type: 'EFFECT',
-            card: queryCard,
-            timestamp: Date.now(),
-            data: {
-              afterSelectionEffects: [effect], // Push one by one to stack? 
-              selections: currentSelections
-            } as any
-          });
-        } else {
-          // IMMEDIATE resolution
-          await AtomicEffectExecutor.execute(gameState, playerUid, effect, sourceCard, undefined, currentSelections);
+          if (query.executionMode === 'ON_STACK') {
+            const queryCard = sourceCard || query.options[0]?.card;
+            ServerGameService.enterCountering(gameState, playerUid, {
+              ownerUid: playerUid,
+              type: 'EFFECT',
+              card: queryCard,
+              timestamp: Date.now(),
+              data: {
+                afterSelectionEffects: [effect], // Push one by one to stack?
+                selections: currentSelections
+              } as any
+            });
+          } else {
+            // IMMEDIATE resolution
+            await AtomicEffectExecutor.execute(gameState, playerUid, effect, sourceCard, undefined, currentSelections);
+          }
         }
+      } finally {
+        AtomicEffectExecutor.endRecalcBatch(gameState);
       }
     }
 
@@ -6116,9 +6127,7 @@ export const ServerGameService = {
 
     // 4. Atomic Effects
     if (effect.atomicEffects) {
-      for (const atomic of effect.atomicEffects) {
-        await AtomicEffectExecutor.execute(gameState, playerUid, atomic, liveCard, event);
-      }
+      await AtomicEffectExecutor.executeBatch(gameState, playerUid, effect.atomicEffects, liveCard, event);
     }
 
     // 5. Execute Legacy Callback

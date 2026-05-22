@@ -5,6 +5,41 @@ import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../lib
 import { getCardIdentity } from '../lib/utils';
 
 export class AtomicEffectExecutor {
+  static beginRecalcBatch(gameState: GameState) {
+    const state = gameState as any;
+    state.__atomicRecalcBatchDepth = (state.__atomicRecalcBatchDepth || 0) + 1;
+  }
+
+  static endRecalcBatch(gameState: GameState) {
+    const state = gameState as any;
+    state.__atomicRecalcBatchDepth = Math.max(0, (state.__atomicRecalcBatchDepth || 0) - 1);
+    if (state.__atomicRecalcBatchDepth === 0) {
+      delete state.__atomicRecalcBatchDepth;
+      if (state.__atomicRecalcDirty) {
+        delete state.__atomicRecalcDirty;
+        EventEngine.recalculateContinuousEffects(gameState);
+      }
+    }
+  }
+
+  static async executeBatch(
+    gameState: GameState,
+    playerUid: string,
+    effects: AtomicEffect[],
+    sourceCard?: Card,
+    event?: any,
+    querySelections?: string[]
+  ): Promise<void> {
+    this.beginRecalcBatch(gameState);
+    try {
+      for (const effect of effects) {
+        await this.execute(gameState, playerUid, effect, sourceCard, event, querySelections);
+      }
+    } finally {
+      this.endRecalcBatch(gameState);
+    }
+  }
+
   private static loseForInsufficientDeckMove(gameState: GameState, playerUid: string, count: number, sourceCard?: Card) {
     if (gameState.gameStatus === 2) return;
     const player = gameState.players[playerUid];
@@ -339,8 +374,13 @@ export class AtomicEffectExecutor {
         break;
     }
 
-    // After any atomic effect, we might need to recalculate continuous effects
-    EventEngine.recalculateContinuousEffects(gameState);
+    // After any atomic effect, we might need to recalculate continuous effects.
+    // Batch callers mark this dirty and recalculate once after the whole effect resolves.
+    if ((gameState as any).__atomicRecalcBatchDepth > 0) {
+      (gameState as any).__atomicRecalcDirty = true;
+    } else {
+      EventEngine.recalculateContinuousEffects(gameState);
+    }
   }
 
   private static async executeCardEffects(gameState: GameState, playerUid: string, effect: AtomicEffect, sourceCard?: Card, querySelections?: string[]) {
@@ -351,9 +391,7 @@ export class AtomicEffectExecutor {
       if (card.effects) {
         for (const e of card.effects) {
           if (e.atomicEffects) {
-            for (const atomic of e.atomicEffects) {
-              await this.execute(gameState, playerUid, atomic, card, undefined, querySelections);
-            }
+            await this.executeBatch(gameState, playerUid, e.atomicEffects, card, undefined, querySelections);
           }
           if (e.execute) {
             e.execute(card, gameState, player);

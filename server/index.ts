@@ -70,13 +70,20 @@ async function insertGame(gameId: string, gameState: any, status = 0) {
     );
 }
 
-async function persistGameState(gameId: string, gameState: any, status?: number) {
+async function persistGameState(gameId: string, gameState: any, status?: number, timings?: Record<string, number>) {
     const now = Date.now();
+    const stringifyStart = process.hrtime.bigint();
+    const serializedState = JSON.stringify(gameState);
+    if (timings) timings.stringifyMs = elapsedMs(stringifyStart);
+
+    const dbStart = process.hrtime.bigint();
     if (status === undefined) {
-        await pool.query('UPDATE games SET state = ?, updated_at = ? WHERE id = ?', [JSON.stringify(gameState), now, gameId]);
+        await pool.query('UPDATE games SET state = ?, updated_at = ? WHERE id = ?', [serializedState, now, gameId]);
+        if (timings) timings.dbUpdateMs = elapsedMs(dbStart);
         return;
     }
-    await pool.query('UPDATE games SET state = ?, status = ?, updated_at = ? WHERE id = ?', [JSON.stringify(gameState), status, now, gameId]);
+    await pool.query('UPDATE games SET state = ?, status = ?, updated_at = ? WHERE id = ?', [serializedState, status, now, gameId]);
+    if (timings) timings.dbUpdateMs = elapsedMs(dbStart);
 }
 
 function formatMb(bytes: number) {
@@ -993,7 +1000,7 @@ async function syncAndSaveState(gameId: string, gameState: any, options: SyncSta
 
     // 5. Persist the pruned state to MariaDB
     const persistStart = process.hrtime.bigint();
-    await persistGameState(gameId, gameState, gameState.gameStatus === 2 ? 2 : undefined);
+    await persistGameState(gameId, gameState, gameState.gameStatus === 2 ? 2 : undefined, timings);
     timings.persistMs = elapsedMs(persistStart);
 
     // 6. If game ended, write full history to file
@@ -1018,7 +1025,13 @@ async function syncAndSaveState(gameId: string, gameState: any, options: SyncSta
 }
 
 async function syncGameStateForCallback(gameId: string, gameState: any, source: string) {
-    const isVisualFrame = !!gameState?.currentProcessingItem || (!!gameState?.isResolvingStack && gameState?.counterStack?.length > 0);
+    const isExplicitVisualFrame = !!gameState?.__visualOnlySync;
+    if (gameState?.__visualOnlySync) {
+        delete gameState.__visualOnlySync;
+    }
+    const isVisualFrame = isExplicitVisualFrame ||
+        !!gameState?.currentProcessingItem ||
+        (!!gameState?.isResolvingStack && gameState?.counterStack?.length > 0);
     await syncAndSaveState(gameId, gameState, {
         source,
         recalc: !isVisualFrame,
@@ -3815,6 +3828,13 @@ io.on('connection', (socket) => {
                 } else if (action === 'ACTIVATE_EFFECT') {
                     const { cardId, effectIndex } = payload;
                     await ServerGameService.activateEffect(gameState, myUid, cardId, effectIndex);
+                    const ackStart = process.hrtime.bigint();
+                    await syncAndSaveState(gameId, gameState, {
+                        recalc: false,
+                        persist: false,
+                        source: `${action}:ack`
+                    });
+                    actionTimings.ackEmitMs = elapsedMs(ackStart);
                 } else if (action === 'PASS_CONFRONTATION') {
                     await ServerGameService.passConfrontation(gameState, myUid, syncCallback);
                 } else if (action === 'RESOLVE_PLAY') {

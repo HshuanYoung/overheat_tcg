@@ -4,7 +4,7 @@ import { AtomicEffectExecutor, discardHandCost, isBattleFreeContext, preventNext
 const disableTradeUntilNextOwnTurn = (instance: Card, gameState: any) => {
   (instance as any).data = {
     ...((instance as any).data || {}),
-    tradeEffectDisabledUntilTurn: gameState.turnCount + 2
+    tradeEffectDisabledUntilOwnStartUid: AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId)
   };
   gameState.logs.push(`[${instance.fullName}] 的手牌交换效果直到下一次自己的回合开始前失去。`);
 };
@@ -50,7 +50,7 @@ const cardEffects: CardEffect[] = [{
   condition: (gameState, playerState, instance) =>
     wealthCount(playerState) >= 3 &&
     playerState.hand.length >= 2 &&
-    ((instance as any).data?.tradeEffectDisabledUntilTurn || 0) < gameState.turnCount &&
+    !(instance as any).data?.tradeEffectDisabledUntilOwnStartUid &&
     gameState.playerIds.some(uid => uid !== playerState.uid && gameState.players[uid].deck.length >= 3),
   cost: discardHandCost(2),
   execute: async (instance, gameState, playerState) => {

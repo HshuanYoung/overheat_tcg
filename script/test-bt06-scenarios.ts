@@ -12,6 +12,7 @@ import bt06W08 from '../src/scripts/201140100';
 import bt06W09 from '../src/scripts/201140101';
 import bt06W11 from '../src/scripts/101140347';
 import bt06B01 from '../src/scripts/104020335';
+import bt06B02 from '../src/scripts/104020336';
 import bt06B03 from '../src/scripts/104020337';
 import bt06B04 from '../src/scripts/104020338';
 import bt06B05 from '../src/scripts/104020339';
@@ -816,6 +817,79 @@ async function testBlueAketiTeteruAndRecord(): Promise<ScenarioResult> {
   return recordInHand && fodderDestroyed && itemLive && erosionPutLive
     ? pass(name, `record=${recordInHand}, item=${itemLive}, erosionPut=${erosionPutLive}`)
     : fail(name, `record=${recordInHand}, destroyed=${fodderDestroyed}, item=${itemLive}, erosionPut=${erosionPutLive}`);
+}
+
+async function testBlueUntilNextOwnTurnStartLocksExpireOnOwnStart(): Promise<ScenarioResult> {
+  const name = 'BT06-B02/B09 option locks expire at next own turn start';
+  const wealthUnits = () => [
+    cloneScriptCard(bt06B01 as Card, 'UNIT'),
+    cloneScriptCard(bt06B01 as Card, 'UNIT'),
+    cloneScriptCard(bt06B01 as Card, 'UNIT'),
+    null,
+    null,
+    null,
+  ];
+
+  const caravan = cloneScriptCard(bt06B02 as Card, 'UNIT');
+  const caravanCosts = [0, 1].map(index => testCard({ id: `B02_COST_${index}`, color: 'BLUE', cardlocation: 'HAND' }));
+  const caravanState = game({
+    hand: caravanCosts,
+    unitZone: [caravan, ...wealthUnits().slice(0, 5)],
+  }, {
+    deck: deckCards(6, 'B02_OPP_DECK', 'RED'),
+  });
+
+  await activateAndResolveByOpponentPass(caravanState, 'BOT', caravan, 1);
+  const caravanLockedAfterUse = !caravan.effects?.[1].condition?.(caravanState, caravanState.players.BOT, caravan, undefined);
+  caravanState.turnCount = 7;
+  caravanState.currentTurnPlayer = 1;
+  caravanState.players.BOT.isTurn = false;
+  caravanState.players.P1.isTurn = true;
+  const caravanLockedOnOpponentTurn = !caravan.effects?.[1].condition?.(caravanState, caravanState.players.BOT, caravan, undefined);
+  caravanState.players.BOT.hand = [0, 1].map(index => testCard({ id: `B02_NEXT_COST_${index}`, color: 'BLUE', cardlocation: 'HAND' }));
+  await ServerGameService.finishTurnTransition(caravanState);
+  const caravanUnlockedOnOwnStart =
+    caravanState.players.BOT.isTurn &&
+    !(caravan as any).data?.tradeEffectDisabledUntilOwnStartUid;
+
+  const record = cloneScriptCard(bt06B09 as Card, 'PLAY');
+  const recordState = game({
+    deck: deckCards(8, 'B09_DRAW_DECK', 'BLUE'),
+    grave: deckCards(2, 'B09_GRAVE', 'BLUE').map(card => ({ ...card, cardlocation: 'GRAVE' })),
+    unitZone: wealthUnits(),
+    playZone: [record],
+  });
+
+  await record.effects?.[0].execute?.(record, recordState, recordState.players.BOT, undefined as any);
+  if (recordState.pendingQuery?.context?.step !== 'MODE') {
+    return fail(name, `expected record mode query, got ${recordState.pendingQuery?.context?.step || 'none'}`);
+  }
+  await record.effects?.[0].onQueryResolve?.(record, recordState, recordState.players.BOT, ['RECOVER_DRAW'], {
+    sourceCardId: record.gamecardId,
+    effectId: '204000098_record_modes',
+    step: 'MODE',
+  });
+  const recoverDrawLockedAfterUse =
+    (record as any).data?.disabledAketiRecordModesUntilOwnStart?.RECOVER_DRAW === 'BOT';
+  recordState.turnCount = 7;
+  recordState.currentTurnPlayer = 1;
+  recordState.players.BOT.isTurn = false;
+  recordState.players.P1.isTurn = true;
+  const recoverDrawLockedOnOpponentTurn =
+    (record as any).data?.disabledAketiRecordModesUntilOwnStart?.RECOVER_DRAW === 'BOT';
+  await ServerGameService.finishTurnTransition(recordState);
+  const recoverDrawUnlockedOnOwnStart =
+    recordState.players.BOT.isTurn &&
+    !(record as any).data?.disabledAketiRecordModesUntilOwnStart?.RECOVER_DRAW;
+
+  return caravanLockedAfterUse &&
+    caravanLockedOnOpponentTurn &&
+    caravanUnlockedOnOwnStart &&
+    recoverDrawLockedAfterUse &&
+    recoverDrawLockedOnOpponentTurn &&
+    recoverDrawUnlockedOnOwnStart
+    ? pass(name, `caravanUnlocked=${!!caravanUnlockedOnOwnStart}, recordUnlocked=${!!recoverDrawUnlockedOnOwnStart}`)
+    : fail(name, `caravan after=${caravanLockedAfterUse} opp=${caravanLockedOnOpponentTurn} own=${!!caravanUnlockedOnOwnStart}; record after=${recoverDrawLockedAfterUse} opp=${recoverDrawLockedOnOpponentTurn} own=${!!recoverDrawUnlockedOnOwnStart}`);
 }
 
 async function testBlueCheckLetsOpponentPayOrCounters(): Promise<ScenarioResult> {
@@ -1842,6 +1916,7 @@ const scenarios: ScenarioRun[] = [
   testLivianLeaveAndCounterWhenShingiPlaced,
   testBlueWealthCounterAndLogistics,
   testBlueAketiTeteruAndRecord,
+  testBlueUntilNextOwnTurnStartLocksExpireOnOwnStart,
   testBlueCheckLetsOpponentPayOrCounters,
   testBlueSheathAndFuka,
   testGreenResonanceDrawBoostAndSearch,

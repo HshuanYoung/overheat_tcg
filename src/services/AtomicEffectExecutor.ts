@@ -4,6 +4,15 @@ import { EventEngine } from './EventEngine';
 import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../lib/cardState';
 import { getCardIdentity } from '../lib/utils';
 
+const isAlchemySourceCard = (card?: Card | null) =>
+  !!card &&
+  (
+    card.fullName?.includes('炼金') ||
+    card.fullName?.includes('鐐奸噾') ||
+    card.specialName?.includes('炼金') ||
+    card.specialName?.includes('鐐奸噾')
+  );
+
 export class AtomicEffectExecutor {
   static beginRecalcBatch(gameState: GameState) {
     const state = gameState as any;
@@ -1367,7 +1376,7 @@ export class AtomicEffectExecutor {
       options?.effectSourceCardId
     ) {
       const sourceCard = this.findCardById(gameState, options.effectSourceCardId);
-      if (sourceCard?.fullName?.includes('炼金')) {
+      if (isAlchemySourceCard(sourceCard)) {
         (card as any).data.enteredFromDeckByAlchemyTurn = gameState.turnCount;
         (card as any).data.enteredFromDeckByAlchemySourceCardId = sourceCard.gamecardId;
       }

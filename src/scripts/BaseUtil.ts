@@ -729,7 +729,7 @@ export const getOnlyGodMarkUnit = (player: PlayerState) => {
 export const countItemTypes = (player: PlayerState) =>
   new Set(player.itemZone.filter((card): card is Card => !!card).map(card => card.id)).size;
 
-export const isAlchemyCard = (card: Card) => card.fullName.includes('炼金');
+export const isAlchemyCard = (card?: Card | null) => !!card && card.fullName.includes('炼金');
 export const isTruthOrHickUnit = (card: Card) => card.type === 'UNIT' && (card.specialName === '真理' || card.specialName === '希克');
 export const isValkyrieUnit = (card: Card) => card.type === 'UNIT' && card.specialName === '瓦尔基里';
 export const isYellowHandCard = (card: Card) => card.cardlocation === 'HAND' && card.color === 'YELLOW';

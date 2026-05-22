@@ -4,16 +4,22 @@ import {
   addContinuousKeyword,
   addContinuousPower,
   damagePlayerByEffect,
-  getOpponentUid
+  getOpponentUid,
+  isAlchemyCard
 } from './BaseUtil';
 
 const enteredFromDeckByAlchemy = (instance: Card, gameState: any) =>
   (instance as any).data?.enteredFromDeckByAlchemyTurn !== undefined ||
-  (
-    (instance as any).data?.lastMovedFromZone === 'DECK' &&
-    (instance as any).data?.lastMovedToZone === 'UNIT' &&
-    !!AtomicEffectExecutor.findCardById(gameState, (instance as any).data?.lastMoveEffectSourceCardId)?.fullName?.includes('炼金')
-  );
+  (() => {
+    if (
+      (instance as any).data?.lastMovedFromZone !== 'DECK' ||
+      (instance as any).data?.lastMovedToZone !== 'UNIT'
+    ) {
+      return false;
+    }
+    const source = AtomicEffectExecutor.findCardById(gameState, (instance as any).data?.lastMoveEffectSourceCardId);
+    return isAlchemyCard(source);
+  })();
 
 const enteredFromDeckByEffect = (instance: Card) =>
   (instance as any).data?.lastMovedFromZone === 'DECK' &&

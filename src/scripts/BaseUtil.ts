@@ -814,6 +814,18 @@ export const allCardsOnField = (gameState: GameState) =>
     ...player.itemZone.filter((card): card is Card => !!card)
   ]);
 
+export const hasBattlefieldSpecialNameConflict = (
+  gameState: GameState,
+  ownerUid: string,
+  card: Card,
+  zone: TriggerLocation
+) => {
+  if (!card.specialName) return false;
+  const owner = gameState.players[ownerUid];
+  const zoneCards = zone === 'ITEM' ? owner?.itemZone : zone === 'UNIT' ? owner?.unitZone : undefined;
+  return Array.isArray(zoneCards) && zoneCards.some(slot => slot?.specialName === card.specialName);
+};
+
 export const allUnitsOnField = (gameState: GameState) =>
   Object.values(gameState.players).flatMap(player => player.unitZone.filter((card): card is Card => !!card));
 

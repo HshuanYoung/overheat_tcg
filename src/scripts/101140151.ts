@@ -1,5 +1,5 @@
 import { Card, CardEffect, GameEvent } from '../types/game';
-import { addInfluence, allCardsOnField, createSelectCardQuery, ensureData, moveCard, ownerUidOf } from './BaseUtil';
+import { addInfluence, allCardsOnField, createSelectCardQuery, ensureData, hasBattlefieldSpecialNameConflict, moveCard, ownerUidOf } from './BaseUtil';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 
 const getFieldSlotIndex = (gameState: any, ownerUid: string, card: Card) => {
@@ -81,8 +81,14 @@ const cardEffects: CardEffect[] = [{
       const card = AtomicEffectExecutor.findCardById(gameState, entry.cardId);
       if (!card || card.cardlocation !== 'EXILE') continue;
       delete ensureData(card).escortReturn;
-      moveCard(gameState, entry.ownerUid, card, entry.zone, instance, { targetIndex: entry.slotIndex });
-      if (entry.zone === 'UNIT') card.isExhausted = true;
+      const returnZone = entry.zone || 'UNIT';
+      if (hasBattlefieldSpecialNameConflict(gameState, entry.ownerUid, card, returnZone)) {
+        moveCard(gameState, entry.ownerUid, card, 'GRAVE', instance);
+        gameState.logs.push(`[${instance.fullName}] ${card.fullName} 因同专用名已存在，改为送入墓地。`);
+        continue;
+      }
+      moveCard(gameState, entry.ownerUid, card, returnZone, instance, { targetIndex: entry.slotIndex });
+      if (returnZone === 'UNIT') card.isExhausted = true;
       card.displayState = 'FRONT_UPRIGHT';
     }
     (playerState as any).escortReturns = remaining;

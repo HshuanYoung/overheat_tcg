@@ -1,5 +1,5 @@
 import { Card, CardEffect, TriggerLocation } from '../types/game';
-import { AtomicEffectExecutor, addInfluence, allCardsOnField, createSelectCardQuery, ensureData, moveCard, ownUnits, ownerUidOf } from './BaseUtil';
+import { AtomicEffectExecutor, addInfluence, allCardsOnField, createSelectCardQuery, ensureData, hasBattlefieldSpecialNameConflict, moveCard, ownUnits, ownerUidOf } from './BaseUtil';
 
 const getFieldSlotIndex = (gameState: any, ownerUid: string, card: Card) => {
   const owner = gameState.players[ownerUid];
@@ -84,7 +84,13 @@ const cardEffects: CardEffect[] = [{
         if (exiled && entry.ownerUid && exiled.cardlocation === 'EXILE') {
           const data = ensureData(exiled);
           delete data.returnAtOwnEndSourceName;
-          moveCard(gameState, entry.ownerUid, exiled, entry.zone || 'UNIT', instance, { targetIndex: entry.slotIndex });
+          const returnZone = entry.zone || 'UNIT';
+          if (hasBattlefieldSpecialNameConflict(gameState, entry.ownerUid, exiled, returnZone)) {
+            moveCard(gameState, entry.ownerUid, exiled, 'GRAVE', instance);
+            gameState.logs.push(`[${entry.sourceName || instance.fullName}] ${exiled.fullName} 因同专用名已存在，改为送入墓地。`);
+            return;
+          }
+          moveCard(gameState, entry.ownerUid, exiled, returnZone, instance, { targetIndex: entry.slotIndex });
           gameState.logs.push(`[${entry.sourceName || instance.fullName}] ${exiled.fullName} 在回合结束时回归战场。`);
         }
       });

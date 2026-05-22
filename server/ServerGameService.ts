@@ -6108,7 +6108,7 @@ export const ServerGameService = {
         ? event.data.sourceZone as TriggerLocation
         : liveCard.cardlocation as TriggerLocation;
     const movementTriggerEvents = new Set(['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_EXILED', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT']);
-    if (effectIndex >= 0 && !movementTriggerEvents.has(event?.type)) {
+    if (effectIndex >= 0 && !skipCost && !movementTriggerEvents.has(event?.type)) {
       const triggerCheck = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, liveCard, effect, triggerLocation, event);
       if (!triggerCheck.valid) {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);

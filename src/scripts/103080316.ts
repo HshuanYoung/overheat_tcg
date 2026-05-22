@@ -1,4 +1,21 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addTempKeyword, readyByEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103080316_cub_enter_awaken',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'UNIT_AWAKENED' as any,
+  limitCount: 1,
+  description: '1回合1次：由于《仔虎》的效果进入战场的这个单位适用唤醒时，重置并获得歼灭。',
+  condition: (_gameState, _playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    (instance as any).data?.enteredByCubEffectTurn !== undefined,
+  execute: async (instance, gameState, playerState) => {
+    readyByEffect(gameState, instance, instance);
+    addTempKeyword(instance, instance, 'annihilation');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +52,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT07',

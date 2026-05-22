@@ -1,4 +1,72 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import {
+  allCardsOnField,
+  createSelectCardQuery,
+  damagePlayerByEffect,
+  destroyByEffect,
+  discardHandCost,
+  ensureData,
+  getOpponentUid
+} from './BaseUtil';
+
+const nonGodFieldCards = (gameState: any) => allCardsOnField(gameState).filter(card => !card.godMark);
+const ohDisabled = (instance: Card) => !!(instance as any).data?.ohEffectDisabledUntilOwnStartUid;
+
+const destroyedOpponentUnitByOwnEffect = (gameState: any, playerUid: string, event: any) => {
+  const opponentUid = getOpponentUid(gameState, playerUid);
+  if (event?.playerUid !== opponentUid || event.data?.sourcePlayerId !== playerUid || !event.targetCardId) return undefined;
+  return gameState.players[opponentUid].grave.find((card: Card) =>
+    card.gamecardId === event.targetCardId &&
+    card.type === 'UNIT'
+  );
+};
+
+const cardEffects: CardEffect[] = [{
+  id: '102000372_opponent_unit_effect_destroy_damage',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'CARD_DESTROYED_EFFECT',
+  isGlobal: true,
+  limitCount: 1,
+  description: '1回合1次：对手战场上的单位由于你的卡的效果破坏时，给予所有对手2点伤害。',
+  condition: (gameState, playerState, _instance, event) =>
+    !!destroyedOpponentUnitByOwnEffect(gameState, playerState.uid, event),
+  execute: async (instance, gameState, playerState) => {
+    await damagePlayerByEffect(gameState, playerState.uid, getOpponentUid(gameState, playerState.uid), 2, instance);
+  }
+}, {
+  id: '102000372_oh_destroy_non_god',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  cost: discardHandCost(1),
+  description: 'OH：1回合1次，舍弃1张手牌，选择战场上1张非神蚀卡破坏；直到下一次你的回合开始失去这个启动能力。',
+  condition: (gameState, _playerState, instance) =>
+    instance.cardlocation === 'UNIT' &&
+    !ohDisabled(instance) &&
+    nonGodFieldCards(gameState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      nonGodFieldCards(gameState),
+      '选择破坏目标',
+      '选择战场上的1张非神蚀卡破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102000372_oh_destroy_non_god' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && ['UNIT', 'ITEM'].includes(target.cardlocation || '') && !target.godMark) {
+      destroyByEffect(gameState, target, instance);
+    }
+    ensureData(instance).ohEffectDisabledUntilOwnStartUid = playerState.uid;
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +103,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SER',
   availableRarities: ['SER'],
   cardPackage: 'BT07',

@@ -1,4 +1,31 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import {
+  addTemporaryAccessDiscount,
+  genericSoulDevourPowerEffect,
+  isThunderUnit,
+  ownerOf,
+  soulDevourCountThisTurn
+} from './BaseUtil';
+
+const cardEffects: CardEffect[] = [
+  genericSoulDevourPowerEffect('102060321_soul_devour_power'),
+  {
+    id: '102060321_hand_access_discount',
+    type: 'CONTINUOUS',
+    triggerLocation: ['UNIT'],
+    content: 'HAND_ACCESS_DISCOUNT_BY_SOUL_DEVOUR',
+    description: '你的手牌中的<雷霆>单位卡和红色非神蚀卡ACCESS值减少本回合发动过的噬魂次数，最低为0。',
+    applyContinuous: (gameState, instance) => {
+      const owner = ownerOf(gameState, instance);
+      if (!owner) return;
+      const discount = soulDevourCountThisTurn(gameState, owner);
+      if (discount <= 0) return;
+      owner.hand
+        .filter(card => isThunderUnit(card) || (card.color === 'RED' && !card.godMark))
+        .forEach(card => addTemporaryAccessDiscount(card, instance, discount));
+    }
+  }
+];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +62,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR'],
   cardPackage: 'BT07',

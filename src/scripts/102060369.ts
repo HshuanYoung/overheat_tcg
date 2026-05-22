@@ -1,4 +1,22 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, addContinuousKeyword, genericSoulDevourPowerEffect } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [
+  genericSoulDevourPowerEffect('102060369_soul_devour_power'),
+  {
+    id: '102060369_high_power_damage_rush',
+    type: 'CONTINUOUS',
+    triggerLocation: ['UNIT'],
+    description: '力量值3500以上时，这个单位伤害+1并获得速攻。',
+    condition: (_gameState, _playerState, instance) =>
+      instance.cardlocation === 'UNIT' &&
+      (instance.power || 0) >= 3500,
+    applyContinuous: (_gameState, instance) => {
+      addContinuousDamage(instance, instance, 1);
+      addContinuousKeyword(instance, instance, 'rush');
+    }
+  }
+];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +53,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT07',

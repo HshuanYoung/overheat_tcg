@@ -1,4 +1,122 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import {
+  addContinuousDamage,
+  addContinuousKeyword,
+  addContinuousPower,
+  allCardsOnField,
+  createChoiceQuery,
+  createSelectCardQuery,
+  destroyByEffect,
+  getOpponentUid,
+  nameContains
+} from './BaseUtil';
+
+const enteredByBlueprint = (gameState: any, instance: Card) => {
+  const data = (instance as any).data || {};
+  const source = AtomicEffectExecutor.findCardById(gameState, data.lastMoveEffectSourceCardId || data.placedByBlueprintSourceCardId);
+  return data.placedByBlueprintEffectTurn === gameState.turnCount ||
+    !!source && nameContains(source, '蓝图');
+};
+
+const opponentNonGodFieldCards = (gameState: any, playerUid: string) => {
+  const opponent = gameState.players[getOpponentUid(gameState, playerUid)];
+  return [...opponent.unitZone, ...opponent.itemZone].filter((card: Card | null): card is Card =>
+    !!card && !card.godMark
+  );
+};
+
+const godmarkFieldCards = (gameState: any) =>
+  allCardsOnField(gameState).filter(card => card.godMark);
+
+const defenseModeOptions = (gameState: any, playerUid: string) => {
+  const options = [];
+  if (opponentNonGodFieldCards(gameState, playerUid).length > 0) options.push({ id: 'DESTROY_OPPONENT_NON_GOD', label: '破坏对手非神蚀卡' });
+  if (godmarkFieldCards(gameState).length > 0) options.push({ id: 'DESTROY_GODMARK', label: '破坏神蚀卡' });
+  return options;
+};
+
+const cardEffects: CardEffect[] = [{
+  id: '105110386_blueprint_entry_destroy',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  description: '由于卡名含有《蓝图》的卡的效果进入战场时，选择1项：破坏对手战场所有非神蚀卡；或破坏战场1张神蚀卡。',
+  condition: (gameState, playerState, instance, event) =>
+    instance.cardlocation === 'UNIT' &&
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    enteredByBlueprint(gameState, instance) &&
+    defenseModeOptions(gameState, playerState.uid).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    const options = defenseModeOptions(gameState, playerState.uid);
+    if (options.length === 1 && options[0].id === 'DESTROY_OPPONENT_NON_GOD') {
+      opponentNonGodFieldCards(gameState, playerState.uid).forEach(target => destroyByEffect(gameState, target, instance));
+      return;
+    }
+    if (options.length === 1 && options[0].id === 'DESTROY_GODMARK') {
+      createSelectCardQuery(
+        gameState,
+        playerState.uid,
+        godmarkFieldCards(gameState),
+        '选择神蚀卡',
+        '选择战场上的1张神蚀卡破坏。',
+        1,
+        1,
+        { sourceCardId: instance.gamecardId, effectId: '105110386_blueprint_entry_destroy', step: 'DESTROY_GODMARK' },
+        card => card.cardlocation as any
+      );
+      return;
+    }
+    createChoiceQuery(
+      gameState,
+      playerState.uid,
+      '选择效果',
+      '选择1项效果执行。',
+      options,
+      { sourceCardId: instance.gamecardId, effectId: '105110386_blueprint_entry_destroy', step: 'MODE' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'MODE') {
+      if (selections[0] === 'DESTROY_OPPONENT_NON_GOD') {
+        opponentNonGodFieldCards(gameState, playerState.uid).forEach(target => destroyByEffect(gameState, target, instance));
+        return;
+      }
+      createSelectCardQuery(
+        gameState,
+        playerState.uid,
+        godmarkFieldCards(gameState),
+        '选择神蚀卡',
+        '选择战场上的1张神蚀卡破坏。',
+        1,
+        1,
+        { sourceCardId: instance.gamecardId, effectId: '105110386_blueprint_entry_destroy', step: 'DESTROY_GODMARK' },
+        card => card.cardlocation as any
+      );
+      return;
+    }
+
+    if (context?.step === 'DESTROY_GODMARK') {
+      const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+      if (target && target.godMark && ['UNIT', 'ITEM'].includes(target.cardlocation || '')) {
+        destroyByEffect(gameState, target, instance);
+      }
+    }
+  }
+}, {
+  id: '105110386_creation_scar_stats',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  erosionBackLimit: [1, 99],
+  description: '创痕：这张卡伤害+1，力量+1000，并获得【英勇】【歼灭】。',
+  applyContinuous: (_gameState, instance) => {
+    addContinuousDamage(instance, instance, 1);
+    addContinuousPower(instance, instance, 1000);
+    addContinuousKeyword(instance, instance, 'heroic');
+    addContinuousKeyword(instance, instance, 'annihilation');
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,12 +152,14 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
   isrush: false,
-  isAnnihilation: true,
-  isHeroic: true,
+  isAnnihilation: false,
+  baseAnnihilation: false,
+  isHeroic: false,
+  baseHeroic: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'UR',
   availableRarities: ['UR'],
   cardPackage: 'BT07',

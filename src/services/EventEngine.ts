@@ -67,8 +67,11 @@ export class EventEngine {
       ];
       const eventSourceSnapshot = event.sourceCard &&
         (!event.playerUid || player.uid === event.playerUid) &&
-        !activeZones.some(card =>
-          card && card.gamecardId === event.sourceCardId
+        (
+          event.type === 'CARD_LEFT_FIELD' ||
+          !activeZones.some(card =>
+            card && card.gamecardId === event.sourceCardId
+          )
         )
         ? event.sourceCard
         : undefined;
@@ -107,7 +110,9 @@ export class EventEngine {
 
               // New: Check if the card's current location is in the effect's triggerLocation array
               // If triggerLocation is not specified, default depends on the card type (usually UNIT/ITEM for units)
-              const cardLoc = card.cardlocation as TriggerLocation;
+              const cardLoc = (eventSourceSnapshot && card === eventSourceSnapshot && event.type === 'CARD_LEFT_FIELD')
+                ? ((event.data?.sourceZone || card.cardlocation) as TriggerLocation)
+                : (card.cardlocation as TriggerLocation);
               let allowedLocations = effect.triggerLocation || BATTLEFIELD_ZONES;
 
               // Story cards can be activated from Hand or Play zone by default
@@ -765,6 +770,11 @@ export class EventEngine {
               });
             }
           } else {
+            (item as any).data = {
+              ...((item as any).data || {}),
+              lastEquipTargetId: item.equipTargetId,
+              lastEquipTargetLostTurn: gameState.turnCount
+            };
             item.equipTargetId = undefined;
             if (!item.influencingEffects) item.influencingEffects = [];
             item.influencingEffects.push({
@@ -926,6 +936,27 @@ export class EventEngine {
       effectSourceCardId,
       previousSourceCardId
     };
+
+    if (fromZone === 'UNIT' && toZone === 'GRAVE' && card.type === 'UNIT') {
+      const player = gameState.players[cardOwnerUid] as any;
+      if (player) {
+        const key = `unitsSentFromFieldToGraveTurn_${gameState.turnCount}`;
+        const idsKey = `${key}_ids`;
+        const ids = new Set<string>(player[idsKey] || []);
+        if (!ids.has(card.gamecardId)) {
+          ids.add(card.gamecardId);
+          player[idsKey] = [...ids];
+          player[key] = ids.size;
+        }
+        const globalIdsKey = `${key}_global_ids`;
+        const globalIds = new Set<string>((gameState as any)[globalIdsKey] || []);
+        if (!globalIds.has(card.gamecardId)) {
+          globalIds.add(card.gamecardId);
+          (gameState as any)[globalIdsKey] = [...globalIds];
+          (gameState as any)[`${key}_global`] = globalIds.size;
+        }
+      }
+    }
 
     if (onlyLeftFieldEvent) {
       if (['UNIT', 'ITEM'].includes(fromZone)) {

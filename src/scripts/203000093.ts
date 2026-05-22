@@ -1,4 +1,82 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { canPutUnitOntoBattlefield, moveCard, putUnitOntoField, story } from './BaseUtil';
+
+const greenHandCards = (instance: Card) => (card: Card) =>
+  card.gamecardId !== instance.gamecardId && card.color === 'GREEN';
+
+const erosionUnitTargets = (playerState: any) =>
+  playerState.erosionFront.filter((card: Card | null): card is Card =>
+    !!card &&
+    card.displayState === 'FRONT_UPRIGHT' &&
+    card.type === 'UNIT' &&
+    canPutUnitOntoBattlefield(playerState, card)
+  );
+
+const cardEffects: CardEffect[] = [story('203000093_cliff_rescue', '创痕1：你的主要阶段，选择侵蚀区1张单位卡，舍弃1张绿色手牌，将其放置到战场。之后放逐这张卡。', async (instance, gameState, playerState) => {
+  if (erosionUnitTargets(playerState).length === 0 || !playerState.hand.some(greenHandCards(instance))) return;
+  gameState.pendingQuery = {
+    id: Math.random().toString(36).substring(7),
+    type: 'SELECT_CARD',
+    playerUid: playerState.uid,
+    options: AtomicEffectExecutor.enrichQueryOptions(
+      gameState,
+      playerState.uid,
+      erosionUnitTargets(playerState).map((card: Card) => ({ card, source: 'EROSION_FRONT' as const }))
+    ),
+    title: '选择救出单位',
+    description: '选择你正面侵蚀区中的1张单位卡。',
+    minSelections: 1,
+    maxSelections: 1,
+    callbackKey: 'EFFECT_RESOLVE',
+    context: { sourceCardId: instance.gamecardId, effectId: '203000093_cliff_rescue', step: 'TARGET' }
+  };
+}, {
+  erosionBackLimit: [1, 10],
+  limitCount: 1,
+  limitNameType: true,
+  condition: (gameState, playerState, instance) =>
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    erosionUnitTargets(playerState).length > 0 &&
+    playerState.hand.some(greenHandCards(instance)),
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step === 'TARGET') {
+      const targetId = selections[0];
+      const target = erosionUnitTargets(playerState).find((card: Card) => card.gamecardId === targetId);
+      if (!target) return;
+      const discardCandidates = playerState.hand.filter(greenHandCards(instance));
+      if (discardCandidates.length === 0) return;
+      gameState.pendingQuery = {
+        id: Math.random().toString(36).substring(7),
+        type: 'SELECT_CARD',
+        playerUid: playerState.uid,
+        options: AtomicEffectExecutor.enrichQueryOptions(
+          gameState,
+          playerState.uid,
+          discardCandidates.map((card: Card) => ({ card, source: 'HAND' as const }))
+        ),
+        title: '舍弃绿色手牌',
+        description: '选择1张绿色手牌舍弃。',
+        minSelections: 1,
+        maxSelections: 1,
+        callbackKey: 'EFFECT_RESOLVE',
+        context: { sourceCardId: instance.gamecardId, effectId: '203000093_cliff_rescue', step: 'DISCARD', targetId }
+      };
+      return;
+    }
+
+    if (context?.step !== 'DISCARD') return;
+    const discard = playerState.hand.find((card: Card) => card.gamecardId === selections[0] && greenHandCards(instance)(card));
+    const target = erosionUnitTargets(playerState).find((card: Card) => card.gamecardId === context.targetId);
+    if (!discard || !target) return;
+    moveCard(gameState, playerState.uid, discard, 'GRAVE', instance);
+    putUnitOntoField(gameState, playerState.uid, target, instance);
+    if (instance.cardlocation === 'PLAY' || instance.cardlocation === 'GRAVE') {
+      moveCard(gameState, playerState.uid, instance, 'EXILE', instance);
+    }
+  }
+})];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -27,7 +105,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR'],
   cardPackage: 'BT07',

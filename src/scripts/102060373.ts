@@ -1,4 +1,73 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import {
+  addContinuousKeyword,
+  addContinuousPower,
+  addInfluence,
+  allCardsOnField,
+  createSelectCardQuery,
+  destroyByEffect,
+  markCanAttackAnyUnit,
+  ownUnits,
+  totalUnitsSentFromFieldToGraveThisTurn
+} from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '102060373_units_to_grave_thresholds',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '根据本回合中从战场送入墓地的单位数量，依次获得力量加成、速攻/英勇/神依、攻击单位能力。',
+  applyContinuous: (gameState, instance) => {
+    const owner = Object.values(gameState.players).find(player =>
+      player.unitZone.some(unit => unit?.gamecardId === instance.gamecardId)
+    );
+    if (!owner) return;
+    const count = totalUnitsSentFromFieldToGraveThisTurn(gameState);
+
+    if (count >= 1) {
+      ownUnits(owner).forEach(unit => addContinuousPower(unit, instance, 1000));
+    }
+    if (count >= 2) {
+      addContinuousKeyword(instance, instance, 'rush');
+      addContinuousKeyword(instance, instance, 'heroic');
+      instance.isShenyi = true;
+      addInfluence(instance, instance, '获得【神依】');
+    }
+    if (count >= 4) {
+      ownUnits(owner).forEach(unit => markCanAttackAnyUnit(unit, instance));
+    }
+  }
+}, {
+  id: '102060373_six_destroy_card',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitGlobal: true,
+  description: '游戏1次：本回合从战场送入墓地的单位达到6个后，选择战场上1张卡破坏。',
+  condition: (gameState, _playerState, instance) =>
+    instance.cardlocation === 'UNIT' &&
+    totalUnitsSentFromFieldToGraveThisTurn(gameState) >= 6 &&
+    allCardsOnField(gameState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      allCardsOnField(gameState),
+      '选择破坏目标',
+      '选择战场上的1张卡破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102060373_six_destroy_card' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && ['UNIT', 'ITEM'].includes(target.cardlocation || '')) {
+      destroyByEffect(gameState, target, instance);
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,13 +103,16 @@ const card: Card = {
   godMark: true,
   displayState: 'FRONT_UPRIGHT',
   isExhausted: false,
-  isrush: true,
-  isHeroic: true,
-  isShenyi: true,
+  isrush: false,
+  baseIsrush: false,
+  isHeroic: false,
+  baseHeroic: false,
+  isShenyi: false,
+  baseShenyi: false,
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'UR',
   availableRarities: ['UR'],
   cardPackage: 'BT07',

@@ -1,4 +1,64 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import {
+  addTemporaryColor,
+  createSelectCardQuery,
+  moveCard,
+  nameContains,
+  paymentCost
+} from './BaseUtil';
+
+const allColors = ['WHITE', 'BLUE', 'GREEN', 'RED', 'YELLOW'];
+
+const immortalStoneCandidates = (playerState: any) =>
+  [...playerState.deck, ...playerState.grave].filter((card: Card) => card.id === '305000062' || nameContains(card, '永生石'));
+
+const wasSentToGraveByEffect = (event: any) =>
+  event?.sourceCardId &&
+  event.data?.zone === 'UNIT' &&
+  event.data?.targetZone === 'GRAVE' &&
+  event.data?.isEffect === true;
+
+const cardEffects: CardEffect[] = [{
+  id: '105000384_all_colors_for_alchemy',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '卡名含有《炼金》的卡的效果将战场上的这张卡送入墓地时，这张卡视作具备所有颜色。',
+  applyContinuous: (_gameState, instance) => {
+    allColors.forEach(color => addTemporaryColor(instance, color));
+  }
+}, {
+  id: '105000384_effect_grave_search_immortal_stone',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT', 'GRAVE'],
+  triggerEvent: 'CARD_LEFT_ZONE',
+  cost: paymentCost(2),
+  description: '这张卡由于卡的效果送去墓地时，支付ACCESS2：将卡组或墓地中的1张《永生石》加入手牌。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    wasSentToGraveByEffect(event) &&
+    immortalStoneCandidates(playerState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      immortalStoneCandidates(playerState),
+      '选择永生石',
+      '从你的卡组或墓地选择1张《永生石》加入手牌。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '105000384_effect_grave_search_immortal_stone' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const selected = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!selected || !immortalStoneCandidates(playerState).some(card => card.gamecardId === selected.gamecardId)) return;
+    const fromDeck = selected.cardlocation === 'DECK';
+    moveCard(gameState, playerState.uid, selected, 'HAND', instance);
+    if (fromDeck) await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +95,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT07',

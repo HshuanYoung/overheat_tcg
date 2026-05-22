@@ -1,4 +1,55 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { addContinuousDamage, canPutUnitOntoBattlefield, discardHandCost, ensureData, moveCard, ownUnits, ownerOf, totalErosionCount } from './BaseUtil';
+
+const ADVENTURER = '冒险家公会';
+
+const isAdventurerUnit = (card: Card) =>
+  card.type === 'UNIT' &&
+  (card.faction === ADVENTURER || card.fullName.includes('冒险家公会'));
+
+const hasHammo = (playerState: any) =>
+  ownUnits(playerState).some(unit =>
+    unit.id === '104030306' ||
+    unit.specialName === '汉莫' ||
+    unit.fullName.includes('汉莫')
+  );
+
+const canErosionEnter = (gameState: any, playerState: any, instance: Card) =>
+  playerState.isTurn &&
+  gameState.phase === 'MAIN' &&
+  instance.cardlocation === 'EROSION_FRONT' &&
+  instance.displayState === 'FRONT_UPRIGHT' &&
+  totalErosionCount(playerState) >= 4 &&
+  totalErosionCount(playerState) <= 7 &&
+  ownUnits(playerState).filter(isAdventurerUnit).length >= 2 &&
+  playerState.hand.length > 0 &&
+  canPutUnitOntoBattlefield(playerState, instance);
+
+const cardEffects: CardEffect[] = [{
+  id: '104030307_buff_with_hammo',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  description: '你的战场上有「汉莫」单位时，这个单位伤害+2，不会被战斗破坏。',
+  applyContinuous: (gameState, instance) => {
+    const owner = ownerOf(gameState, instance);
+    if (!owner || !hasHammo(owner)) return;
+    addContinuousDamage(instance, instance, 2);
+    const data = ensureData(instance);
+    data.preventNextBattleDestroy = true;
+    data.preventNextBattleDestroySourceName = instance.fullName;
+  }
+}, {
+  id: '104030307_enter_from_erosion',
+  type: 'ACTIVATE',
+  triggerLocation: ['EROSION_FRONT'],
+  erosionTotalLimit: [4, 7],
+  description: '4-7：你的主要阶段，若你有2个以上<冒险家公会>单位，舍弃1张手牌，将正面侵蚀区的这张卡放置到战场。',
+  condition: canErosionEnter,
+  cost: discardHandCost(1),
+  execute: async (instance, gameState, playerState) => {
+    moveCard(gameState, playerState.uid, instance, 'UNIT', instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +86,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT07',

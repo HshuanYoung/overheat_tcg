@@ -1,4 +1,77 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { allCardsOnField, allUnitsOnField, backErosionCount, createSelectCardQuery, destroyByEffect, ensureData, getOpponentUid, moveTopDeckTo } from './BaseUtil';
+
+const nonGodFieldCards = (gameState: any) => allCardsOnField(gameState).filter(card => !card.godMark);
+const hasDrawnByEffectThisTurn = (playerState: any, gameState: any) =>
+  Number((playerState as any).drawnByEffectTurn || -1) === gameState.turnCount;
+
+const ohDisabled = (instance: Card) => !!(instance as any).data?.ohEffectDisabledUntilOwnStartUid;
+
+const cardEffects: CardEffect[] = [{
+  id: '104000309_draw_effect_destroy',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  description: '创痕2：你的回合中，若你由于卡的效果抽过卡，选择战场1张非神蚀卡，破坏。',
+  condition: (gameState, playerState, instance) =>
+    instance.cardlocation === 'UNIT' &&
+    playerState.isTurn &&
+    backErosionCount(playerState) >= 2 &&
+    hasDrawnByEffectThisTurn(playerState, gameState) &&
+    nonGodFieldCards(gameState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      nonGodFieldCards(gameState),
+      '选择破坏目标',
+      '选择战场上的1张非神蚀卡破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '104000309_draw_effect_destroy' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && ['UNIT', 'ITEM'].includes(target.cardlocation || '') && !target.godMark) {
+      destroyByEffect(gameState, target, instance);
+    }
+  }
+}, {
+  id: '104000309_oh_exhaust_mill',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  description: 'OH：1回合1次，选择战场上1个单位横置，将对手卡组顶2张送入墓地；直到下次你的回合开始失去这个启动能力。',
+  condition: (gameState, _playerState, instance) =>
+    instance.cardlocation === 'UNIT' &&
+    !ohDisabled(instance) &&
+    allUnitsOnField(gameState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      allUnitsOnField(gameState),
+      '选择横置单位',
+      '选择战场上的1个单位横置，并将对手卡组顶2张送入墓地。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '104000309_oh_exhaust_mill' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && target.cardlocation === 'UNIT' && !target.isExhausted) target.isExhausted = true;
+    moveTopDeckTo(gameState, getOpponentUid(gameState, playerState.uid), 2, 'GRAVE', instance);
+    const data = ensureData(instance);
+    data.ohEffectDisabledUntilOwnStartUid = playerState.uid;
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +108,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SER',
   availableRarities: ['SER'],
   cardPackage: 'BT07',

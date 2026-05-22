@@ -22,6 +22,9 @@ const getPreservedFieldLeaveData = (card: Card, data: any) => {
   if (card.id === '101000379') {
     prefixes.push('placedByShingiEffect');
   }
+  if (card.id === '304020050') {
+    prefixes.push('wealthBeforeLeftField');
+  }
   const preserved: Record<string, any> = {};
   Object.keys(data).forEach(key => {
     if (prefixes.some(prefix => key.startsWith(prefix))) {

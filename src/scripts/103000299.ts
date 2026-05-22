@@ -1,4 +1,92 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { addTempDamage, addTempPower, createSelectCardQuery, destroyByEffect, ownUnits, ownerUidOf } from './BaseUtil';
+
+const isSeisoUnit = (card: Card) =>
+  card.type === 'UNIT' && (card.fullName.includes('清霜') || !!card.specialName?.includes('清霜'));
+
+const isSeisoMochiyuki = (card: Card) =>
+  card.id === '103000299' || card.fullName.includes('清霜饼雪') || card.specialName?.includes('饼雪');
+
+const isAccessThree = (card: Card) => Number(card.acValue || 0) === 3;
+
+const effect_103000299_attack_destroy_boost: CardEffect = {
+  id: '103000299_attack_destroy_boost',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_ATTACK_DECLARED',
+  isGlobal: true,
+  isMandatory: false,
+  triggerLocation: ['UNIT'],
+  description: '这个单位宣言攻击时，可以破坏自己场上1个《清霜饼雪》以外的《清霜》单位。之后己方ACCESS 3单位本回合力量+1000。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.playerUid === playerState.uid &&
+    (event.data?.attackerIds || []).includes(instance.gamecardId) &&
+    ownUnits(playerState).some(unit =>
+      unit.gamecardId !== instance.gamecardId &&
+      isSeisoUnit(unit) &&
+      !isSeisoMochiyuki(unit)
+    ),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState).filter(unit =>
+        unit.gamecardId !== instance.gamecardId &&
+        isSeisoUnit(unit) &&
+        !isSeisoMochiyuki(unit)
+      ),
+      '选择破坏的清霜单位',
+      '选择自己战场上的1个《清霜饼雪》以外的《清霜》单位破坏。之后ACCESS 3单位力量+1000。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103000299_attack_destroy_boost' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (
+      target?.cardlocation === 'UNIT' &&
+      ownerUidOf(gameState, target) === playerState.uid &&
+      target.gamecardId !== instance.gamecardId &&
+      isSeisoUnit(target) &&
+      !isSeisoMochiyuki(target)
+    ) {
+      destroyByEffect(gameState, target, instance);
+    }
+
+    ownUnits(playerState)
+      .filter(isAccessThree)
+      .forEach(unit => addTempPower(unit, instance, 1000));
+  }
+};
+
+const effect_103000299_leave_army_boost: CardEffect = {
+  id: '103000299_leave_army_boost',
+  type: 'TRIGGER',
+  triggerEvent: 'CARD_LEFT_FIELD',
+  sourceSnapshotOnLeftField: true,
+  isMandatory: false,
+  limitCount: 1,
+  limitNameType: true,
+  triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
+  description: '同名1回合1次：这张卡由于战斗或自己的卡牌效果离开战场时，己方ACCESS 3单位本回合伤害+1、力量+1000。',
+  condition: (_gameState, playerState, instance, event) => {
+    if (event?.sourceCardId !== instance.gamecardId && event?.data?.previousSourceCardId !== instance.gamecardId) return false;
+    if (event.data?.sourceZone !== 'UNIT') return false;
+    const leftByOwnEffect = !!event.data?.isEffect && event.data?.effectSourcePlayerUid === playerState.uid;
+    const leftByBattle = !event.data?.isEffect && event.data?.targetZone === 'GRAVE';
+    return (leftByOwnEffect || leftByBattle) && ownUnits(playerState).some(isAccessThree);
+  },
+  execute: async (instance, _gameState, playerState) => {
+    ownUnits(playerState)
+      .filter(isAccessThree)
+      .forEach(unit => {
+        addTempDamage(unit, instance, 1);
+        addTempPower(unit, instance, 1000);
+      });
+  }
+};
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -12,7 +100,6 @@ import { Card } from '../types/game';
  * Card Detail:
  * 【诱】{这个单位宣言攻击时}：你可以将你的战场上的《清霜饼雪》以外的1个卡名含有《清霜》的单位破坏。之后，你的战场上所有的ACCESS值+3的单位本回合中〖力量+1000〗。
  * 【诱】〖同名1回合1次〗{这张卡由于战斗或你的卡的效果从战场离开时}：你可以使你的战场上所有的ACCESS值+3的单位本回合中〖伤害+1〗〖力量+1000〗。
- * TODO: confirm ID / godMark / rarity variants and implement effects.
  */
 const card: Card = {
   id: '103000299',
@@ -35,7 +122,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: [effect_103000299_attack_destroy_boost, effect_103000299_leave_army_boost],
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'SP03',

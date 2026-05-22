@@ -29,6 +29,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '这张卡进入战场时，舍弃2张手牌：可以将手牌或卡组中的2张具有【菲晶】的非神蚀单位放置到战场。',
   condition: (_gameState, playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&
@@ -66,6 +67,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['GRAVE', 'EXILE'],
   triggerEvent: ['CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  isMandatory: false,
   erosionBackLimit: [2, 10],
   description: '创痕2：这张卡由于战斗或对手效果从战场离开时，选择战场上的1张卡破坏。',
   condition: (_gameState, playerState, instance, event) => {
@@ -113,7 +115,7 @@ const card: Card = {
   isExhausted: false,
   isrush: false,
   canAttack: true,
-  feijingMark: true,
+  feijingMark: false,
   canResetCount: 0,
   effects: cardEffects,
   rarity: 'R',

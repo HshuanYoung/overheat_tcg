@@ -2,6 +2,7 @@ import { Card, CardEffect, GameEvent, GameState, PlayerState, TriggerLocation } 
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 export { AtomicEffectExecutor };
 import { EventEngine } from '../services/EventEngine';
+import { getCardWealthValue, getPlayerWealthCount } from '../lib/wealth';
 
 const VIRTUAL_GOD_MARK_IDS = new Set(['105000472', '105000473']);
 
@@ -611,7 +612,7 @@ export const moveCard = (
   card: Card,
   toZone: TriggerLocation,
   sourceCard?: Card,
-  options?: { insertAtBottom?: boolean; faceDown?: boolean; toPlayerUid?: string }
+  options?: { insertAtBottom?: boolean; faceDown?: boolean; toPlayerUid?: string; targetIndex?: number }
 ) => {
   const targetPlayerUid = options?.toPlayerUid || ownerUid;
   if (sourceCard && isUnaffectedByCardEffect(gameState, card, sourceCard, options?.toPlayerUid ? ownerUidOf(gameState, sourceCard) : undefined)) {
@@ -628,6 +629,7 @@ export const moveCard = (
     {
       insertAtBottom: options?.insertAtBottom,
       faceDown: options?.faceDown,
+      targetIndex: options?.targetIndex,
       effectSourcePlayerUid: (sourceCard ? AtomicEffectExecutor.findCardOwnerKey(gameState, sourceCard.gamecardId) : ownerUid) || ownerUid,
       effectSourceCardId: sourceCard?.gamecardId
     }
@@ -640,7 +642,7 @@ export const moveCardAsCost = (
   card: Card,
   toZone: TriggerLocation,
   sourceCard?: Card,
-  options?: { insertAtBottom?: boolean; faceDown?: boolean; toPlayerUid?: string }
+  options?: { insertAtBottom?: boolean; faceDown?: boolean; toPlayerUid?: string; targetIndex?: number }
 ) => {
   const targetPlayerUid = options?.toPlayerUid || ownerUid;
   const data = ensureData(card);
@@ -658,6 +660,7 @@ export const moveCardAsCost = (
     {
       insertAtBottom: options?.insertAtBottom,
       faceDown: options?.faceDown,
+      targetIndex: options?.targetIndex,
       effectSourcePlayerUid: (sourceCard ? AtomicEffectExecutor.findCardOwnerKey(gameState, sourceCard.gamecardId) : ownerUid) || ownerUid,
       effectSourceCardId: sourceCard?.gamecardId
     }
@@ -892,6 +895,18 @@ export const allCardsOnField = (gameState: GameState) =>
     ...player.itemZone.filter((card): card is Card => !!card)
   ]);
 
+export const hasBattlefieldSpecialNameConflict = (
+  gameState: GameState,
+  ownerUid: string,
+  card: Card,
+  zone: TriggerLocation
+) => {
+  if (!card.specialName) return false;
+  const owner = gameState.players[ownerUid];
+  const zoneCards = zone === 'ITEM' ? owner?.itemZone : zone === 'UNIT' ? owner?.unitZone : undefined;
+  return Array.isArray(zoneCards) && zoneCards.some(slot => slot?.specialName === card.specialName);
+};
+
 export const allUnitsOnField = (gameState: GameState) =>
   Object.values(gameState.players).flatMap(player => player.unitZone.filter((card): card is Card => !!card));
 
@@ -945,21 +960,15 @@ export const isOtherworldBat = (card: Card) =>
   card.fullName.includes('异界狂蝠') ||
   !!(card as any).data?.extraNameContainsOtherworldBatBy;
 
-export const getCardWealthValue = (card: Card) => {
-  const dataValue = Number((card as any).data?.wealthValue || 0);
-  const textValue = Math.max(0, ...((card.effects || [])
-    .map(effect => effect.description.match(/财富\s*(\d+)/)?.[1])
-    .filter(Boolean)
-    .map(Number)));
-  return Math.max(dataValue, textValue);
-};
+export { getCardWealthValue };
 
-export const wealthCount = (player: PlayerState) =>
-  ownUnits(player).reduce((total, unit) => total + getCardWealthValue(unit), 0);
+export const wealthCount = (player: PlayerState, gameState?: GameState) =>
+  getPlayerWealthCount(player, { turnCount: gameState?.turnCount });
 
 export const wealthContinuous = (id: string, value: number): CardEffect => ({
   id,
   type: 'CONTINUOUS',
+  wealthValue: value,
   description: `财富${value}（只要这个单位在战场上，你获得${value}个财富指示物）。`
 });
 
@@ -1440,7 +1449,7 @@ export const moveByEffect = (
   card: Card,
   toZone: TriggerLocation,
   source: Card,
-  options?: { toPlayerUid?: string; insertAtBottom?: boolean; faceDown?: boolean }
+  options?: { toPlayerUid?: string; insertAtBottom?: boolean; faceDown?: boolean; targetIndex?: number }
 ) => {
   const fromUid = ownerUidOf(gameState, card);
   if (!fromUid) return;
@@ -1665,6 +1674,7 @@ export const searchDeckEffect = (id: string, description: string, predicate: (ca
   id,
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description,
   condition: (_gameState, _playerState, instance, event) =>
@@ -1719,6 +1729,7 @@ export const appendEndResolution = (
     effect: {
       id,
       type: 'TRIGGER',
+      isMandatory: false,
       description: '回合结束时处理延迟效果。',
       resolve
     }
@@ -1731,20 +1742,15 @@ export const markExileAtEndOfTurn = (
   target: Card,
   source: Card,
   id: string,
-  shouldExile: (card: Card, state: GameState) => boolean = card => card.cardlocation === 'UNIT'
+  _shouldExile: (card: Card, state: GameState) => boolean = card => card.cardlocation === 'UNIT'
 ) => {
   const targetId = target.gamecardId;
   const data = ensureData(target);
   data.returnToExileAtEndTurn = gameState.turnCount;
   data.returnToExileSourceName = source.fullName;
   data.returnToExileSourceCardId = source.gamecardId;
+  data.returnToExileEffectOwnerUid = playerUid;
+  data.returnToExileAtEndPredicateKey = 'STILL_IN_UNIT';
+  delete data.returnToExileAtEndPredicate;
   addInfluence(target, source, '回合结束时放逐');
-
-  appendEndResolution(gameState, playerUid, source, id, (resolveSource, state) => {
-    const current = AtomicEffectExecutor.findCardById(state, targetId);
-    if (current?.cardlocation === 'UNIT' && shouldExile(current, state)) {
-      state.logs.push(`[${resolveSource.fullName}] 回合结束时将 [${current.fullName}] 放逐。`);
-      exileByEffect(state, current, resolveSource);
-    }
-  });
 };

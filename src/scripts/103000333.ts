@@ -33,6 +33,7 @@ const cardEffects: CardEffect[] = [
     id: '103000333_resonance_lock_recover',
     type: 'TRIGGER',
     triggerEvent: 'CARD_EXILED',
+    isMandatory: false,
     triggerLocation: ['UNIT'],
     erosionBackLimit: [1, 10],
     description: '创痕1：这个单位的共鸣能力将「萨拉拉」「奇美拉」或「特特鲁」单位卡放逐时，可以横置自身，选择对手战场上1张非神蚀卡使其直到对手回合结束不能横置。之后，将墓地中1张AC+3以下非神蚀单位卡加入手牌。',

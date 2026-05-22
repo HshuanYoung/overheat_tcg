@@ -7,7 +7,7 @@ const effect_105120168_enter: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: true,
+  isMandatory: false,
   description: '这个单位进入战场时，将你墓地最多2张「艾尔蒙特」以外的炼金卡放置到卡组底，之后抽1张卡。',
   condition: (_gameState, playerState, instance, event?: GameEvent) =>
     instance.cardlocation === 'UNIT' &&

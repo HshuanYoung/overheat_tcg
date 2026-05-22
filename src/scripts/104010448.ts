@@ -38,6 +38,7 @@ const effect_104010448_trigger: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '【诱发】当此单位从手牌进入对战区时，若我方对战区仅有一位神蚀单位，抽一张牌。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     if (!event) return false;

@@ -6,6 +6,7 @@ const effect_104030454_trigger: CardEffect = {
   id: 'sodo_entry_bounce',
   type: 'TRIGGER',
   triggerEvent: 'CARD_EROSION_TO_FIELD',
+  isMandatory: false,
   description: '【诱】每回合一次。当此单位从侵蚀区域进入战场时：将此单位转为横置，并选择对手的一张单位卡牌返回持有者手牌。',
   limitCount: 1,
   limitNameType: true,

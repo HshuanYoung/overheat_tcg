@@ -43,6 +43,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'COMBAT_DAMAGE_CAUSED',
+  isMandatory: false,
   description: '这个单位对对手造成战斗伤害时，可以将卡组中1张卡名含有《怪盗》的卡加入手牌。',
   condition: (gameState, playerState, instance, event) =>
     event?.playerUid === getOpponentUid(gameState, playerState.uid) &&

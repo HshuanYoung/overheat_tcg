@@ -27,6 +27,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['GRAVE'],
   triggerEvent: 'CARD_DESTROYED_BATTLE',
+  isMandatory: false,
   isGlobal: true,
   description: '魔女之夜赋予：这个单位被战斗破坏送入墓地时，横置放置到战场。',
   condition: (gameState, playerState, instance, event) =>
@@ -78,7 +79,7 @@ const card: Card = {
   effects: cardEffects,
   rarity: 'PR',
   availableRarities: ['PR'],
-  cardPackage: 'BT04',
+  cardPackage: 'PR',
   uniqueId: null as any,
 };
 

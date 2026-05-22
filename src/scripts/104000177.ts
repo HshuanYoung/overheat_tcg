@@ -70,7 +70,6 @@ const trigger_104000177_2: CardEffect = {
   description: '【诱】这个单位从战场送入墓地时，你可以抽1张卡。',
   triggerLocation: ['GRAVE'],
   triggerEvent: ['CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
-  isMandatory: false,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     if (!event) return instance.cardlocation === 'GRAVE';
 
@@ -95,7 +94,8 @@ const trigger_104000177_2: CardEffect = {
       type: 'DRAW',
       value: 1
     }, instance);
-    gameState.logs.push(`[海啸的美鱼人] 效果：由于离场进入墓地，抽 1 张卡。`);
+    gameState.logs.push(`[海啸的美鱼人]
+  isMandatory: false, 效果：由于离场进入墓地，抽 1 张卡。`);
   }
 };
 

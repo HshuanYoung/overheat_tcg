@@ -13,6 +13,7 @@ const effect_105000472_reveal: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['DECK'],
   triggerEvent: 'REVEAL_DECK',
+  isMandatory: false,
   description: '这张卡从卡组顶展示时，你可以将其放置到战场。',
   condition: (_gameState, playerState, instance, event?: GameEvent) =>
     instance.cardlocation === 'DECK' &&

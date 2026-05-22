@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '102050190_end_damage',
   type: 'TRIGGER',
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,

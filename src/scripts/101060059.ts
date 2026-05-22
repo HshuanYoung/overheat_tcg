@@ -41,7 +41,6 @@ const trigger_101060059_recover: CardEffect = {
   triggerEvent: ['CARD_DESTROYED_EFFECT', 'CARD_DESTROYED_BATTLE'],
   limitCount: 1,
   limitNameType: true,
-  isMandatory: false,
   isGlobal: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     if (!event) return false;
@@ -66,6 +65,7 @@ const trigger_101060059_recover: CardEffect = {
       type: 'SELECT_PAYMENT',
       playerUid: playerState.uid,
       options: [],
+  isMandatory: false,
       title: `支付 AC 费用: ${cardInGrave.fullName}`,
       description: `支付 ${acCost} 点费用以将此装备放回道具区。`,
       minSelections: 1,

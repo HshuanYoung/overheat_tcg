@@ -10,6 +10,7 @@ const cardEffects: CardEffect[] = [{
   id: '303090077_xenobu_combat_recover',
   type: 'TRIGGER',
   triggerEvent: 'COMBAT_DAMAGE_CAUSED',
+  isMandatory: false,
   triggerLocation: ['ITEM'],
   description: '你的<瑟诺布>单位对对手造成战斗伤害时，可以随机将墓地中的1张卡放置到卡组底。',
   condition: (gameState, playerState, _instance, event?: GameEvent) => {

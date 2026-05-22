@@ -19,6 +19,7 @@ const cardEffects: CardEffect[] = [{
   id: '102050431_goddess_enter',
   type: 'TRIGGER',
   triggerEvent: 'GODDESS_TRANSFORMATION',
+  isMandatory: false,
   triggerLocation: ['HAND'],
   erosionTotalLimit: [10, 10],
   description: '10+：你的回合中，你进入女神化状态时，可以将这张卡从手牌放置到战场上。',

@@ -7,6 +7,7 @@ const trigger_104020065_1: CardEffect = {
   description: '【诱发】此单位进入战场时，若你的场上存在2个蓝色单位，支付0费用：选择一名玩家（我方或对手），展示其手牌。之后，从该玩家的手牌中选择1张卡，从该玩家的侵蚀前区中选择1张正面向上的卡。被选择的侵蚀前区卡牌加入手牌，被选择的手牌放置在侵蚀前区。',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   playCost: 0,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     // 1. Check if this card entered the battlefield (UNIT or ITEM zone)

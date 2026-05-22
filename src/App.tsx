@@ -5,7 +5,7 @@
 
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 import { socket, getAuthUser, setAuthUser, setAuthToken, getAuthToken, clearAuthSession } from './socket';
 import { TopBar } from './components/TopBar';

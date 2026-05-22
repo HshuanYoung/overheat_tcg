@@ -24,6 +24,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['ITEM'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '进入战场时，选择你的1个单位并宣言1个颜色。只要这张卡在战场上，该单位不受对手该颜色卡牌效果影响。',
   condition: (_gameState, playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&
@@ -73,6 +74,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['GRAVE'],
   triggerEvent: 'CARD_LEFT_FIELD',
+  isMandatory: false,
   description: '这张卡从战场离开时，将这张卡放逐。',
   condition: (_gameState, _playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&
@@ -115,7 +117,7 @@ const card: Card = {
   effects: cardEffects,
   rarity: 'PR',
   availableRarities: ['PR'],
-  cardPackage: 'BT05',
+  cardPackage: 'PR',
   uniqueId: null as any,
 };
 

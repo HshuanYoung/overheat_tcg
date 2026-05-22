@@ -78,6 +78,7 @@ const effect_104000176_trigger: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['GRAVE'],
   triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  isMandatory: false,
   description: '【诱发】当此单位因战斗或对手的卡牌效果破坏并送入墓地时：选择最多两张你侵蚀区域的卡牌加入手牌。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     if (!event) return instance.cardlocation === 'GRAVE';

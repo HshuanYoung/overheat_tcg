@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['HAND'],
   triggerEvent: 'CARD_DRAWN',
+  isMandatory: false,
   description: '抽到这张卡并展示时，可以将手牌中的这张卡放置到战场上。',
   condition: (_gameState, playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&
@@ -72,7 +73,7 @@ const card: Card = {
   effects: cardEffects,
   rarity: 'PR',
   availableRarities: ['PR'],
-  cardPackage: 'BT05',
+  cardPackage: 'PR',
   uniqueId: null as any,
 };
 

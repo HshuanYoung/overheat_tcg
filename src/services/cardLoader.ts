@@ -1,23 +1,30 @@
 import { Card, GameState } from '../types/game';
 import { grantedTotemReviveFromGrave } from '../scripts/BaseUtil';
 
-// use import.meta.glob to load all scripts from ../scripts
-const modules = import.meta.glob('../scripts/*.ts', { eager: true });
+const modules = import.meta.glob('../scripts/*.ts');
 
 export const CARD_LIBRARY: Record<string, Card> = {};
+let cardLibraryPromise: Promise<void> | null = null;
 
 const isCardModule = (mod: any): mod is { default: Card } =>
   !!mod?.default &&
   typeof mod.default === 'object' &&
   typeof mod.default.id === 'string';
 
-// Process modules to fill the library
-Object.keys(modules).forEach((path) => {
-  const mod = modules[path] as any;
-  if (isCardModule(mod)) {
-    CARD_LIBRARY[mod.default.id] = mod.default;
-  }
-});
+export async function loadCardLibrary() {
+  if (Object.keys(CARD_LIBRARY).length > 0) return;
+
+  cardLibraryPromise ||= Promise.all(
+    Object.values(modules).map(async loader => {
+      const mod = await loader() as any;
+      if (isCardModule(mod)) {
+        CARD_LIBRARY[mod.default.id] = mod.default;
+      }
+    })
+  ).then(() => undefined);
+
+  await cardLibraryPromise;
+}
 
 export function hydrateCard(card: Card | null) {
   if (!card || !card.id) return;
@@ -50,7 +57,8 @@ export function hydrateCard(card: Card | null) {
         resolve: originalEffect.resolve,
         targetSpec: originalEffect.targetSpec,
         applyContinuous: originalEffect.applyContinuous,
-        removeContinuous: originalEffect.removeContinuous
+        removeContinuous: originalEffect.removeContinuous,
+        wealthValue: originalEffect.wealthValue ?? runtimeEffect?.wealthValue
       };
     });
   }

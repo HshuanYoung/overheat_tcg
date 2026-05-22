@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '进入战场时，若对手单位比你多2个以上，送墓2张白色正面侵蚀，可将卡组中1张ACCESS+2白色故事卡加入手牌。',
   condition: (gameState, playerState, instance, event?: GameEvent) => {
     if (event?.sourceCardId !== instance.gamecardId || event.data?.zone !== 'UNIT') return false;

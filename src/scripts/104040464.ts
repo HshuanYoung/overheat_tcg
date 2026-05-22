@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '进入战场时，可以选择侵蚀区中的1张「Brave Immortal」或「Eternal」卡放置到战场。',
   condition: (_gameState, playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&
@@ -77,7 +78,7 @@ const card: Card = {
   effects: cardEffects,
   rarity: 'PR',
   availableRarities: ['PR'],
-  cardPackage: 'BT04',
+  cardPackage: 'PR',
   uniqueId: null as any,
 };
 

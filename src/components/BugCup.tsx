@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Check, ChevronDown, Loader2, RefreshCw, Swords, Trophy, UploadCloud, UsersRound, X } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowLeft, BookOpen, Check, ChevronDown, Eye, Loader2, RefreshCw, Swords, Trophy, UploadCloud, UsersRound, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Deck } from '../types/game';
 import { cn } from '../lib/utils';
 import { validateDeckForBattle } from '../lib/deckValidation';
 import { getAuthToken, getAuthUser, socket } from '../socket';
+import { useCardCatalog } from '../hooks/useCardCatalog';
 
 interface BugCupCurrent {
   edition: number;
@@ -72,6 +73,10 @@ export const BugCup: React.FC = () => {
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
   const token = getAuthToken();
   const myUid = getAuthUser()?.uid?.toString();
+  const {
+    getCardByReference,
+    loading: cardsLoading
+  } = useCardCatalog({ includeEffects: false });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,6 +87,7 @@ export const BugCup: React.FC = () => {
   const [registration, setRegistration] = useState<BugCupRegistration | null>(null);
   const [matches, setMatches] = useState<BugCupMatch[]>([]);
   const [eliminationMatches, setEliminationMatches] = useState<BugCupMatch[]>([]);
+  const [spectatableMatches, setSpectatableMatches] = useState<BugCupMatch[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [selectedBattleDeckIndex, setSelectedBattleDeckIndex] = useState(0);
@@ -95,7 +101,7 @@ export const BugCup: React.FC = () => {
   const selectedDecks = selectedDeckIds.map(id => myDecks.find(deck => deck.id === id) || null);
   const selectedDeckErrors = selectedDecks
     .filter(Boolean)
-    .map(deck => validateDeckForBattle(deck))
+    .map(deck => validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference))
     .filter(result => !result.valid)
     .map(result => result.error || '卡组不合法');
   const canSubmitDecks = selectedDeckIds.filter(Boolean).length >= 1 && selectedDeckErrors.length === 0 && !!current?.canEditDecks;
@@ -117,6 +123,7 @@ export const BugCup: React.FC = () => {
       setRegistration(meData.registration || null);
       setMatches(meData.matches || []);
       setEliminationMatches(standingData.eliminationMatches || []);
+      setSpectatableMatches(standingData.spectatableMatches || []);
       setStandings(standingData.standings || []);
       if (meData.registration?.deckSourceIds?.length) {
         setSelectedDeckIds(meData.registration.deckSourceIds);
@@ -285,6 +292,14 @@ export const BugCup: React.FC = () => {
     matches.filter(match => match.phase !== 'PRELIM' && ['PENDING', 'ACTIVE'].includes(match.resultStatus)),
     [matches]
   );
+  const visibleSpectatableMatches = useMemo(() =>
+    spectatableMatches.filter(match => !!match.gameId),
+    [spectatableMatches]
+  );
+
+  const watchMatch = (gameId: string) => {
+    navigate(`/battle/${gameId}?seat=spectator`, { state: { seat: 'spectator' } });
+  };
 
   const renderDeckPicker = (slot: number) => {
     const selected = myDecks.find(deck => deck.id === selectedDeckIds[slot]);
@@ -324,7 +339,7 @@ export const BugCup: React.FC = () => {
                 </button>
               )}
               {myDecks.map(deck => {
-                const validation = validateDeckForBattle(deck);
+                const validation = validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference);
                 return (
                   <button
                     key={deck.id}
@@ -349,7 +364,7 @@ export const BugCup: React.FC = () => {
     );
   };
 
-  if (loading) {
+  if (loading || cardsLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="h-8 w-8 animate-spin text-red-600" />
@@ -363,7 +378,7 @@ export const BugCup: React.FC = () => {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-1/4 -top-1/4 h-[800px] w-[800px] rounded-full bg-red-900/20 blur-[120px]" />
         <div className="absolute -right-1/4 bottom-1/4 h-[600px] w-[600px] rounded-full bg-purple-900/20 blur-[100px]" />
-        <div className="absolute inset-0 bg-[url('/assets/noise.png')] opacity-[0.03] mix-blend-overlay" />
+        <div className="absolute inset-0 bg-white/[0.03] mix-blend-overlay" />
       </div>
 
       <div className="relative mx-auto max-w-6xl space-y-6 sm:space-y-8">
@@ -581,6 +596,52 @@ export const BugCup: React.FC = () => {
                 </div>
               )
             )}
+          </section>
+        )}
+
+        {visibleSpectatableMatches.length > 0 && (
+          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
+            <div className="absolute inset-0 bg-gradient-to-br from-sky-900/[0.04] to-transparent pointer-events-none" />
+            <div className="relative mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black italic tracking-tight">可观战对局</h2>
+                <p className="mt-1 text-xs font-bold tracking-widest text-zinc-500">正在进行中的 bug杯 比赛</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5">
+                <Eye className="h-5 w-5 text-sky-300" />
+              </div>
+            </div>
+
+            <div className="relative space-y-3">
+              {visibleSpectatableMatches.map(match => (
+                <div
+                  key={match.id}
+                  className="grid gap-4 rounded-2xl border border-white/5 bg-black/30 p-4 sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-black text-white sm:text-base">
+                        {match.phase === 'SWISS' ? `瑞士轮第 ${match.round} 轮` : match.phase === 'ELIMINATION' ? (match.round === 1 ? '半决赛' : '决赛') : '预赛'}
+                      </span>
+                      <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black text-emerald-300">对局中</span>
+                    </div>
+                    <div className="mt-2 text-xs font-bold text-zinc-400 sm:text-sm">
+                      <span className="text-white">{match.player1Name || match.player1Id}</span>
+                      <span className="px-2 text-zinc-600">vs</span>
+                      <span className="text-white">{match.player2Name || match.player2Id || '待定'}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => match.gameId && watchMatch(match.gameId)}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-sky-400/20 bg-sky-500/10 px-4 py-3 text-sm font-black text-sky-200 transition-colors hover:bg-sky-500/20"
+                  >
+                    <Eye className="h-4 w-4" />
+                    观战
+                  </button>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 

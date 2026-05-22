@@ -7,6 +7,7 @@ const effect_105000469_enter: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   description: '这个单位进入战场时，你可以从卡组将1张礼帽道具放置到战场。其场上能力无效，回合结束时将其放置到卡组底。',
   condition: (_gameState, _playerState, instance, event?: GameEvent) =>
     instance.cardlocation === 'UNIT' &&

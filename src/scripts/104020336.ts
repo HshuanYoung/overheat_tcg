@@ -1,10 +1,10 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor, discardHandCost, isBattleFreeContext, preventNextDestroy, wealthCount } from './BaseUtil';
+import { AtomicEffectExecutor, discardHandCost, ensureData, isBattleFreeContext, wealthCount } from './BaseUtil';
 
 const disableTradeUntilNextOwnTurn = (instance: Card, gameState: any) => {
   (instance as any).data = {
     ...((instance as any).data || {}),
-    tradeEffectDisabledUntilTurn: gameState.turnCount + 2
+    tradeEffectDisabledUntilOwnStartUid: AtomicEffectExecutor.findCardOwnerKey(gameState, instance.gamecardId)
   };
   gameState.logs.push(`[${instance.fullName}] 的手牌交换效果直到下一次自己的回合开始前失去。`);
 };
@@ -17,7 +17,7 @@ const cardEffects: CardEffect[] = [{
   limitNameType: true,
   description: '财富3以上，战斗自由步骤中，舍弃2张手牌：这次战斗中你的单位不会被战斗破坏，防止你将要受到的所有战斗伤害。',
   condition: (gameState, playerState) =>
-    wealthCount(playerState) >= 3 &&
+    wealthCount(playerState, gameState) >= 3 &&
     isBattleFreeContext(gameState) &&
     !!gameState.battleState &&
     playerState.hand.length >= 2,
@@ -36,7 +36,15 @@ const cardEffects: CardEffect[] = [{
       battlingOwnUnits.push(defender);
     }
 
-    battlingOwnUnits.forEach(unit => preventNextDestroy(unit, instance, gameState.turnCount));
+    battlingOwnUnits.forEach(unit => {
+      const data = ensureData(unit);
+      const battleId = gameState.battleState
+        ? ((gameState.battleState as any).battleId ||= `battle_${gameState.turnCount}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`)
+        : undefined;
+      data.preventBattleDestroyForBattleId = battleId;
+      data.preventBattleDestroyForBattleTurn = gameState.turnCount;
+      data.preventBattleDestroyForBattleSourceName = instance.fullName;
+    });
     (playerState as any).preventAllDamageTurn = gameState.turnCount;
     (playerState as any).preventAllDamageSourceName = instance.fullName;
   }
@@ -48,9 +56,9 @@ const cardEffects: CardEffect[] = [{
   limitNameType: true,
   description: '财富3以上，选择一名对手，舍弃2张手牌：那名对手抽3张卡，之后舍弃自己的3张手牌。直到下一次你的回合开始失去这项效果。',
   condition: (gameState, playerState, instance) =>
-    wealthCount(playerState) >= 3 &&
+    wealthCount(playerState, gameState) >= 3 &&
     playerState.hand.length >= 2 &&
-    ((instance as any).data?.tradeEffectDisabledUntilTurn || 0) < gameState.turnCount &&
+    !(instance as any).data?.tradeEffectDisabledUntilOwnStartUid &&
     gameState.playerIds.some(uid => uid !== playerState.uid && gameState.players[uid].deck.length >= 3),
   cost: discardHandCost(2),
   execute: async (instance, gameState, playerState) => {

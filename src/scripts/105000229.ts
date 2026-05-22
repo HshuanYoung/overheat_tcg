@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
   triggerEvent: ['CARD_ENTERED_ZONE', 'CARD_LEFT_FIELD'],
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '进入战场或从战场离开时，将卡组中1张ACCESS+1以下的黄色道具卡放置到战场上。',

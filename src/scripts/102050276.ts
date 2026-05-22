@@ -92,6 +92,7 @@ const effect_102050276_battle_boost: CardEffect = {
   id: '102050276_battle_boost',
   type: 'TRIGGER',
   triggerEvent: ['PHASE_CHANGED', 'CARD_DEFENSE_DECLARED'],
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '这个单位参与的战斗的战斗自由步骤开始时，将你的战场上的1个黄色或蓝色非神蚀单位送入墓地：这次战斗中，这个单位伤害+2、力量+1500。',
   condition: (gameState, playerState, instance) =>
@@ -201,7 +202,7 @@ const card: Card = {
   effects: [effect_102050276_irodori_enter, effect_102050276_battle_boost, effect_102050276_main_damage],
   rarity: 'SR',
   availableRarities: ['SR'],
-  cardPackage: 'BT06',
+  cardPackage: 'SP02',
   uniqueId: null as any,
 };
 

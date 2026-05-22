@@ -23,6 +23,7 @@ const effect_105120352_end_alchemy: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   description: '你的回合结束时，选择你的战场2张以上卡，可将其送墓。之后将卡组1张非神蚀卡放置到战场，其所有非关键词效果直到下个你的回合开始无效。',
   condition: (_gameState, playerState) =>
     playerState.isTurn &&

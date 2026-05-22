@@ -16,6 +16,7 @@ const cardEffects: CardEffect[] = [{
   id: '102060193_attack_power',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ATTACK_DECLARED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   description: '你的单位攻击时，本回合这个单位力量+1000。',

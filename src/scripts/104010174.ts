@@ -6,8 +6,8 @@ const trigger_104010174_battle: CardEffect = {
   type: 'TRIGGER',
   triggerEvent: ['CARD_ATTACK_DECLARED', 'CARD_DEFENSE_DECLARED'],
   triggerLocation: ['UNIT'],
-  description: '【诱发】当此单位宣言攻击或防御时，你可以选择发动：选择对手的一张非神蚀单位横置。',
   isMandatory: false,
+  description: '【诱发】当此单位宣言攻击或防御时，你可以选择发动：选择对手的一张非神蚀单位横置。',
   condition: (_gameState: GameState, _playerState: PlayerState, instance: Card, event?: GameEvent) => {
     return (
       event?.sourceCardId === instance.gamecardId ||

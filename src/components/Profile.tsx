@@ -3,7 +3,7 @@ import { socket } from '../socket';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Settings, Image, Layout, Heart, Save, Loader2, X, Search, LogOut, ArrowLeft } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { RAY_CARDS, CARD_BACKS } from '../data/customization';
 import { readJsonResponse } from '../lib/http';

@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '103090079_revive',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     limitCount: 1,
     limitNameType: true,

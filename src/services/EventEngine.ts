@@ -194,7 +194,14 @@ export class EventEngine {
       }
 
       if (!gameState.triggeredEffectsQueue) gameState.triggeredEffectsQueue = [];
-      gameState.triggeredEffectsQueue.push({ card, effect, effectIndex, playerUid, event });
+      gameState.triggeredEffectsQueue.push({
+        queueId: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        card,
+        effect,
+        effectIndex,
+        playerUid,
+        event
+      });
       const identity = getCardIdentity(gameState, playerUid, card);
       gameState.logs.push(`[诱发入队] ${identity} ${card.fullName} 的效果已入队，待系统处理。`);
     }
@@ -713,6 +720,24 @@ export class EventEngine {
       });
     };
     Object.values(gameState.players).forEach(applyEffects);
+
+    Object.values(gameState.players).forEach(player => {
+      player.hand.forEach(card => {
+        if (!card) return;
+        const costDetails = GameService.getEffectivePlayCostDetails(gameState, player, card);
+        if (!costDetails.description || costDetails.cost >= costDetails.baseCost) return;
+        if (!card.influencingEffects) card.influencingEffects = [];
+        if (!card.influencingEffects.some(effect =>
+          effect.sourceCardName === (costDetails.sourceCardName || card.fullName) &&
+          effect.description === costDetails.description
+        )) {
+          card.influencingEffects.push({
+            sourceCardName: costDetails.sourceCardName || card.fullName,
+            description: costDetails.description
+          });
+        }
+      });
+    });
 
     // 2.5 Apply post-processing locks that must override other stat changes.
     Object.values(gameState.players).forEach(player => {

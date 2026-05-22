@@ -26,6 +26,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130377_recruit_alliance_partner',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ATTACK_DECLARED',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   description: '1回合1次：这个单位宣言非联军攻击时，从卡组横置放置1张《王国重骑》以外AC+3以下<圣王国>非神蚀单位，视为与这个单位联军攻击。',

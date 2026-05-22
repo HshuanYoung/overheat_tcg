@@ -15,15 +15,20 @@ const IRODORI_CARD_IDS = new Set([
   '103000275',
   '104000298',
   '104000368',
-  '105000296'
+  '105000296',
+  '105110284'
 ]);
 
-const hasIrodori = (card: Card) =>
+const hasIrodoriByText = (card: Card) =>
   IRODORI_CARD_IDS.has(String(card.id)) ||
   card.effects?.some(effect =>
     effect.id?.toLowerCase().includes('irodori') ||
     effect.description?.includes('异彩')
   );
+
+const hasIrodori = (card: Card) =>
+  IRODORI_CARD_IDS.has(String(card.id)) ||
+  card.effects?.some(effect => effect.id?.toLowerCase().includes('irodori'));
 
 const addTemporaryColor = (card: Card, color: string) => {
   (card as any).temporaryExtraColors = Array.from(new Set([
@@ -39,6 +44,7 @@ const effect_103000272_enter_search: CardEffect = {
   id: '103000272_enter_search',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '【诱】这个单位进入战场时，横置并舍弃1张手牌：你可以将卡组中1张具有异彩的卡加入手牌。',
   condition: (_gameState, playerState, instance, event) =>
@@ -166,7 +172,7 @@ const card: Card = {
   effects: [effect_103000272_enter_search, effect_103000272_grave_color],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'BT07',
+  cardPackage: 'SP02',
   uniqueId: null as any,
 };
 

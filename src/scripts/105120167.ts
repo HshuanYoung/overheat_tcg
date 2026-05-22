@@ -94,6 +94,8 @@ const effect_105120167_last_resort: CardEffect = {
     moveCardsToBottom(gameState, playerState.uid, graveCards, instance);
     (playerState as any).loseAtEndOfTurn = gameState.turnCount;
     (playerState as any).loseAtEndOfTurnSourceName = instance.fullName;
+    (playerState as any).loseAtEndOfTurnSourceCardId = instance.gamecardId;
+    (playerState as any).loseAtEndOfTurnSourceCardSnapshot = { ...instance };
     EventEngine.recalculateContinuousEffects(gameState);
   }
 };

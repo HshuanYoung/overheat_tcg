@@ -8,6 +8,7 @@ const cardEffects: CardEffect[] = [
     type: 'TRIGGER',
     triggerLocation: ['ITEM'],
     triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+    isMandatory: false,
     isGlobal: true,
     description: '3~5：装备单位由于战斗或对手卡效果破坏送入墓地时，从卡组放置1张同色且AC少1的非神蚀卡到战场。之后破坏这张卡。',
     condition: (gameState, playerState, instance, event) => {
@@ -80,7 +81,7 @@ const card: Card = {
   effects: cardEffects,
   rarity: 'PR',
   availableRarities: ['PR'],
-  cardPackage: 'BT05',
+  cardPackage: 'PR',
   uniqueId: null as any,
 };
 

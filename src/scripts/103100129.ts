@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103100129_return_witch',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['GRAVE'],
   description: '从战场送入墓地时，选择墓地中1张《魔女的仆从》以外卡名含《魔女》的单位卡加入手牌。',
   condition: (_gameState, playerState, instance, event) =>

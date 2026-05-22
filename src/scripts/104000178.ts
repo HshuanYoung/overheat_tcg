@@ -5,6 +5,7 @@ import { GameService } from '../services/gameService';
 const effect_104000178_skip_draw_requirement: CardEffect = {
   id: 'vaer_entry_skip_draw_requirement',
   type: 'TRIGGER',
+  isMandatory: false,
   description: '侵蚀区域背面卡牌在2张或以上时，选择一名玩家将其下一次抽卡阶段跳过。',
   erosionBackLimit: [2, 10]
 };
@@ -13,6 +14,7 @@ const effect_104000178_trigger: CardEffect = {
   id: 'vaer_entry_trigger',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '【诱】当此单位从手牌进入战场时：选择一名玩家，该玩家抽两张卡。之后，若我方侵蚀区域背面卡牌在2张或以上，选择一名玩家将其下一次抽卡阶段跳过。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {

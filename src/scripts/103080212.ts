@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '你的回合结束时，若你有3个以上单位返回过卡组，可以将卡组中1张卡名含有《神木》的单位卡加入手牌。',

@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['GRAVE', 'EXILE', 'HAND', 'DECK'],
   triggerEvent: 'CARD_LEFT_FIELD',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '通过卡的效果从战场离开时，可以抽1张卡。',

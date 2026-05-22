@@ -10,6 +10,7 @@ const cardEffects: CardEffect[] = [{
   id: '101140374_shingi_cost_destroy',
   type: 'TRIGGER',
   triggerEvent: 'CARD_EXILED',
+  isMandatory: false,
   triggerLocation: ['EXILE'],
   limitCount: 1,
   limitNameType: true,

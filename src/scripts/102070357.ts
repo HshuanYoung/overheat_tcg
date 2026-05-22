@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'COMBAT_DAMAGE_CAUSED',
+  isMandatory: false,
   description: '这张卡对对手造成战斗伤害时，恢复1。',
   condition: (gameState, playerState, instance, event) =>
     event?.playerUid === getOpponentUid(gameState, playerState.uid) &&

@@ -2,7 +2,7 @@ import { getAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Swords, Bot, ShoppingBag, Library, Play, Users, Layout, CreditCard, Image as ImageIcon, Plus, GalleryHorizontalEnd } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { RAY_CARDS } from '../data/customization';
 import { readJsonResponse } from '../lib/http';
 

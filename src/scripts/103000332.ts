@@ -11,6 +11,7 @@ const cardEffects: CardEffect[] = [{
   id: '103000332_enter_put_feather',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   erosionTotalLimit: [1, 4],
   description: '1~4：进入战场时，可以选择卡组或墓地中的1张《极彩鸟的羽毛》，以横置状态放置到战场上。',

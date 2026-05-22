@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Coins, Sparkles, ArrowLeft, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn, getCardImageUrl } from '../lib/utils';
 import { Card } from '../types/game';
 import { prefetchCardCatalog, useCardCatalog } from '../hooks/useCardCatalog';

@@ -40,6 +40,7 @@ const effect_105000354_battle_damage: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_DESTROYED_BATTLE' as any,
+  isMandatory: false,
   description: '由于卡效果从卡组进入战场的这张卡战斗破坏对手单位时，给予对手1点伤害。',
   condition: (_gameState, playerState, instance, event) =>
     instance.cardlocation === 'UNIT' &&

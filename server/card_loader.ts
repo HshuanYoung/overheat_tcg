@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Card } from '../src/types/game';
+import { bundledCardModules } from './generated/card_manifest';
 
 const SCRIPTS_DIR = path.join(process.cwd(), 'src', 'scripts');
 
@@ -11,6 +12,29 @@ const isCardModule = (cardModule: any): cardModule is { default: Card } =>
 
 export async function loadServerCards(): Promise<Card[]> {
   const cards: Card[] = [];
+  if (bundledCardModules.length > 0) {
+    for (const cardModule of bundledCardModules) {
+      if (isCardModule(cardModule)) {
+        const baseCard = cardModule.default;
+        if (baseCard.availableRarities && baseCard.availableRarities.length > 0) {
+          baseCard.availableRarities.forEach((r: any) => {
+            cards.push({
+              ...baseCard,
+              rarity: r,
+              uniqueId: `${baseCard.id}:${r}`
+            });
+          });
+        } else {
+          cards.push({
+            ...baseCard,
+            uniqueId: `${baseCard.id}:${baseCard.rarity}`
+          });
+        }
+      }
+    }
+    return cards;
+  }
+
   const files = fs.readdirSync(SCRIPTS_DIR);
   
   for (const file of files) {

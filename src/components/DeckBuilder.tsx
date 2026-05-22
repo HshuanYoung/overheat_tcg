@@ -365,7 +365,7 @@ export const DeckBuilder: React.FC = () => {
       return;
     }
 
-    const validation = validateDeckForBattle(buildCurrentDeckForValidation());
+    const validation = validateDeckForBattle(buildCurrentDeckForValidation(), getCardByReference);
     if (!validation.valid) {
       showNotice(validation.error || '只有合法卡组才能分享', undefined, 'warning');
       return;

@@ -1,5 +1,4 @@
 import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackItem, GamePhase, GAME_TIMEOUTS, GameEvent, DeclaredEffectTarget, EffectTargetCandidate, AiDecisionLog } from '../src/types/game';
-import { CARD_LIBRARY } from '../src/data/cards';
 import { EventEngine } from '../src/services/EventEngine';
 import { AtomicEffectExecutor } from '../src/services/AtomicEffectExecutor';
 import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../src/lib/cardState';
@@ -50,9 +49,28 @@ export const ServerGameService = {
     return (gameState as any).skipResolutionDelay === true || mode === 'ai-selfplay' || mode === 'ai-evaluation';
   },
 
+  getVisualDelayMs(envKey: string, fallbackMs: number) {
+    const raw = Number(process.env[envKey]);
+    return Number.isFinite(raw) && raw >= 0 ? raw : fallbackMs;
+  },
+
+  getTriggerVisualDelayMs() {
+    return ServerGameService.getVisualDelayMs('TRIGGER_VISUAL_DELAY_MS', 1500);
+  },
+
+  getStackVisualDelayMs() {
+    return ServerGameService.getVisualDelayMs('STACK_VISUAL_DELAY_MS', 1500);
+  },
+
+  getStackBetweenItemsDelayMs() {
+    return ServerGameService.getVisualDelayMs('STACK_BETWEEN_ITEMS_DELAY_MS', 1500);
+  },
+
   async waitForVisualDelay(gameState: GameState, ms: number) {
+    const delayMs = Math.max(0, Number(ms) || 0);
+    if (delayMs <= 0) return;
     if (ServerGameService.shouldSkipVisualDelay(gameState)) return;
-    await new Promise(resolve => setTimeout(resolve, ms));
+    await new Promise(resolve => setTimeout(resolve, delayMs));
   },
 
   clearAllianceAttackMarkers(gameState: GameState, attackerIds?: string[]) {
@@ -609,9 +627,7 @@ export const ServerGameService = {
     }
 
     if (effect.atomicEffects && effect.atomicEffects.length > 0) {
-      for (const atomic of effect.atomicEffects) {
-        await AtomicEffectExecutor.execute(gameState, playerUid, atomic, sourceCard, event, declaredSelectionIds);
-      }
+      await AtomicEffectExecutor.executeBatch(gameState, playerUid, effect.atomicEffects, sourceCard, event, declaredSelectionIds);
     }
 
     if (effect.execute) {
@@ -619,6 +635,11 @@ export const ServerGameService = {
       await (effect.execute as any)(sourceCard, gameState, owner, event, declaredSelectionIds, { selectedModeId, declaredTargets: validDeclaredTargets });
     }
     return true;
+  },
+
+  async dispatchEventAndDrainTriggers(gameState: GameState, event: GameEvent, onUpdate?: (state: GameState) => Promise<void>) {
+    EventEngine.dispatchEvent(gameState, event);
+    await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
   },
 
   getColorRequirementResult(player: PlayerState, req: Record<string, number> = {}) {
@@ -723,8 +744,7 @@ export const ServerGameService = {
       if (!unit) return false;
       const forcedAttackTurn = (unit as any).data?.forcedAttackTurn;
       if (forcedAttackTurn !== gameState.turnCount) return false;
-      if (unit.isExhausted || unit.canAttack === false) return false;
-      if (!ServerGameService.canCardBeExhausted(unit, gameState)) return false;
+      if (!ServerGameService.canExhaustForDeclaration(unit, gameState) || unit.canAttack === false) return false;
       if ((unit as any).battleForbiddenByEffect) return false;
       if ((unit as any).data?.cannotAttackThisTurn === gameState.turnCount) return false;
       if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) return false;
@@ -733,6 +753,31 @@ export const ServerGameService = {
       const wasPlayedThisTurn = unit.playedTurn === gameState.turnCount;
       return isRush || !wasPlayedThisTurn;
     });
+  },
+
+  canUnitDefendInCurrentBattle(gameState: GameState, unit: Card | null | undefined) {
+    if (!unit || !gameState.battleState) return false;
+    if (unit.isExhausted) return false;
+    if ((unit as any).battleForbiddenByEffect) return false;
+    if ((unit as any).data?.cannotDefendTurn === gameState.turnCount) return false;
+    if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) return false;
+    if (!ServerGameService.canExhaustForDeclaration(unit, gameState)) return false;
+
+    const lockedTargetId = gameState.battleState.defenseLockedToTargetId;
+    if (lockedTargetId && unit.gamecardId !== lockedTargetId) return false;
+
+    const minPower = gameState.battleState.defensePowerRestriction || 0;
+    if (minPower > 0 && (unit.power || 0) < minPower) return false;
+
+    const maxPower = gameState.battleState.defenseMaxPowerRestriction;
+    if (maxPower !== undefined && (unit.power || 0) >= maxPower) return false;
+
+    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+    const attackers = (gameState.battleState.attackers || [])
+      .map(id => gameState.players[turnPlayerId]?.unitZone.find(attacker => attacker?.gamecardId === id))
+      .filter((attacker): attacker is Card => !!attacker);
+    const minExclusive = Math.max(0, ...attackers.map(attacker => (attacker as any).data?.defenseMinPower || 0));
+    return minExclusive <= 0 || (unit.power || 0) > minExclusive;
   },
 
   isPlayerAttackLockedThisTurn(gameState: GameState, playerUid: string) {
@@ -753,6 +798,15 @@ export const ServerGameService = {
     return true;
   },
 
+  ensureBattleInstanceId(gameState: GameState) {
+    if (!gameState.battleState) return undefined;
+    const battleState = gameState.battleState as any;
+    if (!battleState.battleId) {
+      battleState.battleId = `battle_${gameState.turnCount}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return battleState.battleId as string;
+  },
+
   async enterForcedAttackBattleIfNeeded(gameState: GameState, playerId: string, onUpdate?: (state: GameState) => Promise<void>, reason: string = 'FORCED_ATTACK') {
     if (gameState.gameStatus === 2 || gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem) return false;
     if (gameState.turnCount <= 1) return false;
@@ -769,13 +823,14 @@ export const ServerGameService = {
 
     if (forcedAttackUnits.length === 1) {
       const unit = forcedAttackUnits[0];
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason } }, onUpdate);
       gameState.logs.push(`[强制攻击] ${player.displayName} 必须用 [${unit.fullName}] 攻击。`);
+      if (gameState.pendingQuery || gameState.phase !== 'BATTLE_DECLARATION') return true;
       await ServerGameService.declareAttack(gameState, playerId, [unit.gamecardId], false, undefined, undefined, onUpdate);
       return true;
     }
 
-    EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: `${reason}_CHOICE` } });
+    await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: `${reason}_CHOICE` } }, onUpdate);
     gameState.logs.push(`[强制攻击] ${player.displayName} 有多个必须攻击的单位，进入攻击宣言阶段请选择其中1个攻击。`);
     return true;
   },
@@ -844,7 +899,8 @@ export const ServerGameService = {
           onQueryResolve: originalEffect.onQueryResolve,
           resolve: originalEffect.resolve,
           applyContinuous: originalEffect.applyContinuous,
-          removeContinuous: originalEffect.removeContinuous
+          removeContinuous: originalEffect.removeContinuous,
+          wealthValue: originalEffect.wealthValue ?? runtimeEffect?.wealthValue
         };
       });
     }
@@ -854,6 +910,92 @@ export const ServerGameService = {
       !card.effects?.some(effect => effect.id === '103080184_granted_totem_revive')
     ) {
       card.effects = [...(card.effects || []), grantedTotemReviveFromGrave()];
+    }
+  },
+
+  hydrateVirtualTriggerRecord(record: any) {
+    if (!record || record.effectIndex >= 0 || !record.virtualTriggerType) return record;
+    const payload = record.virtualPayload || {};
+    const queueId = record.queueId || record.effect?.id || `${record.virtualTriggerType}_${payload.targetCardId || record.playerUid || 'effect'}`;
+    const sourceName = payload.sourceName || record.card?.fullName || '卡牌效果';
+    record.effect = {
+      ...(record.effect || {}),
+      id: record.effect?.id || queueId,
+      type: 'TRIGGER',
+      triggerEvent: 'TURN_END' as any,
+      isMandatory: true,
+      execute: async (_source: Card, state: GameState, player: PlayerState) => {
+        await ServerGameService.executeVirtualTriggerRecord(state, player, record);
+      }
+    };
+    if (!record.effect.description) {
+      if (record.virtualTriggerType === 'RETURN_TO_EXILE_AT_END') {
+        record.effect.description = `[${sourceName}] 回合结束时将 [${record.card?.fullName || '目标'}] 放逐。`;
+      } else if (record.virtualTriggerType === 'RETURN_TO_DECK_BOTTOM_AT_END') {
+        record.effect.description = `[${sourceName}] 回合结束时将 [${record.card?.fullName || '目标'}] 放置到卡组底。`;
+      } else if (record.virtualTriggerType === 'LOSE_AT_END') {
+        record.effect.description = `[${sourceName}] 回合结束时你输掉游戏。`;
+      } else {
+        record.effect.description = '回合结束时处理延迟效果。';
+      }
+    }
+    return record;
+  },
+
+  async executeVirtualTriggerRecord(state: GameState, player: PlayerState, record: any) {
+    const payload = record.virtualPayload || {};
+    const sourceName = payload.sourceName || record.card?.fullName || '卡牌效果';
+    const sourceCardId = payload.sourceCardId;
+    const targetCardId = payload.targetCardId || record.card?.gamecardId;
+
+    if (record.virtualTriggerType === 'RETURN_TO_EXILE_AT_END') {
+      const live = ServerGameService.findCardLocation(state, targetCardId);
+      if (!live || (live.card as any).data?.returnToExileAtEndTurn !== state.turnCount) return;
+      const predicateKey = (live.card as any).data.returnToExileAtEndPredicateKey || payload.predicateKey || 'STILL_IN_UNIT';
+      if (predicateKey === 'STILL_IN_UNIT' && live.zone !== 'UNIT') return;
+      delete (live.card as any).data.returnToExileAtEndTurn;
+      delete (live.card as any).data.returnToExileSourceName;
+      delete (live.card as any).data.returnToExileSourceCardId;
+      delete (live.card as any).data.returnToExileEffectOwnerUid;
+      delete (live.card as any).data.returnToExileAtEndPredicate;
+      delete (live.card as any).data.returnToExileAtEndPredicateKey;
+      ServerGameService.moveCard(state, live.ownerUid, live.zone, live.ownerUid, 'EXILE', live.card.gamecardId, {
+        isEffect: true,
+        faceDown: false,
+        effectSourcePlayerUid: payload.effectOwnerUid || live.ownerUid,
+        effectSourceCardId: sourceCardId
+      });
+      state.logs.push(`[${sourceName}] 回合结束时将 [${live.card.fullName}] 放逐。`);
+      return;
+    }
+
+    if (record.virtualTriggerType === 'RETURN_TO_DECK_BOTTOM_AT_END') {
+      const live = ServerGameService.findCardLocation(state, targetCardId);
+      if (!live || (live.card as any).data?.returnToDeckBottomAtTurnEnd !== state.turnCount) return;
+      delete (live.card as any).data.returnToDeckBottomAtTurnEnd;
+      delete (live.card as any).data.returnToDeckBottomSourceName;
+      delete (live.card as any).data.returnToDeckBottomSourceCardId;
+      delete (live.card as any).data.returnToDeckBottomOwnerUid;
+      ServerGameService.moveCard(state, live.ownerUid, live.zone, live.ownerUid, 'DECK', live.card.gamecardId, {
+        insertAtBottom: true,
+        isEffect: true,
+        effectSourcePlayerUid: payload.effectOwnerUid || live.ownerUid,
+        effectSourceCardId: sourceCardId
+      });
+      state.logs.push(`[${sourceName}] 将 [${live.card.fullName}] 放置到卡组底。`);
+      return;
+    }
+
+    if (record.virtualTriggerType === 'LOSE_AT_END') {
+      delete (player as any).loseAtEndOfTurn;
+      delete (player as any).loseAtEndOfTurnSourceName;
+      delete (player as any).loseAtEndOfTurnSourceCardId;
+      delete (player as any).loseAtEndOfTurnSourceCardSnapshot;
+      state.gameStatus = 2;
+      state.winReason = 'CARD_EFFECT_SPECIAL_WIN';
+      state.winnerId = state.playerIds.find(id => id !== player.uid);
+      state.winSourceCardName = sourceName;
+      state.logs.push(`[游戏结束] ${player.displayName} 因 [${sourceName}] 的效果在回合结束时判负。`);
     }
   },
 
@@ -930,8 +1072,10 @@ export const ServerGameService = {
         if (!record || !record.card) return record;
 
         ServerGameService.hydrateCard(record.card);
+        if (record.sourceCard) ServerGameService.hydrateCard(record.sourceCard);
+        ServerGameService.hydrateVirtualTriggerRecord(record);
 
-        if (record.card.effects) {
+        if (record.effectIndex >= 0 && record.card.effects) {
           const masterEffect = record.card.effects[record.effectIndex];
           if (masterEffect) {
             record.effect = { ...record.effect, ...masterEffect };
@@ -947,9 +1091,11 @@ export const ServerGameService = {
         if (!record || !record.card) return record;
 
         ServerGameService.hydrateCard(record.card);
+        if (record.sourceCard) ServerGameService.hydrateCard(record.sourceCard);
+        ServerGameService.hydrateVirtualTriggerRecord(record);
 
         // Find the matching effect in the library and restore it entirely
-        if (record.card.effects) {
+        if (record.effectIndex >= 0 && record.card.effects) {
           const masterEffect = record.card.effects[record.effectIndex];
           if (masterEffect) {
             // Merge all properties from the library to restore functions and metadata
@@ -996,8 +1142,8 @@ export const ServerGameService = {
     return true;
   },
 
-  canCardBeExhausted(card: Card | null | undefined, gameState: GameState) {
-    if (!card) return false;
+  canExhaustForDeclaration(card: Card | null | undefined, gameState: GameState) {
+    if (!card || card.isExhausted) return false;
     const untilTurn = (card as any).data?.cannotExhaustUntilTurn;
     return untilTurn === undefined || untilTurn < gameState.turnCount;
   },
@@ -1005,10 +1151,10 @@ export const ServerGameService = {
   canUnitDefendInCurrentBattle(gameState: GameState, unit: Card | null | undefined) {
     if (!unit || !gameState.battleState) return false;
     if (unit.isExhausted) return false;
-    if (!ServerGameService.canCardBeExhausted(unit, gameState)) return false;
     if ((unit as any).battleForbiddenByEffect) return false;
     if ((unit as any).data?.cannotDefendTurn === gameState.turnCount) return false;
     if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) return false;
+    if (!ServerGameService.canExhaustForDeclaration(unit, gameState)) return false;
 
     const lockedTargetId = gameState.battleState.defenseLockedToTargetId;
     if (lockedTargetId && unit.gamecardId !== lockedTargetId) return false;
@@ -1019,14 +1165,12 @@ export const ServerGameService = {
     const maxPower = gameState.battleState.defenseMaxPowerRestriction;
     if (maxPower !== undefined && (unit.power || 0) >= maxPower) return false;
 
-    const attackerPlayer = gameState.players[gameState.playerIds[gameState.currentTurnPlayer]];
+    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const attackers = (gameState.battleState.attackers || [])
-      .map(id => attackerPlayer?.unitZone.find(attacker => attacker?.gamecardId === id))
-      .filter(Boolean) as Card[];
+      .map(id => gameState.players[turnPlayerId]?.unitZone.find(attacker => attacker?.gamecardId === id))
+      .filter((attacker): attacker is Card => !!attacker);
     const minExclusive = Math.max(0, ...attackers.map(attacker => (attacker as any).data?.defenseMinPower || 0));
-    if (minExclusive > 0 && (unit.power || 0) <= minExclusive) return false;
-
-    return true;
+    return minExclusive <= 0 || (unit.power || 0) > minExclusive;
   },
 
   readyCard(card: Card) {
@@ -1134,10 +1278,11 @@ export const ServerGameService = {
       card: target,
       ownerUid: defenderPlayerId,
       effectIndex: 1,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      data: { isTriggeredEffect: true }
     };
     if (onUpdate) await onUpdate(gameState);
-    await ServerGameService.waitForVisualDelay(gameState, 1500);
+    await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getTriggerVisualDelayMs());
     gameState.currentProcessingItem = null;
     if (onUpdate) await onUpdate(gameState);
     EventEngine.recalculateContinuousEffects(gameState);
@@ -1518,6 +1663,8 @@ export const ServerGameService = {
     card.cardlocation = targetZone;
     if (options?.faceDown !== undefined) {
       card.displayState = options.faceDown ? 'FRONT_FACEDOWN' : 'FRONT_UPRIGHT';
+    } else if (targetZone === 'EXILE') {
+      card.displayState = 'FRONT_UPRIGHT';
     }
     if (targetZone === 'GRAVE') {
       card.displayState = 'FRONT_UPRIGHT';
@@ -1717,6 +1864,15 @@ export const ServerGameService = {
       } else if (c.color !== 'NONE') {
         availableColors[c.color] = (availableColors[c.color] || 0) + 1;
       }
+      const extraColors = [
+        ...((c as any).temporaryExtraColors || []),
+        ...((c as any).persistentExtraColors || [])
+      ];
+      extraColors.forEach(color => {
+        if (typeof color === 'string' && color !== c.color && color in availableColors) {
+          availableColors[color] = (availableColors[color] || 0) + 1;
+        }
+      });
     });
 
     const colorReqOptions = [card.colorReq || {}];
@@ -2543,6 +2699,16 @@ export const ServerGameService = {
     if (gameState.counterStack.length === 0) return;
     if (gameState.pendingQuery) return gameState;
 
+    const emitVisualUpdate = async () => {
+      if (!onUpdate) return;
+      (gameState as any).__visualOnlySync = true;
+      try {
+        await onUpdate(gameState);
+      } finally {
+        delete (gameState as any).__visualOnlySync;
+      }
+    };
+
     gameState.isResolvingStack = true;
     (gameState as any).deferTriggeredEffectsUntilCounterStackEnds = true;
     gameState.priorityPlayerId = undefined;
@@ -2566,12 +2732,12 @@ export const ServerGameService = {
       if (onUpdate) await onUpdate(gameState);
 
       if (nextPhase) {
-        return ServerGameService.advancePhase(gameState, nextPhase);
+        return ServerGameService.advancePhase(gameState, nextPhase, undefined, onUpdate);
       }
       return gameState;
     }
 
-    if (onUpdate) await onUpdate(gameState);
+    await emitVisualUpdate();
 
     // Resolve the entire stack from top to bottom (LIFO)
     while (gameState.counterStack.length > 0) {
@@ -2579,10 +2745,10 @@ export const ServerGameService = {
 
       // 1. Visual Highlight: Show which item is being processed
       gameState.currentProcessingItem = topItem;
-      if (onUpdate) await onUpdate(gameState);
+      await emitVisualUpdate();
 
-      // Wait for the front-end to display the effect
-      await ServerGameService.waitForVisualDelay(gameState, 1500);
+      // Keep the visual highlight readable after it has been broadcast to clients.
+      await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getStackVisualDelayMs());
 
       const stackItem = gameState.counterStack.pop();
       if (!stackItem) continue;
@@ -2618,7 +2784,8 @@ export const ServerGameService = {
               replaceToExile ? {
                 isEffect: true,
                 effectSourcePlayerUid: stackItem.ownerUid,
-                effectSourceCardId: card.gamecardId
+                effectSourceCardId: card.gamecardId,
+                faceDown: false
               } : undefined
             );
           }
@@ -2670,7 +2837,8 @@ export const ServerGameService = {
                 replaceToExile ? {
                   isEffect: true,
                   effectSourcePlayerUid: stackItem.ownerUid,
-                  effectSourceCardId: card.gamecardId
+                  effectSourceCardId: card.gamecardId,
+                  faceDown: false
                 } : undefined
               );
             }
@@ -2688,9 +2856,7 @@ export const ServerGameService = {
           }
           const data = stackItem.data as any;
           if (data && data.afterSelectionEffects) {
-            for (const atomic of data.afterSelectionEffects) {
-              await AtomicEffectExecutor.execute(gameState, stackItem.ownerUid, atomic, liveEffectCard, undefined, data.selections);
-            }
+            await AtomicEffectExecutor.executeBatch(gameState, stackItem.ownerUid, data.afterSelectionEffects, liveEffectCard, undefined, data.selections);
           } else {
             const effectIndex = stackItem.effectIndex ?? 0;
             const effect = liveEffectCard.effects?.[effectIndex];
@@ -2706,6 +2872,7 @@ export const ServerGameService = {
                 gameState.pendingResolutions.push({
                   card: liveEffectCard,
                   effect,
+                  effectIndex,
                   playerUid: stackItem.ownerUid
                 });
               }
@@ -2727,6 +2894,7 @@ export const ServerGameService = {
             attackers: stackItem.attackerIds || [],
             isAlliance: !!stackItem.isAlliance
           };
+          ServerGameService.ensureBattleInstanceId(gameState);
           gameState.phase = stackItem.skipDefense ? 'BATTLE_FREE' : 'DEFENSE_DECLARATION';
           gameState.logs.push(`[攻击宣言] 连锁结算完成，进入${stackItem.skipDefense ? '战斗自由' : '防御宣言'}阶段`);
           // Clear previous phase so we don't return to MAIN
@@ -2735,18 +2903,18 @@ export const ServerGameService = {
           // Re-calculate effects to ensure 302050013's defensePowerRestriction is applied to the new battleState
           EventEngine.recalculateContinuousEffects(gameState);
           if (stackItem.skipDefense) {
-            EventEngine.dispatchEvent(gameState, {
+            await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
               type: 'PHASE_CHANGED',
               playerUid: stackItem.ownerUid,
               data: { phase: 'BATTLE_FREE', reason: 'ATTACK_DECLARED_SKIP_DEFENSE' }
-            });
+            }, onUpdate);
           }
           break;
       }
 
       // 2. Clear Highlight: Item has been processed and removed from stack
       gameState.currentProcessingItem = null;
-      if (onUpdate) await onUpdate(gameState);
+      await emitVisualUpdate();
 
       // PAUSE RESOLUTION: If an effect triggered a user choice, stop here.
       // We will resume once handleQueryChoice is called and finished.
@@ -2757,7 +2925,7 @@ export const ServerGameService = {
 
       // Small pause between multiple items
       if (gameState.counterStack.length > 0) {
-        await ServerGameService.waitForVisualDelay(gameState, 500);
+        await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getStackBetweenItemsDelayMs());
       }
     }
 
@@ -2807,7 +2975,7 @@ export const ServerGameService = {
       gameState.previousPhase = undefined;
       gameState.battleState = undefined;
       gameState.phaseTimerStart = Date.now();
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_INTERRUPTED' } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_INTERRUPTED' } }, onUpdate);
       gameState.logs.push(`[阶段切换] 战斗已中止，返回主要阶段`);
     }
 
@@ -2820,7 +2988,7 @@ export const ServerGameService = {
       currentPlayer.isTurn
     ) {
       delete (currentPlayer as any).forceEndTurnRequested;
-      await ServerGameService.executeEndPhase(gameState, currentPlayer);
+      await ServerGameService.executeEndPhase(gameState, currentPlayer, false, onUpdate);
       return;
     }
 
@@ -2829,6 +2997,145 @@ export const ServerGameService = {
     if (ServerGameService.checkBattleInterruption(gameState)) {
       await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
     }
+  },
+
+  getTriggerQueueId(record: any) {
+    if (!record.queueId) {
+      record.queueId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return record.queueId;
+  },
+
+  getTriggerBucketOrder(gameState: GameState) {
+    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+    const nonTurnPlayerId = gameState.playerIds.find(uid => uid !== turnPlayerId);
+    return [
+      { ownerUid: turnPlayerId, mandatory: true },
+      { ownerUid: nonTurnPlayerId, mandatory: true },
+      { ownerUid: turnPlayerId, mandatory: false },
+      { ownerUid: nonTurnPlayerId, mandatory: false }
+    ].filter(bucket => !!bucket.ownerUid) as { ownerUid: string; mandatory: boolean }[];
+  },
+
+  removeTriggerRecordById(gameState: GameState, queueId?: string) {
+    if (!queueId || !gameState.triggeredEffectsQueue) return undefined;
+    const index = gameState.triggeredEffectsQueue.findIndex(record => ServerGameService.getTriggerQueueId(record) === queueId);
+    if (index === -1) return undefined;
+    return gameState.triggeredEffectsQueue.splice(index, 1)[0];
+  },
+
+  getTriggerBucket(gameState: GameState) {
+    const queue = gameState.triggeredEffectsQueue || [];
+    for (const bucket of ServerGameService.getTriggerBucketOrder(gameState)) {
+      const records = queue
+        .filter(record => record.playerUid === bucket.ownerUid && !!record.effect?.isMandatory === bucket.mandatory)
+        .sort((a, b) => (b.effect?.triggerPriority || 0) - (a.effect?.triggerPriority || 0));
+      if (records.length > 0) {
+        return { ...bucket, records };
+      }
+    }
+    return undefined;
+  },
+
+  createTriggerOrderQuery(gameState: GameState, playerUid: string, records: any[], mandatory: boolean) {
+    gameState.pendingQuery = {
+      id: Math.random().toString(36).substring(7),
+      type: 'SELECT_CHOICE',
+      playerUid,
+      options: records.map(record => {
+        const queueId = ServerGameService.getTriggerQueueId(record);
+        const sourceCard = record.sourceCard || record.effectSourceCard || record.card;
+        const sourceName = sourceCard?.fullName || record.card?.fullName || record.effect?.id || '未知来源';
+        const identity = sourceCard ? getCardIdentity(gameState, record.playerUid, sourceCard) : '';
+        return {
+          id: queueId,
+          selectionId: queueId,
+          value: queueId,
+          label: `${identity ? `${identity} ` : ''}${sourceName}`,
+          detail: `${mandatory ? '必发' : '选发'}：${record.effect.description}`,
+          icon: mandatory ? 'trigger' : 'choice',
+          card: sourceCard
+        };
+      }),
+      title: '选择诱发效果',
+      description: `请选择下一个要结算的${mandatory ? '必发' : '选发'}诱发效果。`,
+      minSelections: 1,
+      maxSelections: 1,
+      callbackKey: 'TRIGGER_ORDER_CHOICE',
+      context: { mandatory }
+    };
+  },
+
+  resolveTriggerOrderSelection(query: GameState['pendingQuery'], selection?: string) {
+    if (!selection) return selection;
+    const options = query?.options || [];
+    const option = options.find((opt: any) =>
+      opt.id === selection ||
+      opt.selectionId === selection ||
+      opt.value === selection ||
+      opt.card?.gamecardId === selection ||
+      opt.card?.id === selection
+    );
+    return (option as any)?.selectionId || option?.id || option?.value || selection;
+  },
+
+  async processSelectedTriggerRecord(gameState: GameState, trigger: any, onUpdate?: (state: GameState) => Promise<void>) {
+    ServerGameService.hydrateVirtualTriggerRecord(trigger);
+    let { card, effect, effectIndex, playerUid, event } = trigger;
+    let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
+    if (!liveSource && event?.sourceCardId === card.gamecardId) {
+      liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
+    }
+    const isVirtualTrigger = effectIndex < 0;
+    if (!liveSource) {
+      if (isVirtualTrigger) {
+        liveSource = { card, ownerUid: playerUid, zone: card.cardlocation || 'PLAY' };
+      }
+    }
+    if (!liveSource) {
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      return;
+    }
+    card = liveSource.card;
+    const triggerLocation = (event?.type === 'REVEAL_DECK' && effect.triggerLocation?.includes('DECK'))
+      ? 'DECK'
+      : card.cardlocation as TriggerLocation;
+    if (!isVirtualTrigger && !ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, card, effect, triggerLocation, event).valid) {
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      return;
+    }
+
+    if (effect.isMandatory) {
+      await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+        effectIndex,
+        card,
+        effect,
+        event
+      }, onUpdate);
+      return;
+    }
+
+    gameState.pendingQuery = {
+      id: Math.random().toString(36).substring(7),
+      type: 'ASK_TRIGGER',
+      playerUid,
+      options: [],
+      title: '发动提示',
+      description: `是否发动 ${getCardIdentity(gameState, playerUid, card)} [${card.fullName}] 的诱发效果：${effect.description}`,
+      minSelections: 1,
+      maxSelections: 1,
+      callbackKey: 'TRIGGER_CHOICE',
+      context: {
+        triggerQueueId: ServerGameService.getTriggerQueueId(trigger),
+        effectIndex,
+        effectId: effect.id,
+        queuedEffect: effect,
+        effectDescription: effect.description,
+        sourceCardId: card.gamecardId,
+        sourceCardSnapshot: { ...card, effects: undefined },
+        event
+      }
+    };
   },
 
   async checkTriggeredEffects(gameState: GameState, onUpdate?: (state: GameState) => Promise<void>) {
@@ -2844,14 +3151,10 @@ export const ServerGameService = {
     }
 
     if (gameState.triggeredEffectsQueue && gameState.triggeredEffectsQueue.length > 0) {
-      const trigger = gameState.triggeredEffectsQueue.shift()!;
-      let { card, effect, effectIndex, playerUid, event } = trigger;
-      let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
-      if (!liveSource && event?.sourceCardId === card.gamecardId) {
-        liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
-      }
-      if (!liveSource) {
-        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      const bucket = ServerGameService.getTriggerBucket(gameState);
+      if (!bucket) return;
+      if (bucket.records.length > 1) {
+        ServerGameService.createTriggerOrderQuery(gameState, bucket.ownerUid, bucket.records, bucket.mandatory);
         return;
       }
       card = liveSource.card;
@@ -2864,29 +3167,7 @@ export const ServerGameService = {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
         return;
       }
-      const isMandatory = effect.isMandatory;
-
-      if (isMandatory) {
-        await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
-          effectIndex: effectIndex,
-          card,
-          effect,
-          event
-        }, onUpdate);
-      } else {
-        gameState.pendingQuery = {
-          id: Math.random().toString(36).substring(7),
-          type: 'ASK_TRIGGER',
-          playerUid: playerUid,
-          options: [],
-          title: '发动提示',
-          description: `是否发动 ${getCardIdentity(gameState, playerUid, card)} [${card.fullName}] 的诱发效果：${effect.description}`,
-          minSelections: 1,
-          maxSelections: 1,
-          callbackKey: 'TRIGGER_CHOICE',
-          context: { effectIndex, sourceCardId: card.gamecardId, event }
-        };
-      }
+      await ServerGameService.processSelectedTriggerRecord(gameState, trigger, onUpdate);
     } else {
       // Queue is empty, settlement is truly complete
       const queueLengthBeforeInterrupt = gameState.triggeredEffectsQueue?.length || 0;
@@ -2910,13 +3191,25 @@ export const ServerGameService = {
         const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
         const currentPlayer = gameState.players[currentPlayerId];
         if (currentPlayer) {
-          await ServerGameService.executeEndPhase(gameState, currentPlayer, true);
+          await ServerGameService.executeEndPhase(gameState, currentPlayer, true, onUpdate);
         }
       }
 
       if (!gameState.pendingQuery && gameState.phase === 'MAIN') {
         const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
         await ServerGameService.enterForcedAttackBattleIfNeeded(gameState, currentPlayerId, onUpdate, 'FORCED_ATTACK_CONTINUE');
+      }
+
+      const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      const currentPlayer = gameState.players[currentPlayerId];
+      if (
+        currentPlayer &&
+        !gameState.pendingQuery &&
+        (currentPlayer as any).forceEndTurnRequested === gameState.turnCount &&
+        currentPlayer.isTurn
+      ) {
+        delete (currentPlayer as any).forceEndTurnRequested;
+        await ServerGameService.executeEndPhase(gameState, currentPlayer, false, onUpdate);
       }
     }
   },
@@ -3327,12 +3620,62 @@ export const ServerGameService = {
     // 2. Trigger Option Processing
     if (query.callbackKey === 'TRIGGER_CHOICE') {
       if (currentSelections[0] === 'YES') {
-        await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
-          effectIndex: query.context.effectIndex,
-          card: sourceCard!,
-          event: query.context.event
-        }, onUpdate);
+        const effectIndex = query.context?.effectIndex;
+        const effectId = query.context?.effectId;
+        const snapshot = query.context?.sourceCardSnapshot as Card | undefined;
+        const isSyntheticTrigger = effectIndex === undefined || effectIndex < 0;
+        const effect = effectIndex !== undefined && effectIndex >= 0
+          ? sourceCard?.effects?.[effectIndex]
+          : effectId
+            ? sourceCard?.effects?.find(e => e.id === effectId)
+            : undefined;
+        const queuedEffect = query.context?.queuedEffect as CardEffect | undefined;
+        if (sourceCard && effect) {
+          await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+            effectIndex,
+            card: sourceCard,
+            effect,
+            event: query.context.event
+          }, onUpdate);
+        } else if (sourceCard && queuedEffect) {
+          await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+            effectIndex: isSyntheticTrigger ? -1 : effectIndex,
+            card: sourceCard,
+            effect: queuedEffect,
+            event: query.context.event
+          }, onUpdate);
+        } else if (isSyntheticTrigger && sourceCard) {
+          const queuedLikeEffect: CardEffect = {
+            id: effectId || query.context?.triggerQueueId || 'synthetic_optional_trigger',
+            type: 'TRIGGER',
+            isMandatory: false,
+            description: query.context?.effectDescription || '选发诱发效果',
+            execute: async () => undefined
+          };
+          await ServerGameService.executeTriggeredEffect(gameState, playerUid, {
+            effectIndex: -1,
+            card: sourceCard,
+            effect: queuedLikeEffect,
+            event: query.context.event
+          }, onUpdate);
+        } else {
+          const fallbackCard = snapshot || sourceCard;
+          gameState.logs.push(`[诱发跳过] 找不到选发诱发来源或效果，已跳过：${fallbackCard?.fullName || sourceCardId || '未知来源'}。`);
+          await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+        }
       } else {
+        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      }
+      return gameState;
+    }
+
+    if (query.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+      const selectedQueueId = ServerGameService.resolveTriggerOrderSelection(query, currentSelections[0]);
+      const trigger = ServerGameService.removeTriggerRecordById(gameState, selectedQueueId);
+      if (trigger) {
+        await ServerGameService.processSelectedTriggerRecord(gameState, trigger, onUpdate);
+      } else {
+        gameState.logs.push(`[错误] 找不到选择的诱发效果: ${currentSelections[0] || 'none'}。`);
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
       }
       return gameState;
@@ -3574,6 +3917,7 @@ export const ServerGameService = {
       if (query.context?.isTrigger) {
         await ServerGameService.executeTriggeredEffect(gameState, activationPlayerUid, {
           card: sourceCard,
+          effect,
           effectIndex,
           event: query.context.event,
           skipCost: true
@@ -3756,57 +4100,62 @@ export const ServerGameService = {
 
 
     if (afterEffects.length > 0) {
-      for (let i = 0; i < afterEffects.length; i++) {
-        const effect = afterEffects[i];
+      AtomicEffectExecutor.beginRecalcBatch(gameState);
+      try {
+        for (let i = 0; i < afterEffects.length; i++) {
+          const effect = afterEffects[i];
 
-        // INTERCEPT: If we need payment, "pause" and issue a SELECT_PAYMENT query
-        if (effect.type === 'PAY_CARD_COST') {
-          const targetId = currentSelections[0];
-          const targetCard = ServerGameService.findCardById(gameState, targetId);
-          const targetCost = targetCard
-            ? ServerGameService.getEffectivePlayCost(gameState.players[playerUid], targetCard, gameState)
-            : 0;
-          if (targetCard && targetCost !== 0) {
-            gameState.pendingQuery = {
-              id: Math.random().toString(36).substring(7),
-              type: 'SELECT_PAYMENT',
-              playerUid,
-              options: [], // Not used for payment
-              title: `支付费用: ${targetCard.fullName}`,
-              description: `请选择如何支付 ${targetCost} 点费用。`,
-              minSelections: 1,
-              maxSelections: 1,
-              callbackKey: 'GENERIC_RESOLVE',
-              paymentCost: targetCost,
-              paymentColor: targetCard.color,
-              context: {
-                ...query.context,
-                targetCardId: targetId,
-                targetSelections: currentSelections,
-                remainingEffects: afterEffects.slice(i + 1)
-              }
-            };
-            return gameState; // Exit handleQueryChoice, waiting for payment
+          // INTERCEPT: If we need payment, "pause" and issue a SELECT_PAYMENT query
+          if (effect.type === 'PAY_CARD_COST') {
+            const targetId = currentSelections[0];
+            const targetCard = ServerGameService.findCardById(gameState, targetId);
+            const targetCost = targetCard
+              ? ServerGameService.getEffectivePlayCost(gameState.players[playerUid], targetCard, gameState)
+              : 0;
+            if (targetCard && targetCost !== 0) {
+              gameState.pendingQuery = {
+                id: Math.random().toString(36).substring(7),
+                type: 'SELECT_PAYMENT',
+                playerUid,
+                options: [], // Not used for payment
+                title: `支付费用: ${targetCard.fullName}`,
+                description: `请选择如何支付 ${targetCost} 点费用。`,
+                minSelections: 1,
+                maxSelections: 1,
+                callbackKey: 'GENERIC_RESOLVE',
+                paymentCost: targetCost,
+                paymentColor: targetCard.color,
+                context: {
+                  ...query.context,
+                  targetCardId: targetId,
+                  targetSelections: currentSelections,
+                  remainingEffects: afterEffects.slice(i + 1)
+                }
+              };
+              return gameState; // Exit handleQueryChoice, waiting for payment
+            }
+            continue; // No cost to pay
           }
-          continue; // No cost to pay
-        }
 
-        if (query.executionMode === 'ON_STACK') {
-          const queryCard = sourceCard || query.options[0]?.card;
-          ServerGameService.enterCountering(gameState, playerUid, {
-            ownerUid: playerUid,
-            type: 'EFFECT',
-            card: queryCard,
-            timestamp: Date.now(),
-            data: {
-              afterSelectionEffects: [effect], // Push one by one to stack? 
-              selections: currentSelections
-            } as any
-          });
-        } else {
-          // IMMEDIATE resolution
-          await AtomicEffectExecutor.execute(gameState, playerUid, effect, sourceCard, undefined, currentSelections);
+          if (query.executionMode === 'ON_STACK') {
+            const queryCard = sourceCard || query.options[0]?.card;
+            ServerGameService.enterCountering(gameState, playerUid, {
+              ownerUid: playerUid,
+              type: 'EFFECT',
+              card: queryCard,
+              timestamp: Date.now(),
+              data: {
+                afterSelectionEffects: [effect], // Push one by one to stack?
+                selections: currentSelections
+              } as any
+            });
+          } else {
+            // IMMEDIATE resolution
+            await AtomicEffectExecutor.execute(gameState, playerUid, effect, sourceCard, undefined, currentSelections);
+          }
         }
+      } finally {
+        AtomicEffectExecutor.endRecalcBatch(gameState);
       }
     }
 
@@ -3844,8 +4193,9 @@ export const ServerGameService = {
         throw new Error('先手玩家第一回合不能进入战斗阶段');
       }
       gameState.phase = 'BATTLE_DECLARATION';
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: 'DECLARE_ATTACK_FROM_MAIN' } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION', reason: 'DECLARE_ATTACK_FROM_MAIN' } }, onUpdate);
       gameState.logs.push(`[阶段切换] ${player.displayName} 进入战斗阶段`);
+      if (gameState.pendingQuery || gameState.phase !== 'BATTLE_DECLARATION') return gameState;
     }
     if (gameState.phase !== 'BATTLE_DECLARATION') throw new Error('Not in battle declaration phase');
     if (ServerGameService.isPlayerAttackLockedThisTurn(gameState, playerId)) {
@@ -4000,7 +4350,7 @@ export const ServerGameService = {
       if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotAttackOrDefendSourceName || '卡牌效果'}] 不能宣言攻击`);
       }
-      if ((unit as any).data?.cannotExhaustUntilTurn !== undefined && (unit as any).data.cannotExhaustUntilTurn >= gameState.turnCount) {
+      if (!ServerGameService.canExhaustForDeclaration(unit, gameState)) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotExhaustSourceName || '卡牌效果'}] 不能横置`);
       }
       if (isAlliance && (unit as any).data?.cannotAllianceByEffect) {
@@ -4109,7 +4459,8 @@ export const ServerGameService = {
       attackers: attackerIds,
       isAlliance,
       unitTargetId: targetId === 'NO_PROMPT' ? undefined : targetId,
-      defensePowerRestriction: 0
+      defensePowerRestriction: 0,
+      battleId: `battle_${gameState.turnCount}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     };
     EventEngine.recalculateContinuousEffects(gameState);
 
@@ -4145,6 +4496,8 @@ export const ServerGameService = {
       skipDefense: effectiveSkipDefense
     });
 
+    await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+
     return gameState;
   },
 
@@ -4168,7 +4521,7 @@ export const ServerGameService = {
       if ((unit as any).data?.cannotAttackOrDefendUntilTurn && (unit as any).data.cannotAttackOrDefendUntilTurn >= gameState.turnCount) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotAttackOrDefendSourceName || '卡牌效果'}] 不能宣言防御`);
       }
-      if ((unit as any).data?.cannotExhaustUntilTurn !== undefined && (unit as any).data.cannotExhaustUntilTurn >= gameState.turnCount) {
+      if (!ServerGameService.canExhaustForDeclaration(unit, gameState)) {
         throw new Error(`单位 [${unit.fullName}] 由于 [${(unit as any).data.cannotExhaustSourceName || '卡牌效果'}] 不能横置`);
       }
 
@@ -4225,13 +4578,14 @@ export const ServerGameService = {
         unit.temporaryBuffSources = { ...(unit.temporaryBuffSources || {}), damage: (player as any).snowstormSourceName || '暴风雪', power: (player as any).snowstormSourceName || '暴风雪' };
       }
       gameState.battleState.defender = defenderId;
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'CARD_DEFENSE_DECLARED',
         sourceCard: unit,
         sourceCardId: unit.gamecardId,
         playerUid: playerId,
         data: { defenderId: unit.gamecardId }
       });
+      if (gameState.pendingQuery) return gameState;
       addBattleLog(gameState, {
         category: 'BATTLE',
         actorUid: playerId,
@@ -4264,13 +4618,12 @@ export const ServerGameService = {
     // Transition to counter check (for now just move to battle free)
     gameState.phase = 'BATTLE_FREE';
     gameState.phaseTimerStart = Date.now();
-    EventEngine.dispatchEvent(gameState, {
+    await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
       type: 'PHASE_CHANGED',
       playerUid: playerId,
       data: { phase: 'BATTLE_FREE', reason: 'DEFENSE_DECLARED' }
     });
-
-    await ServerGameService.checkTriggeredEffects(gameState);
+    if (gameState.pendingQuery) return gameState;
 
     return gameState;
   },
@@ -4336,7 +4689,7 @@ export const ServerGameService = {
           text: `${attacker.displayName} 对 ${defender.displayName} 造成了 ${dealtDamage} 点战斗伤害`,
           metadata: { result: 'DIRECT_DAMAGE', damage: dealtDamage, defenderId }
         });
-        EventEngine.dispatchEvent(gameState, {
+        await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
           type: 'COMBAT_DAMAGE_CAUSED',
           playerUid: defenderId,
           data: {
@@ -4346,6 +4699,7 @@ export const ServerGameService = {
             isAlliance: !!gameState.battleState.isAlliance
           }
         });
+        if (gameState.pendingQuery) return gameState;
       }
     } else {
       // Unit combat
@@ -4586,7 +4940,7 @@ export const ServerGameService = {
 
     // Now set phase back to MAIN or SHENYI if triggered
     if (gameState.phase !== 'SHENYI_CHOICE') {
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'BATTLE_ENDED',
         sourceCard: attackingUnits[0],
         sourceCardId: attackingUnits[0]?.gamecardId,
@@ -4597,9 +4951,11 @@ export const ServerGameService = {
           isAlliance: !!gameState.battleState.isAlliance
         }
       });
+      if (gameState.pendingQuery) return gameState;
       gameState.phase = 'MAIN';
       gameState.phaseTimerStart = Date.now();
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_END' } });
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_END' } });
+      if (gameState.pendingQuery) return gameState;
       gameState.logs.push(`${attacker.displayName} 进入主要阶段 (战斗结算后)`);
     }
 
@@ -4890,6 +5246,19 @@ export const ServerGameService = {
     }
 
     const unit = zone === 'UNIT' ? player.unitZone[unitIdx]! : player.itemZone[unitIdx]!;
+    const battleId = ServerGameService.ensureBattleInstanceId(gameState);
+
+    if (
+      !isEffect &&
+      zone === 'UNIT' &&
+      !!battleId &&
+      (unit as any).data?.preventBattleDestroyForBattleTurn === gameState.turnCount &&
+      (unit as any).data.preventBattleDestroyForBattleId === battleId
+    ) {
+      const sourceName = (unit as any).data.preventBattleDestroyForBattleSourceName || '战斗破坏防止';
+      gameState.logs.push(`[${sourceName}] 防止了 [${unit.fullName}] 这次战斗中将被战斗破坏。`);
+      return false;
+    }
 
     if (!isEffect && (unit as any).data?.combatImmuneUntilOwnNextTurnStartUid === playerId) {
       gameState.logs.push(`[${unit.fullName}] 不会被战斗破坏，本次破坏无效。`);
@@ -5148,14 +5517,14 @@ export const ServerGameService = {
     });
 
     if (isEffect) {
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'CARD_DESTROYED_EFFECT',
         targetCardId: gamecardId,
         playerUid: playerId,
         data: { sourcePlayerId }
       });
     } else {
-      EventEngine.dispatchEvent(gameState, {
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, {
         type: 'CARD_DESTROYED_BATTLE',
         targetCardId: gamecardId,
         playerUid: playerId,
@@ -5166,7 +5535,6 @@ export const ServerGameService = {
         }
       });
     }
-    await ServerGameService.checkTriggeredEffects(gameState);
     return true; // Successfully destroyed
   },
 
@@ -5234,91 +5602,188 @@ export const ServerGameService = {
     });
   },
 
+  enqueueMandatoryEndTurnDelayedEffects(gameState: GameState, turnPlayerUid: string) {
+    const queue = gameState.triggeredEffectsQueue || [];
+    gameState.triggeredEffectsQueue = queue;
+    const enqueue = (record: any) => {
+      if (queue.some(existing => existing.queueId === record.queueId)) return;
+      queue.push(record);
+    };
+
+    Object.entries(gameState.players).forEach(([uid, player]) => {
+      const fieldCards = [
+        ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
+        ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
+      ];
+
+      fieldCards.forEach(({ card, zone }) => {
+        if (!card || (card as any).data?.returnToDeckBottomAtTurnEnd !== gameState.turnCount) return;
+        const sourceName = (card as any).data.returnToDeckBottomSourceName || '卡牌效果';
+        const sourceCardId = (card as any).data.returnToDeckBottomSourceCardId;
+        const effectOwnerUid = (card as any).data.returnToDeckBottomOwnerUid ||
+          (sourceCardId ? ServerGameService.findCardLocation(gameState, sourceCardId)?.ownerUid : undefined) ||
+          uid;
+        const queueId = `return_deck_${card.gamecardId}_${gameState.turnCount}`;
+        enqueue({
+          queueId,
+          card,
+          sourceCard: sourceCardId ? ServerGameService.findCardById(gameState, sourceCardId) : undefined,
+          playerUid: effectOwnerUid,
+          effectIndex: -1,
+          virtualTriggerType: 'RETURN_TO_DECK_BOTTOM_AT_END',
+          virtualPayload: {
+            targetCardId: card.gamecardId,
+            sourceCardId,
+            sourceName,
+            effectOwnerUid,
+            turnCount: gameState.turnCount,
+            targetZone: zone
+          },
+          event: { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+          effect: {
+            id: queueId,
+            type: 'TRIGGER',
+            triggerEvent: 'TURN_END' as any,
+            triggerLocation: [zone],
+            isMandatory: true,
+            description: `[${sourceName}] 回合结束时将 [${card.fullName}] 放置到卡组底。`
+          }
+        });
+      });
+    });
+
+    Object.entries(gameState.players).forEach(([uid, player]) => {
+      const fieldCards = [
+        ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
+        ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
+      ];
+
+      fieldCards.forEach(({ card, zone }) => {
+        if (!card || (card as any).data?.returnToExileAtEndTurn !== gameState.turnCount) return;
+        const sourceName = (card as any).data.returnToExileSourceName || '卡牌效果';
+        const sourceCardId = (card as any).data.returnToExileSourceCardId;
+        const effectOwnerUid = (card as any).data.returnToExileEffectOwnerUid ||
+          (sourceCardId ? ServerGameService.findCardLocation(gameState, sourceCardId)?.ownerUid : undefined) ||
+          uid;
+        const queueId = `return_exile_${card.gamecardId}_${gameState.turnCount}`;
+        enqueue({
+          queueId,
+          card,
+          sourceCard: sourceCardId ? ServerGameService.findCardById(gameState, sourceCardId) : undefined,
+          playerUid: effectOwnerUid,
+          effectIndex: -1,
+          virtualTriggerType: 'RETURN_TO_EXILE_AT_END',
+          virtualPayload: {
+            targetCardId: card.gamecardId,
+            sourceCardId,
+            sourceName,
+            effectOwnerUid,
+            turnCount: gameState.turnCount,
+            targetZone: zone,
+            predicateKey: (card as any).data.returnToExileAtEndPredicateKey || 'STILL_IN_UNIT'
+          },
+          event: { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+          effect: {
+            id: queueId,
+            type: 'TRIGGER',
+            triggerEvent: 'TURN_END' as any,
+            triggerLocation: [zone],
+            isMandatory: true,
+            description: `[${sourceName}] 回合结束时将 [${card.fullName}] 放逐。`
+          }
+        });
+      });
+    });
+
+    if (gameState.pendingResolutions && gameState.pendingResolutions.length > 0) {
+      const resolutions = [...gameState.pendingResolutions];
+      gameState.pendingResolutions = [];
+      resolutions.forEach((record, index) => {
+        if (!record.effect?.resolve) return;
+        const queueId = `pending_resolution_${gameState.turnCount}_${index}_${record.effect.id || record.card?.gamecardId || 'effect'}`;
+        enqueue({
+          ...record,
+          queueId,
+          playerUid: record.playerUid,
+          event: record.event || { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+          effectIndex: record.effectIndex ?? -1,
+          effect: {
+            ...record.effect,
+            id: record.effect.id || queueId,
+            type: 'TRIGGER',
+            triggerEvent: 'TURN_END' as any,
+            isMandatory: true,
+            execute: async (source: Card, state: GameState, player: PlayerState, event?: any) => {
+              try {
+                const resolvePromise = (record.effect.resolve as any)(source, state, player, event);
+                await Promise.race([
+                  resolvePromise,
+                  new Promise((_, reject) => setTimeout(() => reject(new Error("Effect resolution timeout (5s)")), 5000))
+                ]);
+              } catch (err: any) {
+                state.logs.push(`[效果错误] ${source?.fullName || '未知来源'} 的阶段结束效果处理失败: ${err.message}`);
+              }
+            }
+          }
+        });
+      });
+    }
+
+    const currentPlayer = gameState.players[turnPlayerUid];
+    if ((currentPlayer as any)?.loseAtEndOfTurn === gameState.turnCount) {
+      const sourceName = (currentPlayer as any).loseAtEndOfTurnSourceName || '卡牌效果';
+      const sourceCardId = (currentPlayer as any).loseAtEndOfTurnSourceCardId;
+      const sourceCardSnapshot = (currentPlayer as any).loseAtEndOfTurnSourceCardSnapshot as Card | undefined;
+      const sourceCard = sourceCardId
+        ? ServerGameService.findCardById(gameState, sourceCardId)
+        : currentPlayer.unitZone.find(card => card?.fullName === sourceName);
+      const displaySourceCard = sourceCard || sourceCardSnapshot;
+      const queueId = `lose_at_end_${turnPlayerUid}_${gameState.turnCount}`;
+        enqueue({
+          queueId,
+          card: displaySourceCard || {
+          id: queueId,
+          uniqueId: queueId,
+          gamecardId: queueId,
+          fullName: sourceName,
+          type: 'STORY',
+          color: 'NONE',
+          colorReq: {},
+          acValue: 0,
+          godMark: false,
+          displayState: 'FRONT_UPRIGHT',
+          feijingMark: false,
+          canResetCount: 0,
+          faction: '无'
+        } as Card,
+        playerUid: turnPlayerUid,
+        effectIndex: -1,
+        virtualTriggerType: 'LOSE_AT_END',
+        virtualPayload: {
+          sourceCardId,
+          sourceName,
+          effectOwnerUid: turnPlayerUid,
+          turnCount: gameState.turnCount
+        },
+        event: { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+        effect: {
+          id: queueId,
+          type: 'TRIGGER',
+          triggerEvent: 'TURN_END' as any,
+          isMandatory: true,
+          description: `[${sourceName}] 回合结束时你输掉游戏。`
+        }
+      });
+    }
+  },
+
   async finishTurnTransition(gameState: GameState) {
     try {
 
       const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
       const currentPlayer = gameState.players[currentPlayerId];
 
-      if ((currentPlayer as any).loseAtEndOfTurn === gameState.turnCount) {
-        gameState.gameStatus = 2;
-        gameState.winReason = 'CARD_EFFECT_SPECIAL_WIN';
-        gameState.winnerId = gameState.playerIds.find(id => id !== currentPlayerId);
-        gameState.winSourceCardName = (currentPlayer as any).loseAtEndOfTurnSourceName || '卡牌效果';
-        gameState.logs.push(`[游戏结束] ${currentPlayer.displayName} 因 [${gameState.winSourceCardName}] 的效果在回合结束时判负。`);
-        return;
-      }
-
-      Object.entries(gameState.players).forEach(([uid, player]) => {
-        const fieldCards = [
-          ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
-          ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
-        ];
-
-        fieldCards.forEach(({ card, zone }) => {
-          if (!card || (card as any).data?.returnToDeckBottomAtTurnEnd !== gameState.turnCount) return;
-          const sourceName = (card as any).data.returnToDeckBottomSourceName || '卡牌效果';
-          const sourceCardId = (card as any).data.returnToDeckBottomSourceCardId;
-          delete (card as any).data.returnToDeckBottomAtTurnEnd;
-          delete (card as any).data.returnToDeckBottomSourceName;
-          delete (card as any).data.returnToDeckBottomSourceCardId;
-          delete (card as any).data.returnToDeckBottomOwnerUid;
-          ServerGameService.moveCard(gameState, uid, zone, uid, 'DECK', card.gamecardId, {
-            insertAtBottom: true,
-            isEffect: true,
-            effectSourcePlayerUid: uid,
-            effectSourceCardId: sourceCardId
-          });
-          gameState.logs.push(`[${sourceName}] 将 [${card.fullName}] 放置到卡组底。`);
-        });
-      });
-
-      Object.entries(gameState.players).forEach(([uid, player]) => {
-        const fieldCards = [
-          ...player.unitZone.map(card => ({ card, zone: 'UNIT' as TriggerLocation })),
-          ...player.itemZone.map(card => ({ card, zone: 'ITEM' as TriggerLocation }))
-        ];
-
-        fieldCards.forEach(({ card, zone }) => {
-          if (!card || (card as any).data?.returnToExileAtEndTurn !== gameState.turnCount) return;
-          const sourceName = (card as any).data.returnToExileSourceName || '卡牌效果';
-          const sourceCardId = (card as any).data.returnToExileSourceCardId;
-          delete (card as any).data.returnToExileAtEndTurn;
-          delete (card as any).data.returnToExileSourceName;
-          delete (card as any).data.returnToExileSourceCardId;
-          ServerGameService.moveCard(gameState, uid, zone, uid, 'EXILE', card.gamecardId, {
-            isEffect: true,
-            effectSourcePlayerUid: uid,
-            effectSourceCardId: sourceCardId
-          });
-          gameState.logs.push(`[${sourceName}] 回合结束时将 [${card.fullName}] 放逐。`);
-        });
-      });
-
-      // End-of-turn delayed effects must resolve before the turn counter/player changes.
-      if (gameState.pendingResolutions && gameState.pendingResolutions.length > 0) {
-        const resolutions = [...gameState.pendingResolutions];
-        gameState.pendingResolutions = [];
-
-        for (const record of resolutions) {
-          if (!record.effect || !record.effect.resolve) {
-            continue;
-          }
-
-          try {
-            const player = gameState.players[record.playerUid];
-            if (player) {
-              const resolvePromise = (record.effect.resolve as any)(record.card, gameState, player, record.event);
-              await Promise.race([
-                resolvePromise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Effect resolution timeout (5s)")), 5000))
-              ]);
-            }
-          } catch (err: any) {
-            gameState.logs.push(`[效果错误] ${record.card?.fullName || '未知来源'} 的阶段结束效果处理失败: ${err.message}`);
-          }
-        }
-      }
+      if (gameState.gameStatus === 2) return;
 
       gameState.currentTurnPlayer = gameState.currentTurnPlayer === 0 ? 1 : 0;
       ServerGameService.applyExtraTurnIfQueued(gameState, currentPlayerId);
@@ -5335,7 +5800,7 @@ export const ServerGameService = {
         category: 'TURN',
         actorUid: nextPlayer.uid,
         actorName: nextPlayer.displayName,
-        text: `第 ${gameState.turnCount} 回合：${nextPlayer.displayName}`,
+        text: `Turn ${gameState.turnCount}: ${nextPlayer.displayName}`,
         metadata: { currentTurnPlayer: gameState.currentTurnPlayer }
       });
 
@@ -5383,6 +5848,20 @@ export const ServerGameService = {
             delete (card as any).data.combatImmuneUntilOwnNextTurnStartUid;
             delete (card as any).data.combatImmuneSourceName;
           }
+          if ((card as any).data?.tradeEffectDisabledUntilOwnStartUid === nextPlayerId) {
+            delete (card as any).data.tradeEffectDisabledUntilOwnStartUid;
+          }
+          const disabledAketiRecordModes = (card as any).data?.disabledAketiRecordModesUntilOwnStart;
+          if (disabledAketiRecordModes) {
+            Object.keys(disabledAketiRecordModes).forEach(mode => {
+              if (disabledAketiRecordModes[mode] === nextPlayerId) {
+                delete disabledAketiRecordModes[mode];
+              }
+            });
+            if (Object.keys(disabledAketiRecordModes).length === 0) {
+              delete (card as any).data.disabledAketiRecordModesUntilOwnStart;
+            }
+          }
           if ((card as any).data?.forcedAttackTurn !== undefined && (card as any).data.forcedAttackTurn < gameState.turnCount) {
             delete (card as any).data.forcedAttackTurn;
             delete (card as any).data.forcedAttackSourceName;
@@ -5418,6 +5897,11 @@ export const ServerGameService = {
             delete (card as any).data.preventNextBattleDestroy;
             delete (card as any).data.preventNextBattleDestroySourceName;
             delete (card as any).data.preventNextBattleDestroyUntilTurn;
+          }
+          if ((card as any).data?.preventBattleDestroyForBattleTurn !== undefined && (card as any).data.preventBattleDestroyForBattleTurn < gameState.turnCount) {
+            delete (card as any).data.preventBattleDestroyForBattleId;
+            delete (card as any).data.preventBattleDestroyForBattleTurn;
+            delete (card as any).data.preventBattleDestroyForBattleSourceName;
           }
           if ((card as any).data?.forbiddenAlchemyBanishTurn !== undefined && (card as any).data.forbiddenAlchemyBanishTurn < gameState.turnCount) {
             delete (card as any).data.forbiddenAlchemyBanishTurn;
@@ -5483,8 +5967,7 @@ export const ServerGameService = {
       EventEngine.recalculateContinuousEffects(gameState);
 
       // 4. Start the next phase
-      EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', playerUid: nextPlayerId, data: { phase: 'START' } });
-      await ServerGameService.checkTriggeredEffects(gameState);
+      await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', playerUid: nextPlayerId, data: { phase: 'START' } });
       if (gameState.pendingQuery || gameState.phase !== 'START') return;
       await ServerGameService.executeStartPhase(gameState, nextPlayer);
 
@@ -5607,11 +6090,15 @@ export const ServerGameService = {
     trigger: { card: Card; effect: CardEffect; effectIndex: number; event?: any; skipCost?: boolean },
     onUpdate?: (state: GameState) => Promise<void>
   ) {
+    ServerGameService.hydrateVirtualTriggerRecord(trigger);
     const { card, effectIndex, event, skipCost } = trigger;
     const effect = trigger.effect || card.effects?.[effectIndex];
     let liveSource = ServerGameService.findCardLocation(gameState, card.gamecardId);
     if (!liveSource && event?.sourceCardId === card.gamecardId) {
       liveSource = ServerGameService.findCardLocation(gameState, event.data?.previousSourceCardId);
+    }
+    if (!liveSource && effectIndex < 0) {
+      liveSource = { card, ownerUid: playerUid, zone: card.cardlocation || 'PLAY' };
     }
 
     if (!effect || !liveSource) {
@@ -5626,7 +6113,7 @@ export const ServerGameService = {
         ? event.data.sourceZone as TriggerLocation
         : liveCard.cardlocation as TriggerLocation;
     const movementTriggerEvents = new Set(['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT']);
-    if (!movementTriggerEvents.has(event?.type)) {
+    if (effectIndex >= 0 && !movementTriggerEvents.has(event?.type)) {
       const triggerCheck = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, liveCard, effect, triggerLocation, event);
       if (!triggerCheck.valid) {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
@@ -5677,7 +6164,7 @@ export const ServerGameService = {
       ownerUid: playerUid,
       effectIndex,
       timestamp: Date.now(),
-      data: { event }
+      data: { event, isTriggeredEffect: true }
     };
     if (onUpdate) await onUpdate(gameState);
 
@@ -5690,14 +6177,12 @@ export const ServerGameService = {
       }
     }
 
-    // Small pause for visual feedback
-    await ServerGameService.waitForVisualDelay(gameState, 1500);
+    // Keep triggered effects readable while normal stack resolution stays fast.
+    await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getTriggerVisualDelayMs());
 
     // 4. Atomic Effects
     if (effect.atomicEffects) {
-      for (const atomic of effect.atomicEffects) {
-        await AtomicEffectExecutor.execute(gameState, playerUid, atomic, liveCard, event);
-      }
+      await AtomicEffectExecutor.executeBatch(gameState, playerUid, effect.atomicEffects, liveCard, event);
     }
 
     // 5. Execute Legacy Callback
@@ -5735,6 +6220,7 @@ export const ServerGameService = {
       gameState.pendingResolutions.push({
         card: liveCard,
         effect,
+        effectIndex,
         playerUid
       });
     }
@@ -5780,8 +6266,7 @@ export const ServerGameService = {
         gameState.phase = 'START';
         gameState.turnCount = 1;
         gameState.logs.push(`[阶段切换] 进入开始阶段`);
-        EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } });
-        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+        await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } }, onUpdate);
         if (gameState.pendingQuery || gameState.phase !== 'START') return gameState;
         await ServerGameService.executeStartPhase(gameState, turnPlayer);
         break;
@@ -5811,8 +6296,9 @@ export const ServerGameService = {
           }
           if (action === 'BATTLE_DECLARATION' || action === 'DECLARE_BATTLE') {
             gameState.phase = 'BATTLE_DECLARATION';
-            EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION' } });
+            await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'BATTLE_DECLARATION' } }, onUpdate);
             gameState.logs.push(`[阶段切换] ${actingPlayer.displayName} 进入战斗阶段`);
+            if (gameState.pendingQuery || gameState.phase !== 'BATTLE_DECLARATION') return gameState;
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求进入战斗阶段`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -5825,7 +6311,7 @@ export const ServerGameService = {
         } else if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
             gameState.logs.push(`[阶段切换] 进入弃牌阶段`);
-            await ServerGameService.executeEndPhase(gameState, actingPlayer);
+            await ServerGameService.executeEndPhase(gameState, actingPlayer, false, onUpdate);
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求结束回合`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -5845,7 +6331,7 @@ export const ServerGameService = {
         if (action === 'DECLARE_END' || action === 'DISCARD') {
           if (action === 'DISCARD') {
             gameState.logs.push(`[阶段切换] 进入弃牌阶段`);
-            await ServerGameService.executeEndPhase(gameState, actingPlayer);
+            await ServerGameService.executeEndPhase(gameState, actingPlayer, false, onUpdate);
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求结束回合`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -5858,8 +6344,9 @@ export const ServerGameService = {
         } else if (action === 'RETURN_MAIN' || action === 'MAIN') {
           if (action === 'MAIN' || action === 'RETURN_MAIN') {
             gameState.phase = 'MAIN';
-            EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } });
+            await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } }, onUpdate);
             gameState.logs.push(`[阶段切换] ${actingPlayer.displayName} 返回主要阶段`);
+            if (gameState.pendingQuery || gameState.phase !== 'MAIN') return gameState;
           } else {
             gameState.logs.push(`[对抗请求] ${actingPlayer.displayName} 请求返回主要阶段`);
             ServerGameService.enterCountering(gameState, actingPlayerId, {
@@ -5896,13 +6383,14 @@ export const ServerGameService = {
           gameState.phase = 'MAIN';
           ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState?.attackers);
           gameState.battleState = undefined;
-          EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } });
+          await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } }, onUpdate);
           gameState.logs.push(`[阶段切换] 战斗中止，返回主要阶段`);
+          if (gameState.pendingQuery || gameState.phase !== 'MAIN') return gameState;
         }
         break;
       case 'BATTLE_END':
         gameState.phase = 'MAIN';
-        EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } });
+        await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } }, onUpdate);
         ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState?.attackers);
         gameState.battleState = undefined;
         gameState.logs.push(`[阶段切换] 战斗结束，返回主要阶段`);
@@ -5984,6 +6472,20 @@ export const ServerGameService = {
           if ((c as any).data?.combatImmuneUntilOwnNextTurnStartUid === player.uid) {
             delete (c as any).data.combatImmuneUntilOwnNextTurnStartUid;
             delete (c as any).data.combatImmuneSourceName;
+          }
+          if ((c as any).data?.tradeEffectDisabledUntilOwnStartUid === player.uid) {
+            delete (c as any).data.tradeEffectDisabledUntilOwnStartUid;
+          }
+          const disabledAketiRecordModes = (c as any).data?.disabledAketiRecordModesUntilOwnStart;
+          if (disabledAketiRecordModes) {
+            Object.keys(disabledAketiRecordModes).forEach(mode => {
+              if (disabledAketiRecordModes[mode] === player.uid) {
+                delete disabledAketiRecordModes[mode];
+              }
+            });
+            if (Object.keys(disabledAketiRecordModes).length === 0) {
+              delete (c as any).data.disabledAketiRecordModesUntilOwnStart;
+            }
           }
         }
       });
@@ -6164,7 +6666,7 @@ export const ServerGameService = {
     gameState.phase = 'MAIN';
     gameState.phaseTimerStart = Date.now();
     gameState.logs.push(`${player.displayName} 进入主要阶段`);
-    EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'MAIN_PHASE_START' } });
+    await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'MAIN_PHASE_START' } }, onUpdate);
     return gameState;
   },
 
@@ -6274,7 +6776,7 @@ export const ServerGameService = {
     }
   },
 
-  async executeEndPhase(gameState: GameState, player: PlayerState, skipEvents: boolean = false) {
+  async executeEndPhase(gameState: GameState, player: PlayerState, skipEvents: boolean = false, onUpdate?: (state: GameState) => Promise<void>) {
     if (!skipEvents) {
       gameState.phase = 'END';
       gameState.logs.push(`${player.displayName} 的结束阶段`);
@@ -6293,10 +6795,11 @@ export const ServerGameService = {
         type: 'TURN_END' as any,
         playerUid: player.uid
       });
+      ServerGameService.enqueueMandatoryEndTurnDelayedEffects(gameState, player.uid);
 
       // Check if any triggers were added to the queue
       if (gameState.triggeredEffectsQueue && gameState.triggeredEffectsQueue.length > 0) {
-        await ServerGameService.checkTriggeredEffects(gameState);
+        await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
         // If we now have a pending query, don't proceed to turn transition yet
         if (gameState.pendingQuery) return;
         if (gameState.phase !== 'END' || !gameState.players[player.uid]?.isTurn) return;
@@ -6384,7 +6887,9 @@ export const ServerGameService = {
       players: {
         [({ uid: "temp", displayName: "temp" } as any).uid]: initialPlayerState
       },
-      phaseTimerStart: 0
+      phaseTimerStart: 0,
+      triggeredEffectsQueue: [],
+      pendingResolutions: []
     };
     return gameState;
   },
@@ -6489,7 +6994,9 @@ export const ServerGameService = {
         [({ uid: "temp", displayName: "temp" } as any).uid]: myState,
         'BOT_PLAYER': botState
       },
-      phaseTimerStart: 0
+      phaseTimerStart: 0,
+      triggeredEffectsQueue: [],
+      pendingResolutions: []
     };
     return gameState;
   },
@@ -7923,6 +8430,18 @@ export const ServerGameService = {
             callback: query.callbackKey,
             type: query.type,
             selection: 'YES',
+          },
+        });
+      } else if (query.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+        selections = (query.options || []).filter((option: any) => !option.disabled).slice(0, 1).map((option: any) => option.id).filter(Boolean);
+        ServerGameService.recordAiDecision(gameState, playerUid, {
+          action: 'TRIGGER_ORDER_CHOICE',
+          subject: query.title || '选择诱发效果',
+          reason: '自动选择当前优先级组中的第一个诱发效果继续结算。',
+          details: {
+            callback: query.callbackKey,
+            type: query.type,
+            selection: selections[0] || 'none',
           },
         });
       } else if (query.options && query.options.length > 0) {

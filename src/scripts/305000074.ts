@@ -7,6 +7,7 @@ const effect_305000074_trigger: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['ITEM'],
   triggerEvent: 'PHASE_CHANGED',
+  isMandatory: false,
   description: '每个对手回合开始时，若你只控制1个神蚀单位，你可以查看对手卡组顶1张卡，并将其放置到卡组顶或卡组底。',
   condition: (gameState, playerState, instance, event) =>
     instance.cardlocation === 'ITEM' &&

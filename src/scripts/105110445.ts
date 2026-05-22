@@ -26,6 +26,7 @@ const effect_105110445_end: CardEffect = {
   id: '105110445_end',
   type: 'TRIGGER',
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '你的回合结束时，你可以抽最多X张卡。X为你控制的不同道具种类数量。',
   condition: (_gameState, playerState, instance) =>

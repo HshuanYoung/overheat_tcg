@@ -19,6 +19,7 @@ const cardEffects: CardEffect[] = [{
   }, {
     id: '102050091_battle_save',
     type: 'TRIGGER',
+  isMandatory: false,
     triggerLocation: ['HAND'],
     isGlobal: true,
     description: '你的1个单位将要被战斗破坏时，支付三费且我方场上有2个以上红色单位：可以将这张卡从手牌放置到战场上。之后，防止那次破坏。',

@@ -27,6 +27,7 @@ const card: Card = {
       id: 'minotaur_guard_trigger',
       type: 'TRIGGER',
       triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
       description: '【诱发】：当这个单位进入单位区时，如果你单位区中包含3个或3个以上「九尾商会联盟」的单位，你可以选择发动，选择对手的一个横置状态的力量值少于1500点的一个单位并将其破坏。',
       condition: (gameState, playerState, instance, event) => {
         if (event?.sourceCardId !== instance.gamecardId || event?.data?.zone !== 'UNIT') return false;

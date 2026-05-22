@@ -270,6 +270,7 @@ export interface CardEffect {
   targetSpec?: EffectTargetSpec;
   content?: string; // Description of the effect: Move, Draw, Add Power, etc.
   description: string; // Human readable text
+  wealthValue?: number;
   substitutionFilter?: CardFilter; // Filter for units this card can substitute/protect
   substitutionAction?: 'DESTROY_SELF' | 'SEND_SELF_TO_GRAVE' | 'EXHAUST_SELF';
   substitutionOnlyEffect?: boolean;
@@ -422,6 +423,7 @@ export interface EffectQuery {
   playerUid: string;
   options: {
     id?: string;
+    selectionId?: string;
     value?: string;
     sourceCardNo?: string;
     optionCode?: string;
@@ -492,11 +494,24 @@ export interface AiDecisionLog {
 }
 
 export interface TriggeredEffectRecord {
+  queueId?: string;
   card: Card;
+  sourceCard?: Card;
   effect: CardEffect;
   effectIndex: number;
   playerUid: string;
   event?: GameEvent;
+  virtualTriggerType?: 'RETURN_TO_EXILE_AT_END' | 'RETURN_TO_DECK_BOTTOM_AT_END' | 'LOSE_AT_END' | 'PENDING_RESOLUTION';
+  virtualPayload?: {
+    targetCardId?: string;
+    sourceCardId?: string;
+    sourceName?: string;
+    effectOwnerUid?: string;
+    turnCount?: number;
+    targetZone?: TriggerLocation;
+    predicateKey?: 'STILL_IN_UNIT';
+    pendingResolutionIndex?: number;
+  };
 }
 
 export interface PendingShenyi {
@@ -554,6 +569,7 @@ export interface GameState {
   };
   battleState?: {
     attackers: string[]; // gamecardIds
+    battleId?: string;
     defender?: string; // gamecardId
     unitTargetId?: string; // Explicit target for the attack (forces unit combat)
     defenseLockedToTargetId?: string; // If set, only this unit can be declared as defender for this battle

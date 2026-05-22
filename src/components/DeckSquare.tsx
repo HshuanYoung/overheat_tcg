@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Copy, Heart, Loader2, Search, Trash2, UserRound } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Card } from '../types/game';
 import { useCardCatalog } from '../hooks/useCardCatalog';
 import { CardComponent } from './Card';

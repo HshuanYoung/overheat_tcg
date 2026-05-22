@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '105120266_reforge',
   type: 'TRIGGER',
   triggerEvent: ['CARD_ENTERED_ZONE', 'CARD_LEFT_FIELD'],
+  isMandatory: false,
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK'],
   limitCount: 1,
   limitNameType: true,

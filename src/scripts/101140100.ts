@@ -1,10 +1,18 @@
 import { Card, CardEffect, TriggerLocation } from '../types/game';
-import { AtomicEffectExecutor, addInfluence, allCardsOnField, createSelectCardQuery, ensureData, exileByEffect, moveCard, ownUnits, ownerUidOf } from './BaseUtil';
+import { AtomicEffectExecutor, addInfluence, allCardsOnField, createSelectCardQuery, ensureData, hasBattlefieldSpecialNameConflict, moveCard, ownUnits, ownerUidOf } from './BaseUtil';
+
+const getFieldSlotIndex = (gameState: any, ownerUid: string, card: Card) => {
+  const owner = gameState.players[ownerUid];
+  const zone = card.cardlocation;
+  const zoneCards = zone === 'ITEM' ? owner?.itemZone : zone === 'UNIT' ? owner?.unitZone : undefined;
+  return Array.isArray(zoneCards) ? zoneCards.findIndex((slot: Card | null) => slot?.gamecardId === card.gamecardId) : -1;
+};
 
 const cardEffects: CardEffect[] = [{
     id: '101140100_blink',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     description: '入场时，若你的<女神教会>单位有3个以上，放逐战场上1张其他卡，下一次你的回合结束时返回。',
     condition: (_gameState, playerState, instance, event) => event?.sourceCardId === instance.gamecardId && event.data?.zone === 'UNIT' && ownUnits(playerState).filter(unit => unit.faction === '女神教会').length >= 3,
@@ -28,19 +36,24 @@ const cardEffects: CardEffect[] = [{
       if (!target) return;
       const ownerUid = ownerUidOf(gameState, target);
       const zone = target.cardlocation as TriggerLocation;
+      const slotIndex = ownerUid ? getFieldSlotIndex(gameState, ownerUid, target) : -1;
       const id = target.gamecardId;
-      exileByEffect(gameState, target, instance);
+      moveCard(gameState, ownerUid, target, 'EXILE', instance, { faceDown: false });
       const exiled = AtomicEffectExecutor.findCardById(gameState, id);
       if (exiled) {
         ensureData(exiled).returnAtOwnEndSourceName = instance.fullName;
-        addInfluence(exiled, instance, '在回合结束时回归战场');
+        addInfluence(exiled, instance, '在下一个回合结束时回归战场');
       }
+      const currentTurnPlayerUid = gameState.playerIds[gameState.currentTurnPlayer];
+      const returnTurn = gameState.turnCount + (currentTurnPlayerUid === playerState.uid ? 2 : 1);
       const returns = (playerState as any).blinkReturns || [];
       returns.push({
         cardId: id,
         ownerUid,
         zone,
-        afterTurn: gameState.turnCount,
+        slotIndex,
+        sourceCardId: instance.gamecardId,
+        afterTurn: returnTurn,
         sourceName: instance.fullName
       });
       (playerState as any).blinkReturns = returns;
@@ -52,14 +65,17 @@ const cardEffects: CardEffect[] = [{
     triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK'],
     isMandatory: true,
     description: '下一次你的回合结束时，将此效果放逐的卡放回其持有者的战场。',
-    condition: (gameState, playerState, _instance, event) =>
+    condition: (gameState, playerState, instance, event) =>
       event?.playerUid === playerState.uid &&
-      ((playerState as any).blinkReturns || []).some((entry: any) => gameState.turnCount >= entry.afterTurn),
+      ((playerState as any).blinkReturns || []).some((entry: any) =>
+        entry.sourceCardId === instance.gamecardId &&
+        gameState.turnCount >= entry.afterTurn
+      ),
     execute: async (instance, gameState, playerState) => {
       const returns = ((playerState as any).blinkReturns || []) as any[];
       const remaining: any[] = [];
       returns.forEach(entry => {
-        if (gameState.turnCount < entry.afterTurn) {
+        if (entry.sourceCardId !== instance.gamecardId || gameState.turnCount < entry.afterTurn) {
           remaining.push(entry);
           return;
         }
@@ -68,7 +84,13 @@ const cardEffects: CardEffect[] = [{
         if (exiled && entry.ownerUid && exiled.cardlocation === 'EXILE') {
           const data = ensureData(exiled);
           delete data.returnAtOwnEndSourceName;
-          moveCard(gameState, entry.ownerUid, exiled, entry.zone || 'UNIT', instance);
+          const returnZone = entry.zone || 'UNIT';
+          if (hasBattlefieldSpecialNameConflict(gameState, entry.ownerUid, exiled, returnZone)) {
+            moveCard(gameState, entry.ownerUid, exiled, 'GRAVE', instance);
+            gameState.logs.push(`[${entry.sourceName || instance.fullName}] ${exiled.fullName} 因同专用名已存在，改为送入墓地。`);
+            return;
+          }
+          moveCard(gameState, entry.ownerUid, exiled, returnZone, instance, { targetIndex: entry.slotIndex });
           gameState.logs.push(`[${entry.sourceName || instance.fullName}] ${exiled.fullName} 在回合结束时回归战场。`);
         }
       });

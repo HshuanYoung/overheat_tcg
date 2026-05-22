@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '302000034_attack_boost',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ATTACK_DECLARED',
+  isMandatory: false,
   triggerLocation: ['ITEM'],
   isGlobal: true,
   limitCount: 1,

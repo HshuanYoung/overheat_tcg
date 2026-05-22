@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '303090043_turn_end_recover',
   type: 'TRIGGER',
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   triggerLocation: ['ITEM'],
   description: '你的回合结束时，可以横置这张卡并丢弃1张<瑟诺布>手牌，随机将墓地中的2张卡放置到卡组底。',
   condition: (_gameState, playerState, instance, event?: GameEvent) =>

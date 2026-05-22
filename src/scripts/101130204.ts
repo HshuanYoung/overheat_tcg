@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130204_enter_bottom',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '入场时，若你的战场上有【神依】单位，可以选择对手战场1张非神蚀卡放置到卡组底。',
   condition: (gameState, playerState, instance, event) => {

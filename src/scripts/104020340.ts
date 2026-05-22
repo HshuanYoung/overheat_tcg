@@ -11,6 +11,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'TURN_END' as any,
+  isMandatory: false,
   description: '你的回合结束时，选择侵蚀区中的1张非神蚀卡，将你战场上的1个菲晶单位破坏：可以将被选择的侵蚀区卡放置到战场上。',
   condition: (_gameState, playerState, _instance, event) =>
     event?.playerUid === playerState.uid &&
@@ -135,7 +136,7 @@ const card: Card = {
   isExhausted: false,
   isrush: false,
   canAttack: true,
-  feijingMark: true,
+  feijingMark: false,
   canResetCount: 0,
   effects: cardEffects,
   rarity: 'SR',

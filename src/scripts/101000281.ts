@@ -14,6 +14,7 @@ const effect_101000281_enter_ready: CardEffect = {
   id: '101000281_enter_ready',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,
@@ -94,7 +95,7 @@ const card: Card = {
   effects: [effect_101000281_enter_ready],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'BT06',
+  cardPackage: 'SP02',
   uniqueId: null as any,
 };
 

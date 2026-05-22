@@ -7,6 +7,7 @@ const effect_105000169_trigger: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['GRAVE'],
   triggerEvent: 'CARD_DESTROYED_BATTLE',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   description: '这个单位被战斗破坏时，你可以支付1点费用。若如此做，对手选择自己的1张手牌舍弃。',

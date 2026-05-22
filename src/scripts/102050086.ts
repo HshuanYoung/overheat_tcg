@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '102050086_attack_buff',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ATTACK_DECLARED',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     isGlobal: true,
     description: '你的<伊列宇王国>单位攻击时，本回合中那个单位力量+500。',

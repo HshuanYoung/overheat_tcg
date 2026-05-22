@@ -11,6 +11,7 @@ const effect_104000269_hand_unit_filter: CardEffect = {
   id: '104000269_hand_unit_filter',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   limitCount: 1,
@@ -82,7 +83,7 @@ const card: Card = {
   effects: [effect_104000269_hand_unit_filter],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'BT06',
+  cardPackage: 'SP02',
   uniqueId: null as any,
 };
 

@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  isMandatory: false,
   limitCount: 1,
   description: '1回合1次：你的单位被破坏时，可以选择墓地1张卡放置到卡组底。',
   condition: (_gameState, playerState, _instance, event) =>
@@ -67,7 +68,7 @@ const card: Card = {
   effects: cardEffects,
   rarity: 'PR',
   availableRarities: ['PR'],
-  cardPackage: 'BT05',
+  cardPackage: 'PR',
   uniqueId: null as any,
 };
 

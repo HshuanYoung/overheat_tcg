@@ -13,6 +13,7 @@ const cardEffects: CardEffect[] = [{
   id: '103000331_enter_color',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   description: '进入战场时，可以宣言1个颜色，这个单位也具备该颜色。若不是通过《极彩鸟》的效果放置，本回合结束时放置到持有者卡组底。',
   condition: (_gameState, _playerState, instance, event) =>

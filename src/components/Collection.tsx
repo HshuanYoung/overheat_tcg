@@ -1,7 +1,7 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Search, Loader2, Layout, CreditCard, Image as ImageIcon, Trash2, Plus, Check, Save, Sparkles, Share2, UploadCloud } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn, getCardImageUrl } from '../lib/utils';
 import { CARD_BACKS, RAY_CARDS } from '../data/customization';
 import { FACTIONS } from '../data/factions';
@@ -221,7 +221,7 @@ export const Collection: React.FC = () => {
       return;
     }
 
-    const validation = validateDeckForBattle(deck);
+    const validation = validateDeckForBattle(deck, getCardByReference);
     if (!validation.valid) {
       alert(validation.error || '只有合法卡组才能分享');
       return;
@@ -245,7 +245,7 @@ export const Collection: React.FC = () => {
   };
 
   const publishDeck = async (deck: Deck) => {
-    const validation = validateDeckForBattle(deck);
+    const validation = validateDeckForBattle(deck, getCardByReference);
     if (!validation.valid) {
       alert(validation.error || '只有合法卡组才能发布');
       return;

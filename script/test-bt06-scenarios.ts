@@ -1,6 +1,7 @@
 import { ServerGameService } from '../server/ServerGameService';
 import { EventEngine } from '../src/services/EventEngine';
 import { Card, TriggerLocation } from '../src/types/game';
+import { getCardWealthValue, getPlayerWealthCount } from '../src/lib/wealth';
 import { moveCardAsCost } from '../src/scripts/BaseUtil';
 import bt06W01 from '../src/scripts/101100342';
 import bt06W02 from '../src/scripts/101140343';
@@ -12,6 +13,7 @@ import bt06W08 from '../src/scripts/201140100';
 import bt06W09 from '../src/scripts/201140101';
 import bt06W11 from '../src/scripts/101140347';
 import bt06B01 from '../src/scripts/104020335';
+import bt06B02 from '../src/scripts/104020336';
 import bt06B03 from '../src/scripts/104020337';
 import bt06B04 from '../src/scripts/104020338';
 import bt06B05 from '../src/scripts/104020339';
@@ -52,6 +54,14 @@ import bt06Y08 from '../src/scripts/205000106';
 import bt06Y09 from '../src/scripts/205000103';
 import bt06Y10 from '../src/scripts/305000055';
 import bt06Y11 from '../src/scripts/105110355';
+import academyFeijingMerchant from '../src/scripts/105110223';
+import greatAlchemist from '../src/scripts/105120167';
+import alchemyKnightElmont from '../src/scripts/105120168';
+import divineAlchemy from '../src/scripts/205000136';
+import forbiddenAlchemy from '../src/scripts/205000064';
+import escort from '../src/scripts/101140151';
+import valkyrieZero from '../src/scripts/105110114';
+import chocolate from '../src/scripts/205000149';
 import devotion from '../src/scripts/201100099';
 import prayer from '../src/scripts/201000102';
 
@@ -218,6 +228,10 @@ async function activateAndResolveByOpponentPass(state: any, playerUid: string, c
 
 async function activateTriggerAndAnswerYes(state: any, playerUid: string) {
   await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    const optionId = state.pendingQuery.options?.[0]?.id;
+    if (optionId) await answerPendingQuery(state, state.pendingQuery.playerUid, [optionId]);
+  }
   if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
     await answerPendingQuery(state, playerUid, ['YES']);
   }
@@ -544,11 +558,12 @@ async function testAngelAdventPlacesShingiMarkedUnit(): Promise<ScenarioResult> 
   const name = 'BT06-W08 Angel Advent places AC5+ white unit with Shingi marker';
   const storyCard = cloneScriptCard(bt06W08 as Card, 'HAND');
   const fodder = [0, 1, 2].map(index => testCard({ id: `W08_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
+  const extraFodder = [3, 4, 5].map(index => testCard({ id: `W08_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
   const target = cloneScriptCard(bt06W11 as Card, 'DECK');
   const state = game({
     hand: [storyCard],
     deck: [target, ...deckCards(5, 'BOT_FILL')],
-    unitZone: [fodder[0], fodder[1], fodder[2], null, null, null],
+    unitZone: [fodder[0], fodder[1], fodder[2], extraFodder[0], extraFodder[1], extraFodder[2]],
   });
 
   await playStoryAndResolve(state, 'BOT', storyCard);
@@ -571,6 +586,7 @@ async function testDawnRitualPlacesGoddessChurchAc3(): Promise<ScenarioResult> {
   const name = 'BT06-W09 Dawn Ritual places Betis or Goddess Church AC3 unit';
   const storyCard = cloneScriptCard(bt06W09 as Card, 'HAND');
   const fodder = [0, 1, 2].map(index => testCard({ id: `W09_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
+  const extraFodder = [3, 4, 5].map(index => testCard({ id: `W09_FODDER_${index}`, fullName: `Fodder ${index}`, cardlocation: 'UNIT' }));
   const target = testCard({
     id: 'W09_TARGET',
     fullName: '女神教会目标',
@@ -583,7 +599,7 @@ async function testDawnRitualPlacesGoddessChurchAc3(): Promise<ScenarioResult> {
   const state = game({
     hand: [storyCard],
     deck: [target, ...deckCards(5, 'BOT_FILL')],
-    unitZone: [fodder[0], fodder[1], fodder[2], null, null, null],
+    unitZone: [fodder[0], fodder[1], fodder[2], extraFodder[0], extraFodder[1], extraFodder[2]],
   });
 
   await playStoryAndResolve(state, 'BOT', storyCard);
@@ -746,6 +762,86 @@ async function testBlueWealthCounterAndLogistics(): Promise<ScenarioResult> {
     : fail(name, `countered=${counteredToHand}, costPaid=${costPaid}, recruited=${recruitedLive}`);
 }
 
+async function testBlueWealthCountUsesContinuousOnly(): Promise<ScenarioResult> {
+  const name = 'BT06-B wealth counter counts only Wealth continuous effects';
+  const logistics = cloneScriptCard(bt06B01 as Card, 'UNIT');
+  const rolys = cloneScriptCard(bt06B03 as Card, 'UNIT');
+  const caravan = cloneScriptCard(bt06B04 as Card, 'UNIT');
+  const aketi = cloneScriptCard(bt06B05 as Card, 'UNIT');
+  const tradeExpert = cloneScriptCard(bt06B02 as Card, 'UNIT');
+  const silencedLogistics = cloneScriptCard(bt06B01 as Card, 'UNIT');
+  const state = game({
+    unitZone: [logistics, rolys, caravan, aketi, tradeExpert, null],
+  });
+  const silencedState = game({
+    unitZone: [silencedLogistics, null, null, null, null, null],
+  });
+  (silencedLogistics as any).data = { fullEffectSilencedTurn: silencedState.turnCount };
+
+  const totalWealth = getPlayerWealthCount(state.players.BOT);
+  const tradeExpertWealth = getCardWealthValue(tradeExpert);
+  const silencedWealth = getPlayerWealthCount(silencedState.players.BOT, { turnCount: silencedState.turnCount });
+
+  return totalWealth === 5 && tradeExpertWealth === 0 && silencedWealth === 0
+    ? pass(name, `wealth=${totalWealth}, tradeExpert=${tradeExpertWealth}, silenced=${silencedWealth}`)
+    : fail(name, `wealth=${totalWealth}, tradeExpert=${tradeExpertWealth}, silenced=${silencedWealth}`);
+}
+
+async function testTradeExpertPreventsThisBattleDestroy(): Promise<ScenarioResult> {
+  const name = 'BT06-B02 Trade Expert prevents battle destruction for this battle';
+  const logistics = cloneScriptCard(bt06B01 as Card, 'UNIT');
+  const rolys = cloneScriptCard(bt06B03 as Card, 'UNIT');
+  const caravan = cloneScriptCard(bt06B04 as Card, 'UNIT');
+  const tradeExpert = cloneScriptCard(bt06B02 as Card, 'UNIT');
+  const attacker = testCard({
+    id: 'B02_ATTACKER',
+    fullName: 'B02 Attacker',
+    type: 'UNIT',
+    color: 'BLUE',
+    cardlocation: 'UNIT',
+    power: 1000,
+    basePower: 1000,
+  });
+  const defender = testCard({
+    id: 'B02_DEFENDER',
+    fullName: 'B02 Defender',
+    type: 'UNIT',
+    color: 'RED',
+    cardlocation: 'UNIT',
+    power: 3000,
+    basePower: 3000,
+  });
+  const handCosts = [0, 1].map(index => testCard({ id: `B02_COST_${index}`, color: 'BLUE', cardlocation: 'HAND' }));
+  const state = game({
+    hand: handCosts,
+    unitZone: [logistics, rolys, caravan, tradeExpert, attacker, null],
+  }, {
+    unitZone: [defender, null, null, null, null, null],
+  }, {
+    phase: 'BATTLE_FREE',
+    previousPhase: 'BATTLE_FREE',
+    battleState: {
+      attackers: [attacker.gamecardId],
+      defender: defender.gamecardId,
+      isAlliance: false,
+      resolvedUnitIds: [],
+      battleId: 'B02_TEST_BATTLE',
+    },
+  });
+
+  await activateAndResolveByOpponentPass(state, 'BOT', tradeExpert, 0);
+  state.phase = 'DAMAGE_CALCULATION';
+  await ServerGameService.resolveDamage(state);
+
+  const attackerLive = state.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === attacker.gamecardId);
+  const attackerDestroyed = state.players.BOT.grave.some((card: Card) => card.gamecardId === attacker.gamecardId);
+  const costsPaid = handCosts.every(cost => state.players.BOT.grave.some((card: Card) => card.gamecardId === cost.gamecardId));
+
+  return attackerLive && !attackerDestroyed && costsPaid
+    ? pass(name, `attackerLive=${attackerLive}, costsPaid=${costsPaid}`)
+    : fail(name, `attackerLive=${attackerLive}, destroyed=${attackerDestroyed}, costsPaid=${costsPaid}`);
+}
+
 async function testBlueAketiTeteruAndRecord(): Promise<ScenarioResult> {
   const name = 'BT06-B05/B06/B09 destroy recover and put field cards';
   const aketi = cloneScriptCard(bt06B05 as Card, 'UNIT');
@@ -813,6 +909,79 @@ async function testBlueAketiTeteruAndRecord(): Promise<ScenarioResult> {
   return recordInHand && fodderDestroyed && itemLive && erosionPutLive
     ? pass(name, `record=${recordInHand}, item=${itemLive}, erosionPut=${erosionPutLive}`)
     : fail(name, `record=${recordInHand}, destroyed=${fodderDestroyed}, item=${itemLive}, erosionPut=${erosionPutLive}`);
+}
+
+async function testBlueUntilNextOwnTurnStartLocksExpireOnOwnStart(): Promise<ScenarioResult> {
+  const name = 'BT06-B02/B09 option locks expire at next own turn start';
+  const wealthUnits = () => [
+    cloneScriptCard(bt06B01 as Card, 'UNIT'),
+    cloneScriptCard(bt06B01 as Card, 'UNIT'),
+    cloneScriptCard(bt06B01 as Card, 'UNIT'),
+    null,
+    null,
+    null,
+  ];
+
+  const caravan = cloneScriptCard(bt06B02 as Card, 'UNIT');
+  const caravanCosts = [0, 1].map(index => testCard({ id: `B02_COST_${index}`, color: 'BLUE', cardlocation: 'HAND' }));
+  const caravanState = game({
+    hand: caravanCosts,
+    unitZone: [caravan, ...wealthUnits().slice(0, 5)],
+  }, {
+    deck: deckCards(6, 'B02_OPP_DECK', 'RED'),
+  });
+
+  await activateAndResolveByOpponentPass(caravanState, 'BOT', caravan, 1);
+  const caravanLockedAfterUse = !caravan.effects?.[1].condition?.(caravanState, caravanState.players.BOT, caravan, undefined);
+  caravanState.turnCount = 7;
+  caravanState.currentTurnPlayer = 1;
+  caravanState.players.BOT.isTurn = false;
+  caravanState.players.P1.isTurn = true;
+  const caravanLockedOnOpponentTurn = !caravan.effects?.[1].condition?.(caravanState, caravanState.players.BOT, caravan, undefined);
+  caravanState.players.BOT.hand = [0, 1].map(index => testCard({ id: `B02_NEXT_COST_${index}`, color: 'BLUE', cardlocation: 'HAND' }));
+  await ServerGameService.finishTurnTransition(caravanState);
+  const caravanUnlockedOnOwnStart =
+    caravanState.players.BOT.isTurn &&
+    !(caravan as any).data?.tradeEffectDisabledUntilOwnStartUid;
+
+  const record = cloneScriptCard(bt06B09 as Card, 'PLAY');
+  const recordState = game({
+    deck: deckCards(8, 'B09_DRAW_DECK', 'BLUE'),
+    grave: deckCards(2, 'B09_GRAVE', 'BLUE').map(card => ({ ...card, cardlocation: 'GRAVE' })),
+    unitZone: wealthUnits(),
+    playZone: [record],
+  });
+
+  await record.effects?.[0].execute?.(record, recordState, recordState.players.BOT, undefined as any);
+  if (recordState.pendingQuery?.context?.step !== 'MODE') {
+    return fail(name, `expected record mode query, got ${recordState.pendingQuery?.context?.step || 'none'}`);
+  }
+  await record.effects?.[0].onQueryResolve?.(record, recordState, recordState.players.BOT, ['RECOVER_DRAW'], {
+    sourceCardId: record.gamecardId,
+    effectId: '204000098_record_modes',
+    step: 'MODE',
+  });
+  const recoverDrawLockedAfterUse =
+    (record as any).data?.disabledAketiRecordModesUntilOwnStart?.RECOVER_DRAW === 'BOT';
+  recordState.turnCount = 7;
+  recordState.currentTurnPlayer = 1;
+  recordState.players.BOT.isTurn = false;
+  recordState.players.P1.isTurn = true;
+  const recoverDrawLockedOnOpponentTurn =
+    (record as any).data?.disabledAketiRecordModesUntilOwnStart?.RECOVER_DRAW === 'BOT';
+  await ServerGameService.finishTurnTransition(recordState);
+  const recoverDrawUnlockedOnOwnStart =
+    recordState.players.BOT.isTurn &&
+    !(record as any).data?.disabledAketiRecordModesUntilOwnStart?.RECOVER_DRAW;
+
+  return caravanLockedAfterUse &&
+    caravanLockedOnOpponentTurn &&
+    caravanUnlockedOnOwnStart &&
+    recoverDrawLockedAfterUse &&
+    recoverDrawLockedOnOpponentTurn &&
+    recoverDrawUnlockedOnOwnStart
+    ? pass(name, `caravanUnlocked=${!!caravanUnlockedOnOwnStart}, recordUnlocked=${!!recoverDrawUnlockedOnOwnStart}`)
+    : fail(name, `caravan after=${caravanLockedAfterUse} opp=${caravanLockedOnOpponentTurn} own=${!!caravanUnlockedOnOwnStart}; record after=${recoverDrawLockedAfterUse} opp=${recoverDrawLockedOnOpponentTurn} own=${!!recoverDrawUnlockedOnOwnStart}`);
 }
 
 async function testBlueCheckLetsOpponentPayOrCounters(): Promise<ScenarioResult> {
@@ -1066,14 +1235,35 @@ async function testGreenBirdSalalaAndAccordion(): Promise<ScenarioResult> {
   const liveFeather = birdState.players.BOT.unitZone.find((unit: Card | null) => unit?.id === bt06G05.id);
   const featherPlaced = !!liveFeather && liveFeather.isExhausted && !(liveFeather as any).data?.returnToDeckBottomAtTurnEnd;
   const featherColorBeforeTurnEnd = !!(liveFeather as any)?.persistentExtraColors?.includes('RED');
-  if (liveFeather) {
-    await ServerGameService.executeEndPhase(birdState, birdState.players.BOT);
-  }
-  const featherColorAfterTurnEnd = !!(liveFeather as any)?.persistentExtraColors?.includes('RED');
   const featherPaysRedRequirement = !!liveFeather && ServerGameService.getColorRequirementResult(
     birdState.players.BOT,
     { RED: 1 }
   ).valid;
+  const redRequirementCard = testCard({
+    id: 'G05_RED_REQ',
+    fullName: 'Feather Red Requirement',
+    type: 'STORY',
+    color: 'RED',
+    colorReq: { RED: 1 },
+    baseColorReq: { RED: 1 },
+    acValue: 0,
+    baseAcValue: 0,
+    cardlocation: 'HAND',
+    effects: [],
+  });
+  birdState.players.BOT.hand.push(redRequirementCard);
+  let featherCanPlayRedRequirement = false;
+  try {
+    await ServerGameService.playCard(birdState, 'BOT', redRequirementCard.gamecardId, {});
+    await ServerGameService.passConfrontation(birdState, birdState.priorityPlayerId);
+    featherCanPlayRedRequirement = birdState.players.BOT.grave.some((card: Card) => card.gamecardId === redRequirementCard.gamecardId);
+  } catch {
+    featherCanPlayRedRequirement = false;
+  }
+  if (liveFeather) {
+    await ServerGameService.executeEndPhase(birdState, birdState.players.BOT);
+  }
+  const featherColorAfterTurnEnd = !!(liveFeather as any)?.persistentExtraColors?.includes('RED');
 
   const salala = cloneScriptCard(bt06G07 as Card, 'UNIT');
   const chimeraCost = cloneScriptCard(bt06G11 as Card, 'GRAVE');
@@ -1124,9 +1314,9 @@ async function testGreenBirdSalalaAndAccordion(): Promise<ScenarioResult> {
   }
   const silenced = target.silencedEffectIds?.includes('G10_DUMMY_ACTIVATE') === true;
 
-  return featherPlaced && featherColorBeforeTurnEnd && featherColorAfterTurnEnd && featherPaysRedRequirement && lockedAndRecovered && silenced
-    ? pass(name, `feather=${featherPlaced}, color=${featherColorAfterTurnEnd}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`)
-    : fail(name, `feather=${featherPlaced}, colorBefore=${featherColorBeforeTurnEnd}, colorAfter=${featherColorAfterTurnEnd}, pays=${featherPaysRedRequirement}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`);
+  return featherPlaced && featherColorBeforeTurnEnd && featherColorAfterTurnEnd && featherPaysRedRequirement && featherCanPlayRedRequirement && lockedAndRecovered && silenced
+    ? pass(name, `feather=${featherPlaced}, color=${featherColorAfterTurnEnd}, play=${featherCanPlayRedRequirement}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`)
+    : fail(name, `feather=${featherPlaced}, colorBefore=${featherColorBeforeTurnEnd}, colorAfter=${featherColorAfterTurnEnd}, pays=${featherPaysRedRequirement}, play=${featherCanPlayRedRequirement}, lockedRecovered=${lockedAndRecovered}, silenced=${silenced}`);
 }
 
 async function testCannotExhaustUnitIsNotAvailableDefender(): Promise<ScenarioResult> {
@@ -1322,7 +1512,8 @@ async function testRedDikaiTrackExplore(): Promise<ScenarioResult> {
     await answerPendingQuery(trackState, 'BOT', [enemy.gamecardId]);
   }
   const tracked = trackState.players.BOT.markedUnitAttackTarget === enemy.gamecardId &&
-    trackState.players.BOT.exile.some((card: Card) => card.id === bt06R08.id);
+    trackState.players.BOT.exile.some((card: Card) => card.id === bt06R08.id) &&
+    !(redSource as any).data?.canAttackAnyUnit;
 
   const explore = cloneScriptCard(bt06R09 as Card, 'HAND');
   const handUnit = cloneScriptCard(bt06R02 as Card, 'HAND');
@@ -1490,6 +1681,7 @@ async function testRedTrainerLockAndCelia(): Promise<ScenarioResult> {
   }
   EventEngine.recalculateContinuousEffects(lockState);
   const locked = !!(enemy as any).data?.cannotExhaustUntilTurn;
+  const lockedCantAttack = ServerGameService.getForcedAttackUnits(lockState, 'BOT').length === 0;
   lockState.players.BOT.isTurn = false;
   lockState.players.P1.isTurn = true;
   lockState.currentTurnPlayer = 1;
@@ -1512,9 +1704,9 @@ async function testRedTrainerLockAndCelia(): Promise<ScenarioResult> {
   EventEngine.recalculateContinuousEffects(celiaState);
   const celiaFreed = !(celia as any).data?.cannotAttackOrDefendUntilTurn && !(celia as any).cannotBeEffectTargetByEffect;
 
-  return trainerPlaced && locked && broken && initiallyLocked && celiaFreed
-    ? pass(name, `trainer=${trainerPlaced}, locked=${locked}, broken=${broken}, celia=${celiaFreed}`)
-    : fail(name, `trainer=${trainerPlaced}, locked=${locked}, broken=${broken}, initial=${initiallyLocked}, celia=${celiaFreed}`);
+  return trainerPlaced && locked && lockedCantAttack && broken && initiallyLocked && celiaFreed
+    ? pass(name, `trainer=${trainerPlaced}, locked=${locked}, lockedCantAttack=${lockedCantAttack}, broken=${broken}, celia=${celiaFreed}`)
+    : fail(name, `trainer=${trainerPlaced}, locked=${locked}, lockedCantAttack=${lockedCantAttack}, broken=${broken}, initial=${initiallyLocked}, celia=${celiaFreed}`);
 }
 
 async function testYellowPartsHickAndValkyrie(): Promise<ScenarioResult> {
@@ -1544,7 +1736,10 @@ async function testYellowPartsHickAndValkyrie(): Promise<ScenarioResult> {
   const hickState = game({
     hand: [handPart],
     unitZone: [hick, partLive ? cloneScriptCard(bt06Y01 as Card, 'UNIT') : null, null, null, null, null],
-    erosionBack: [testCard({ id: 'Y03_EB', cardlocation: 'EROSION_BACK' })],
+    erosionBack: [
+      testCard({ id: 'Y03_EB_A', cardlocation: 'EROSION_BACK' }),
+      testCard({ id: 'Y03_EB_B', cardlocation: 'EROSION_BACK' })
+    ],
   });
   EventEngine.recalculateContinuousEffects(hickState);
   const protectedPart = hickState.players.BOT.unitZone[1] as Card;
@@ -1569,20 +1764,24 @@ async function testYellowPartsHickAndValkyrie(): Promise<ScenarioResult> {
   }
   const fodderDestroyed = valkyrieState.players.BOT.grave.some((card: Card) => card.gamecardId === fodder.gamecardId);
   const boosted = valkyrie.power === 4000 && !!valkyrie.temporaryAnnihilation;
-  const valkyrieInHand = cloneScriptCard(bt06Y04 as Card, 'HAND');
-  const valkyrieCannotPayAsFeijing = !valkyrie.feijingMark && !ServerGameService.payCost(
-    game({
-      hand: [valkyrieInHand],
-    }),
-    'BOT',
-    3,
-    { feijingCardId: valkyrieInHand.gamecardId },
-    'YELLOW'
-  ).success;
 
-  return partLive && makerPaid && protectedFromOpponent && hickPlaced && fodderDestroyed && boosted && valkyrieCannotPayAsFeijing
-    ? pass(name, `part=${!!partLive}, hickPlaced=${hickPlaced}, boosted=${boosted}, valkyrieFeijing=${valkyrie.feijingMark}`)
-    : fail(name, `part=${!!partLive}, makerPaid=${makerPaid}, protected=${protectedFromOpponent}, hick=${hickPlaced}, fodder=${fodderDestroyed}, boosted=${boosted}, valkyrieCannotPay=${valkyrieCannotPayAsFeijing}`);
+  const oneScarHick = cloneScriptCard(bt06Y03 as Card, 'UNIT');
+  const oneScarTarget = cloneScriptCard(bt06Y01 as Card, 'HAND');
+  const oneScarState = game({
+    hand: [oneScarTarget],
+    unitZone: [oneScarHick, null, null, null, null, null],
+    erosionBack: [testCard({ id: 'Y03_ONE_EB', cardlocation: 'EROSION_BACK' })],
+  });
+  let hickRequiresScar2 = false;
+  try {
+    await ServerGameService.activateEffect(oneScarState, 'BOT', oneScarHick.gamecardId, 1);
+  } catch {
+    hickRequiresScar2 = true;
+  }
+
+  return partLive && makerPaid && protectedFromOpponent && hickPlaced && hickRequiresScar2 && fodderDestroyed && boosted
+    ? pass(name, `part=${!!partLive}, hickPlaced=${hickPlaced}, scar2=${hickRequiresScar2}, boosted=${boosted}`)
+    : fail(name, `part=${!!partLive}, makerPaid=${makerPaid}, protected=${protectedFromOpponent}, hick=${hickPlaced}, scar2=${hickRequiresScar2}, fodder=${fodderDestroyed}, boosted=${boosted}`);
 }
 
 async function testYellowHighAlchemyChipAndGiant(): Promise<ScenarioResult> {
@@ -1620,6 +1819,7 @@ async function testYellowHighAlchemyChipAndGiant(): Promise<ScenarioResult> {
   const chipPowered = chipLive?.power === 3000;
   const chipCostExiled = state.players.BOT.exile.some((card: Card) => card.gamecardId === feijingCost.gamecardId);
   const chipCopyExhausted = !!chipCopyLive?.isExhausted;
+  const chipCopyFromDeck = chipCopyLive?.cardlocation === 'UNIT';
   const storyResolved = state.players.BOT.grave.some((card: Card) => card.gamecardId === storyCard.gamecardId);
 
   const giantSource = cloneScriptCard(bt06Y09 as Card, 'GRAVE');
@@ -1642,9 +1842,211 @@ async function testYellowHighAlchemyChipAndGiant(): Promise<ScenarioResult> {
   EventEngine.recalculateContinuousEffects(giantState);
   const giantBoosted = liveGiant?.power === 4000 && !!liveGiant?.isHeroic;
 
-  return chipPowered && chipCostExiled && chipCopyExhausted && storyResolved && giantBoosted
+  return chipPowered && chipCostExiled && chipCopyExhausted && chipCopyFromDeck && storyResolved && giantBoosted
     ? pass(name, `chip=${chipPowered}, copy=${chipCopyExhausted}, giant=${giantBoosted}`)
-    : fail(name, `chip=${chipPowered}, cost=${chipCostExiled}, copy=${chipCopyExhausted}, story=${storyResolved}, giant=${giantBoosted}`);
+    : fail(name, `chip=${chipPowered}, cost=${chipCostExiled}, copy=${chipCopyExhausted}/${chipCopyFromDeck}, story=${storyResolved}, giant=${giantBoosted}`);
+}
+
+async function testAcademyFeijingMerchantLeaveTrigger(): Promise<ScenarioResult> {
+  const name = 'BT05-Y01 Academy Feijing Merchant triggers when leaving field';
+  const merchant = cloneScriptCard(academyFeijingMerchant as Card, 'UNIT');
+  const target = cloneScriptCard(bt06Y01 as Card, 'DECK', { godMark: false, baseGodMark: false });
+  const state = game({
+    deck: [target, ...deckCards(3, 'Y01_LEAVE_FILL', 'YELLOW')],
+    unitZone: [merchant, null, null, null, null, null],
+  });
+
+  ServerGameService.moveCard(state, 'BOT', 'UNIT', 'BOT', 'GRAVE', merchant.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'BOT',
+    effectSourceCardId: merchant.gamecardId,
+  });
+  await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
+    await answerPendingQuery(state, 'BOT', ['YES']);
+  }
+  if (state.pendingQuery?.context?.effectId === '105110223_enter_leave_search') {
+    await answerPendingQuery(state, 'BOT', [target.gamecardId]);
+  }
+
+  const searched = state.players.BOT.hand.some((card: Card) => card.gamecardId === target.gamecardId);
+  return searched
+    ? pass(name, `searched=${searched}`)
+    : fail(name, `searched=${searched}, pending=${state.pendingQuery?.context?.effectId || state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testDivineAlchemyDamageAndEndsTurn(): Promise<ScenarioResult> {
+  const name = 'BT04 Divine Alchemy deals AC damage then ends turn';
+  const story = cloneScriptCard(divineAlchemy as Card, 'HAND', { colorReq: {}, baseColorReq: {}, acValue: 0, baseAcValue: 0 });
+  const target = testCard({
+    id: 'DIVINE_ALCHEMY_TARGET',
+    fullName: 'Divine Alchemy Target',
+    type: 'UNIT',
+    color: 'YELLOW',
+    cardlocation: 'DECK',
+    colorReq: {},
+    baseColorReq: {},
+    acValue: 3,
+    baseAcValue: 3,
+  });
+  const damageCards = deckCards(5, 'DIVINE_ALCHEMY_DAMAGE', 'YELLOW');
+  const state = game({
+    hand: [story],
+    deck: [...damageCards, target],
+    erosionBack: [testCard({ id: 'DIVINE_ALCHEMY_EB', cardlocation: 'EROSION_BACK' })],
+  });
+
+  await playStoryAndResolve(state, 'BOT', story);
+  if (state.pendingQuery?.context?.effectId === '205000136_activate') {
+    await answerPendingQuery(state, 'BOT', [target.gamecardId]);
+  }
+
+  const targetLive = state.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === target.gamecardId);
+  const damageTaken = state.players.BOT.erosionFront.filter((card: Card | null) => !!card).length;
+  const turnEnded = state.turnCount === 7 && state.currentTurnPlayer === 1 && state.players.P1.isTurn;
+  const storyInGrave = state.players.BOT.grave.some((card: Card) => card.gamecardId === story.gamecardId);
+
+  return targetLive && damageTaken === 3 && turnEnded && storyInGrave
+    ? pass(name, `damage=${damageTaken}, turn=${state.turnCount}/${state.phase}`)
+    : fail(name, `targetLive=${targetLive}, damage=${damageTaken}, turnEnded=${turnEnded}, storyInGrave=${storyInGrave}, phase=${state.phase}, turn=${state.turnCount}, current=${state.currentTurnPlayer}`);
+}
+
+async function testGreatAlchemistLoseAtEndOfTurn(): Promise<ScenarioResult> {
+  const name = 'BT02 Great Alchemist loses at end of turn';
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const graveCards = deckCards(2, 'GREAT_ALCHEMIST_GRAVE', 'YELLOW').map(card => ({ ...card, cardlocation: 'GRAVE' as TriggerLocation }));
+  const erosion = deckCards(10, 'GREAT_ALCHEMIST_EROSION', 'YELLOW').map(card => ({ ...card, cardlocation: 'EROSION_FRONT' as TriggerLocation }));
+  const state = game({
+    deck: deckCards(5, 'GREAT_ALCHEMIST_DECK', 'YELLOW'),
+    grave: graveCards,
+    unitZone: [alchemist, null, null, null, null, null],
+    erosionFront: erosion,
+    isGoddessMode: true,
+  });
+
+  await activateAndResolveByOpponentPass(state, 'BOT', alchemist, 1);
+  const markerSet = (state.players.BOT as any).loseAtEndOfTurn === state.turnCount;
+  await ServerGameService.executeEndPhase(state, state.players.BOT);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    const loseOption = state.pendingQuery.options?.find((option: any) => String(option.id || '').startsWith('lose_at_end_'));
+    await answerPendingQuery(state, state.pendingQuery.playerUid, [loseOption?.id || state.pendingQuery.options?.[0]?.id]);
+  }
+
+  const lost = state.gameStatus === 2 && state.winnerId === 'P1';
+  const graveBottomed = graveCards.every(card => state.players.BOT.deck.some((deckCard: Card) => deckCard.gamecardId === card.gamecardId));
+
+  return markerSet && lost && graveBottomed
+    ? pass(name, `lost=${lost}, graveBottomed=${graveBottomed}`)
+    : fail(name, `marker=${markerSet}, lost=${lost}, winner=${state.winnerId || 'none'}, graveBottomed=${graveBottomed}`);
+}
+
+async function testGreatAlchemistLoseAfterLeavingField(): Promise<ScenarioResult> {
+  const name = 'BT02 Great Alchemist end loss still triggers after leaving field';
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const graveCards = deckCards(2, 'GREAT_ALCHEMIST_LEAVE_GRAVE', 'YELLOW').map(card => ({ ...card, cardlocation: 'GRAVE' as TriggerLocation }));
+  const erosion = deckCards(10, 'GREAT_ALCHEMIST_LEAVE_EROSION', 'YELLOW').map(card => ({ ...card, cardlocation: 'EROSION_FRONT' as TriggerLocation }));
+  const state = game({
+    deck: deckCards(5, 'GREAT_ALCHEMIST_LEAVE_DECK', 'YELLOW'),
+    grave: graveCards,
+    unitZone: [alchemist, null, null, null, null, null],
+    erosionFront: erosion,
+    isGoddessMode: true,
+  });
+
+  await activateAndResolveByOpponentPass(state, 'BOT', alchemist, 1);
+  const markerSet = (state.players.BOT as any).loseAtEndOfTurn === state.turnCount;
+  ServerGameService.moveCard(state, 'BOT', 'UNIT', 'BOT', 'GRAVE', alchemist.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'BOT',
+    effectSourceCardId: alchemist.gamecardId
+  });
+
+  await ServerGameService.executeEndPhase(state, state.players.BOT);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    const loseOption = state.pendingQuery.options?.find((option: any) => String(option.id || '').startsWith('lose_at_end_'));
+    await answerPendingQuery(state, state.pendingQuery.playerUid, [loseOption?.card?.gamecardId || loseOption?.id || state.pendingQuery.options?.[0]?.id]);
+  }
+
+  const lost = state.gameStatus === 2 && state.winnerId === 'P1';
+  const sourceCardShown = state.logs.some((log: any) => String(log?.text || log).includes('大炼金术士「伊丽瑟薇」')) ||
+    state.winSourceCardName === alchemist.fullName;
+
+  return markerSet && lost && sourceCardShown
+    ? pass(name, `lost=${lost}, source=${state.winSourceCardName}`)
+    : fail(name, `marker=${markerSet}, lost=${lost}, winner=${state.winnerId || 'none'}, source=${state.winSourceCardName || 'none'}, phase=${state.phase}`);
+}
+
+async function testElmontEnterTriggerIsOptional(): Promise<ScenarioResult> {
+  const name = 'BT02 Alchemy Knight Elmont enter trigger is optional';
+  const buildState = () => {
+    const elmont = cloneScriptCard(alchemyKnightElmont as Card, 'UNIT');
+    const graveA = testCard({
+      id: 'ELMONT_GRAVE_A',
+      fullName: '炼金素材 A',
+      specialName: '素材A',
+      type: 'UNIT',
+      color: 'YELLOW',
+      cardlocation: 'GRAVE',
+    });
+    const graveB = testCard({
+      id: 'ELMONT_GRAVE_B',
+      fullName: '炼金素材 B',
+      specialName: '素材B',
+      type: 'UNIT',
+      color: 'YELLOW',
+      cardlocation: 'GRAVE',
+    });
+    const drawCard = testCard({
+      id: 'ELMONT_DRAW',
+      fullName: 'Elmont draw card',
+      type: 'UNIT',
+      color: 'YELLOW',
+      cardlocation: 'DECK',
+    });
+    const state = game({
+      deck: [drawCard, ...deckCards(2, 'ELMONT_DECK', 'YELLOW')],
+      grave: [graveA, graveB],
+      unitZone: [elmont, null, null, null, null, null],
+    });
+    EventEngine.dispatchEvent(state, {
+      type: 'CARD_ENTERED_ZONE' as any,
+      playerUid: 'BOT',
+      sourceCardId: elmont.gamecardId,
+      data: { zone: 'UNIT' },
+    });
+    return { state, elmont, graveA, graveB };
+  };
+
+  const noState = buildState();
+  await ServerGameService.checkTriggeredEffects(noState.state);
+  const asksOptional = noState.state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    noState.state.pendingQuery.playerUid === 'BOT' &&
+    noState.state.pendingQuery.context?.sourceCardId === noState.elmont.gamecardId;
+  const noBeforeGrave = noState.state.players.BOT.grave.length;
+  const noBeforeDeck = noState.state.players.BOT.deck.length;
+  const noBeforeHand = noState.state.players.BOT.hand.length;
+  await answerPendingQuery(noState.state, 'BOT', ['NO']);
+  const noSkipped = noState.state.players.BOT.grave.length === noBeforeGrave &&
+    noState.state.players.BOT.deck.length === noBeforeDeck &&
+    noState.state.players.BOT.hand.length === noBeforeHand &&
+    !noState.state.pendingQuery;
+
+  const yesState = buildState();
+  await ServerGameService.checkTriggeredEffects(yesState.state);
+  await answerPendingQuery(yesState.state, 'BOT', ['YES']);
+  const asksSelection = yesState.state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
+    yesState.state.pendingQuery.context?.effectId === '105120168_enter' &&
+    yesState.state.pendingQuery.options?.length === 2;
+  await answerPendingQuery(yesState.state, 'BOT', [yesState.graveA.gamecardId, yesState.graveB.gamecardId]);
+  const graveBottomed = [yesState.graveA, yesState.graveB].every(card =>
+    yesState.state.players.BOT.deck.some((deckCard: Card) => deckCard.gamecardId === card.gamecardId)
+  );
+  const drewCard = yesState.state.players.BOT.hand.length === 1;
+  const yesResolved = graveBottomed && drewCard && !yesState.state.pendingQuery;
+
+  return asksOptional && noSkipped && asksSelection && yesResolved
+    ? pass(name, `optional=${asksOptional}, no=${noSkipped}, yes=${yesResolved}`)
+    : fail(name, `optional=${asksOptional}, no=${noSkipped}, select=${asksSelection}, yes=${yesResolved}, pending=${yesState.state.pendingQuery?.callbackKey || 'none'}`);
 }
 
 async function testYellowDailyBlueprintTruthAndIly(): Promise<ScenarioResult> {
@@ -1652,9 +2054,10 @@ async function testYellowDailyBlueprintTruthAndIly(): Promise<ScenarioResult> {
   const daily = cloneScriptCard(bt06Y08 as Card, 'HAND');
   const discard = testCard({ id: 'Y08_DISCARD', type: 'UNIT', color: 'YELLOW', cardlocation: 'HAND' });
   const dailyTarget = testCard({ id: 'Y08_TARGET', type: 'UNIT', color: 'GREEN', cardlocation: 'DECK', colorReq: {}, power: 2500, basePower: 2500, damage: 2, baseDamage: 2 });
+  const dailyTargetB = testCard({ id: 'Y08_TARGET_B', type: 'UNIT', color: 'GREEN', cardlocation: 'DECK', colorReq: {}, power: 1500, basePower: 1500, damage: 1, baseDamage: 1 });
   const dailyState = game({
     hand: [daily, discard],
-    deck: [dailyTarget, ...deckCards(4, 'Y08_FILL', 'YELLOW')],
+    deck: [dailyTargetB, dailyTarget, ...deckCards(4, 'Y08_FILL', 'YELLOW')],
     erosionBack: [testCard({ id: 'Y08_EB', cardlocation: 'EROSION_BACK' })],
   });
   await playStoryAndResolve(dailyState, 'BOT', daily);
@@ -1662,26 +2065,27 @@ async function testYellowDailyBlueprintTruthAndIly(): Promise<ScenarioResult> {
     await answerPendingQuery(dailyState, 'BOT', [discard.gamecardId]);
   }
   if (dailyState.pendingQuery?.context?.step === 'PUT_UNIT') {
-    await answerPendingQuery(dailyState, 'BOT', [dailyTarget.gamecardId]);
+    await answerPendingQuery(dailyState, 'BOT', [dailyTarget.gamecardId, dailyTargetB.gamecardId]);
   }
   const dailyLive = dailyState.players.BOT.unitZone.find((unit: Card | null) => unit?.gamecardId === dailyTarget.gamecardId);
-  const dailySilenced = dailyLive?.power === 0 && dailyLive.damage === 1 && !!(dailyLive as any).data?.permanentEffectSilenced;
+  const dailyLiveB = dailyState.players.BOT.unitZone.find((unit: Card | null) => unit?.gamecardId === dailyTargetB.gamecardId);
+  const dailySilenced = dailyLive?.power === 0 && dailyLive.damage === 1 && !!(dailyLive as any).data?.permanentEffectSilenced &&
+    dailyLiveB?.power === 0 && dailyLiveB.damage === 1 && !!(dailyLiveB as any).data?.permanentEffectSilenced;
   if (dailyLive) {
     ServerGameService.moveCard(dailyState, 'BOT', 'UNIT', 'BOT', 'GRAVE', dailyLive.gamecardId, { isEffect: true, effectSourcePlayerUid: 'BOT', effectSourceCardId: daily.gamecardId });
   }
   const dailyExiledOnLeave = dailyState.players.BOT.exile.some((card: Card) => card.gamecardId === dailyTarget.gamecardId);
 
-  const startBlueprint = cloneScriptCard(bt06Y10 as Card, 'ITEM');
-  const startTopCard = testCard({ id: 'Y10_START_TOP', type: 'UNIT', color: 'YELLOW', cardlocation: 'DECK' });
-  const startState = game({
-    deck: [...deckCards(3, 'Y10_START_FILL', 'YELLOW'), startTopCard],
-    itemZone: [startBlueprint],
+  const blueprintStart = cloneScriptCard(bt06Y10 as Card, 'ITEM');
+  const blueprintTop = testCard({ id: 'Y10_TOP', type: 'UNIT', color: 'YELLOW', cardlocation: 'DECK' });
+  const blueprintStartState = game({
+    deck: [blueprintTop],
+    itemZone: [blueprintStart],
   }, {}, { phase: 'START' });
-  EventEngine.dispatchEvent(startState, { type: 'PHASE_CHANGED', playerUid: 'BOT', data: { phase: 'START' } });
-  await activateTriggerAndAnswerYes(startState, 'BOT');
-  const blueprintStartExiled = startState.players.BOT.exile.some((card: Card) =>
-    card.gamecardId === startTopCard.gamecardId &&
-    card.displayState === 'FRONT_FACEDOWN'
+  EventEngine.dispatchEvent(blueprintStartState, { type: 'PHASE_CHANGED' as any, playerUid: 'BOT', data: { phase: 'START' } });
+  await activateTriggerAndAnswerYes(blueprintStartState, 'BOT');
+  const blueprintStartFacedown = blueprintStartState.players.BOT.exile.some((card: Card) =>
+    card.gamecardId === blueprintTop.gamecardId && card.displayState === 'FRONT_FACEDOWN'
   );
 
   const blueprint = cloneScriptCard(bt06Y10 as Card, 'ITEM');
@@ -1752,9 +2156,401 @@ async function testYellowDailyBlueprintTruthAndIly(): Promise<ScenarioResult> {
   const ilyLive = ilyState.players.BOT.unitZone.find((unit: Card | null) => unit?.gamecardId === ilyTarget.gamecardId);
   const ilyTempSilence = !!(ilyLive as any)?.data?.fullEffectSilencedUntilOwnStartUid;
 
-  return dailySilenced && dailyExiledOnLeave && blueprintStartExiled && blueprintPulled && enemyDestroyed && facedownBottomed && truthNormalized && ilyTempSilence
-    ? pass(name, `daily=${dailySilenced}, blueprintStart=${blueprintStartExiled}, blueprint=${blueprintPulled}, truth=${truthNormalized}, ily=${ilyTempSilence}`)
-    : fail(name, `daily=${dailySilenced}/${dailyExiledOnLeave}, blueprintStart=${blueprintStartExiled}, blueprint=${blueprintPulled}/${enemyDestroyed}/${facedownBottomed}, truth=${truthNormalized}, ily=${ilyTempSilence}`);
+  return dailySilenced && dailyExiledOnLeave && blueprintStartFacedown && blueprintPulled && enemyDestroyed && facedownBottomed && truthNormalized && ilyTempSilence
+    ? pass(name, `daily=${dailySilenced}, blueprint=${blueprintStartFacedown}/${blueprintPulled}, truth=${truthNormalized}, ily=${ilyTempSilence}`)
+    : fail(name, `daily=${dailySilenced}/${dailyExiledOnLeave}, blueprint=${blueprintStartFacedown}/${blueprintPulled}/${enemyDestroyed}/${facedownBottomed}, truth=${truthNormalized}, ily=${ilyTempSilence}`);
+}
+
+async function testYellowChocolate(): Promise<ScenarioResult> {
+  const name = 'BT06/SP Yellow Chocolate resolves reveal destroy';
+  const story = cloneScriptCard(chocolate as Card, 'HAND', { colorReq: {}, baseColorReq: {}, acValue: 0, baseAcValue: 0 });
+  const revealGod = testCard({ id: 'CHOC_GOD', type: 'UNIT', color: 'YELLOW', godMark: true, baseGodMark: true, cardlocation: 'DECK' });
+  const ownSmall = testCard({ id: 'CHOC_OWN_SMALL', type: 'UNIT', color: 'YELLOW', godMark: false, cardlocation: 'UNIT', power: 1000, basePower: 1000 });
+  const enemySmall = testCard({ id: 'CHOC_ENEMY_SMALL', type: 'UNIT', color: 'RED', godMark: false, cardlocation: 'UNIT', power: 1500, basePower: 1500 });
+  const enemyLarge = testCard({ id: 'CHOC_ENEMY_LARGE', type: 'UNIT', color: 'RED', godMark: false, cardlocation: 'UNIT', power: 2500, basePower: 2500 });
+  const state = game({
+    hand: [story],
+    deck: [revealGod],
+    unitZone: [ownSmall, null, null, null, null, null],
+  }, {
+    unitZone: [enemySmall, enemyLarge, null, null, null, null],
+  });
+
+  const oldRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    await playStoryAndResolve(state, 'BOT', story);
+  } finally {
+    Math.random = oldRandom;
+  }
+
+  const enemySmallDestroyed = state.players.P1.grave.some((card: Card) => card.gamecardId === enemySmall.gamecardId);
+  const enemyLargeAlive = state.players.P1.unitZone.some((card: Card | null) => card?.gamecardId === enemyLarge.gamecardId);
+  const ownSmallAlive = state.players.BOT.unitZone.some((card: Card | null) => card?.gamecardId === ownSmall.gamecardId);
+
+  return enemySmallDestroyed && enemyLargeAlive && ownSmallAlive
+    ? pass(name, `enemySmall=${enemySmallDestroyed}, enemyLargeAlive=${enemyLargeAlive}, ownSmallAlive=${ownSmallAlive}`)
+    : fail(name, `enemySmall=${enemySmallDestroyed}, enemyLargeAlive=${enemyLargeAlive}, ownSmallAlive=${ownSmallAlive}`);
+}
+
+async function testEndTurnTriggerBucketOrder(): Promise<ScenarioResult> {
+  const name = 'End turn trigger buckets resolve mandatory turn player before opponent then optional';
+  const ily = cloneScriptCard(bt06Y05 as Card, 'UNIT');
+  const materialA = cloneScriptCard(bt06Y01 as Card, 'UNIT');
+  const materialB = testCard({ id: 'ILY_MAT_B', type: 'ITEM', color: 'YELLOW', cardlocation: 'ITEM' });
+  const ilyDeckTarget = testCard({ id: 'ILY_DECK_TARGET', type: 'UNIT', color: 'GREEN', cardlocation: 'DECK', colorReq: {}, power: 3000, basePower: 3000 });
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_TARGET', fullName: 'Forbidden non alchemy target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  const escortCard = cloneScriptCard(escort as Card, 'UNIT');
+  const escortedTarget = testCard({ id: 'ESCORTED_TARGET', fullName: 'Escorted target', type: 'UNIT', color: 'BLUE', cardlocation: 'EXILE', colorReq: {}, power: 2000, basePower: 2000 });
+
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT'
+  };
+
+  const state = game({
+    deck: [ilyDeckTarget, ...deckCards(4, 'END_ORDER_FILL', 'YELLOW')],
+    grave: [forbiddenSource],
+    unitZone: [ily, materialA, forbiddenTarget, null, null, null],
+    itemZone: [materialB],
+  }, {
+    unitZone: [escortCard, null, null, null, null, null],
+    exile: [escortedTarget],
+    escortReturns: [{ cardId: escortedTarget.gamecardId, ownerUid: 'P1', zone: 'UNIT', afterTurn: 6 }],
+  }, { phase: 'END', turnCount: 6 });
+
+  EventEngine.dispatchEvent(state, { type: 'TURN_END' as any, playerUid: 'BOT' });
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const firstWasForbidden = state.players.BOT.exile.some((card: Card) => card.gamecardId === forbiddenTarget.gamecardId);
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const returnedByEscort = state.players.P1.unitZone.some((card: Card | null) => card?.gamecardId === escortedTarget.gamecardId);
+  const optionalIlyPending = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.context?.sourceCardId === ily.gamecardId;
+
+  return firstWasForbidden && returnedByEscort && optionalIlyPending
+    ? pass(name, `forbidden=${firstWasForbidden}, escort=${returnedByEscort}, optional=${optionalIlyPending}`)
+    : fail(name, `forbidden=${firstWasForbidden}, escort=${returnedByEscort}, pending=${state.pendingQuery?.callbackKey || 'none'}/${state.pendingQuery?.context?.sourceCardId || 'none'}`);
+}
+
+async function testSameBucketTriggerOrderChoice(): Promise<ScenarioResult> {
+  const name = 'Same bucket trigger order asks player to choose next trigger';
+  const sourceA = testCard({ id: 'MAND_A', fullName: 'Mandatory A', type: 'UNIT', color: 'YELLOW', cardlocation: 'UNIT' });
+  const sourceB = testCard({ id: 'MAND_B', fullName: 'Mandatory B', type: 'UNIT', color: 'YELLOW', cardlocation: 'UNIT' });
+  const state = game({
+    unitZone: [sourceA, sourceB, null, null, null, null],
+  }, {}, { phase: 'END' });
+  const resolved: string[] = [];
+  state.triggeredEffectsQueue.push(
+    {
+      queueId: 'mandatory_a',
+      card: sourceA,
+      playerUid: 'BOT',
+      effectIndex: -1,
+      event: { type: 'TURN_END' as any, playerUid: 'BOT' },
+      effect: {
+        id: 'mandatory_a',
+        type: 'TRIGGER',
+        isMandatory: true,
+        description: '必发 A',
+        execute: async () => { resolved.push('A'); }
+      }
+    },
+    {
+      queueId: 'mandatory_b',
+      card: sourceB,
+      playerUid: 'BOT',
+      effectIndex: -1,
+      event: { type: 'TURN_END' as any, playerUid: 'BOT' },
+      effect: {
+        id: 'mandatory_b',
+        type: 'TRIGGER',
+        isMandatory: true,
+        description: '必发 B',
+        execute: async () => { resolved.push('B'); }
+      }
+    }
+  );
+
+  await ServerGameService.checkTriggeredEffects(state);
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.options?.length === 2;
+  await answerPendingQuery(state, 'BOT', ['mandatory_b']);
+
+  return askedOrder && resolved.join(',') === 'B,A'
+    ? pass(name, `resolved=${resolved.join(',')}`)
+    : fail(name, `asked=${askedOrder}, resolved=${resolved.join(',')}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testNonEndTriggerBucketsUseUnifiedOrder(): Promise<ScenarioResult> {
+  const name = 'Non-end triggers use unified bucket order';
+  const turnOptional = testCard({ id: 'TURN_OPTIONAL', fullName: 'turn_optional', cardlocation: 'UNIT' });
+  const opponentOptional = testCard({ id: 'OPPONENT_OPTIONAL', fullName: 'opponent_optional', cardlocation: 'UNIT' });
+  const state = game({
+    unitZone: [turnOptional, null, null, null, null, null],
+  }, {
+    unitZone: [opponentOptional, null, null, null, null, null],
+  }, { phase: 'MAIN' });
+  const resolved: string[] = [];
+  const makeRecord = (queueId: string, playerUid: 'BOT' | 'P1', mandatory: boolean, eventType: any) => {
+    const card = playerUid === 'BOT' ? turnOptional : opponentOptional;
+    return {
+      queueId,
+      card,
+      playerUid,
+      effectIndex: -1,
+      event: { type: eventType, playerUid },
+      effect: {
+        id: queueId,
+        type: 'TRIGGER',
+        isMandatory: mandatory,
+        description: queueId,
+        execute: async () => { resolved.push(queueId); }
+      }
+    };
+  };
+  state.triggeredEffectsQueue.push(
+    makeRecord('turn_optional', 'BOT', false, 'CARD_ATTACK_DECLARED'),
+    makeRecord('opponent_optional', 'P1', false, 'CARD_ATTACK_DECLARED'),
+    makeRecord('opponent_mandatory', 'P1', true, 'CARD_ATTACK_DECLARED'),
+    makeRecord('turn_mandatory', 'BOT', true, 'CARD_ATTACK_DECLARED')
+  );
+
+  await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'BOT', ['YES']);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'P1', ['YES']);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'BOT', ['YES']);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') await answerPendingQuery(state, 'P1', ['YES']);
+
+  const ordered = resolved.join(',') === 'turn_mandatory,opponent_mandatory,turn_optional,opponent_optional';
+  return ordered
+    ? pass(name, resolved.join(','))
+    : fail(name, `resolved=${resolved.join(',')}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testMainPhaseStartTriggersBeforeActions(): Promise<ScenarioResult> {
+  const name = 'Main phase start triggers before actions';
+  const source = testCard({
+    id: 'MAIN_START_TRIGGER',
+    fullName: 'Main Start Trigger',
+    cardlocation: 'UNIT',
+    effects: [{
+      id: 'main_start_optional',
+      type: 'TRIGGER',
+      triggerEvent: 'PHASE_CHANGED' as any,
+      isMandatory: false,
+      description: '主要阶段开始选发',
+      condition: (_gameState: any, _player: any, _card: Card, event?: any) =>
+        event?.type === 'PHASE_CHANGED' && event.data?.phase === 'MAIN',
+      execute: async (_card: Card, gameState: any) => {
+        (gameState as any).mainStartResolved = true;
+      }
+    } as any]
+  });
+  const state = game({
+    unitZone: [source, null, null, null, null, null],
+  }, {}, { phase: 'EROSION' });
+
+  await ServerGameService.proceedAfterErosion(state, 'BOT');
+  const asked = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.context?.sourceCardId === source.gamecardId;
+  await answerPendingQuery(state, 'BOT', ['YES']);
+  const resolved = (state as any).mainStartResolved === true;
+
+  return asked && resolved && state.phase === 'MAIN'
+    ? pass(name, `asked=${asked}, resolved=${resolved}`)
+    : fail(name, `asked=${asked}, resolved=${resolved}, phase=${state.phase}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testAttackAndDamageTriggersUseUnifiedFlow(): Promise<ScenarioResult> {
+  const name = 'Attack and combat damage triggers use unified flow';
+  const attacker = testCard({
+    id: 'ATTACK_FLOW_ATTACKER',
+    fullName: 'Attack Flow Attacker',
+    color: 'YELLOW',
+    cardlocation: 'UNIT',
+    damage: 1,
+    baseDamage: 1,
+    playedTurn: 1,
+    effects: [{
+      id: 'attack_declared_optional',
+      type: 'TRIGGER',
+      triggerEvent: 'CARD_ATTACK_DECLARED' as any,
+      isMandatory: false,
+      description: '攻击宣言选发',
+      condition: (_gameState: any, _player: any, card: Card, event?: any) =>
+        event?.type === 'CARD_ATTACK_DECLARED' && event.sourceCardId === card.gamecardId,
+      execute: async (_card: Card, gameState: any) => {
+        (gameState as any).attackTriggerResolved = true;
+      }
+    }, {
+      id: 'combat_damage_optional',
+      type: 'TRIGGER',
+      triggerEvent: 'COMBAT_DAMAGE_CAUSED' as any,
+      isMandatory: false,
+      description: '战斗伤害选发',
+      isGlobal: true,
+      condition: (_gameState: any, _player: any, card: Card, event?: any) =>
+        event?.type === 'COMBAT_DAMAGE_CAUSED' && event.data?.attackerIds?.includes(card.gamecardId),
+      execute: async (_card: Card, gameState: any) => {
+        (gameState as any).damageTriggerResolved = true;
+      }
+    } as any]
+  });
+  const state = game({
+    unitZone: [attacker, null, null, null, null, null],
+  }, {}, { phase: 'BATTLE_DECLARATION', turnCount: 6 });
+
+  await ServerGameService.declareAttack(state, 'BOT', [attacker.gamecardId], false);
+  if (!state.pendingQuery && state.phase === 'COUNTERING') {
+    await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  }
+  const askedAttack = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.context?.sourceCardId === attacker.gamecardId;
+  await answerPendingQuery(state, 'BOT', ['YES']);
+  const attackResolved = (state as any).attackTriggerResolved === true;
+  if (state.phase === 'COUNTERING') {
+    await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  }
+  await ServerGameService.declareDefense(state, 'P1');
+  state.phase = 'DAMAGE_CALCULATION';
+  await ServerGameService.resolveDamage(state);
+  const askedDamage = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.context?.sourceCardId === attacker.gamecardId;
+  await answerPendingQuery(state, 'BOT', ['YES']);
+  const damageResolved = (state as any).damageTriggerResolved === true;
+
+  return askedAttack && attackResolved && askedDamage && damageResolved
+    ? pass(name, `attack=${attackResolved}, damage=${damageResolved}`)
+    : fail(name, `askedAttack=${askedAttack}, attack=${attackResolved}, askedDamage=${askedDamage}, damage=${damageResolved}, phase=${state.phase}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testMandatoryEndTurnOrderWithValkyrieAndGreatAlchemist(): Promise<ScenarioResult> {
+  const name = 'Mandatory end triggers ask order for Valkyrie Zero Forbidden Alchemy and Great Alchemist loss';
+  const zero = cloneScriptCard(valkyrieZero as Card, 'UNIT');
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_ZERO_TARGET', fullName: 'Forbidden Zero target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  (zero as any).data = { enteredGoddessTurn_105110114: 6 };
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT'
+  };
+  const state = game({
+    grave: [forbiddenSource],
+    unitZone: [zero, alchemist, forbiddenTarget, null, null, null],
+    isGoddessMode: true,
+    loseAtEndOfTurn: 6,
+    loseAtEndOfTurnSourceName: alchemist.fullName,
+    loseAtEndOfTurnSourceCardId: alchemist.gamecardId,
+  }, {}, { phase: 'END', turnCount: 6 });
+
+  EventEngine.dispatchEvent(state, { type: 'TURN_END' as any, playerUid: 'BOT' });
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.context?.mandatory === true;
+  const optionDetails = (state.pendingQuery?.options || []).map((option: any) => `${option.id}:${option.label}:${option.detail}`).join('|');
+  const hasZero = /瓦尔基里/.test(optionDetails);
+  const hasForbidden = /禁忌炼金/.test(optionDetails);
+  const hasLoss = /大炼金术士/.test(optionDetails);
+
+  return askedOrder && hasZero && hasForbidden && hasLoss
+    ? pass(name, optionDetails)
+    : fail(name, `asked=${askedOrder}, options=${optionDetails}`);
+}
+
+async function testTriggerOrderAcceptsDisplayedCardIds(): Promise<ScenarioResult> {
+  const name = 'Trigger order accepts displayed card ids for Forbidden Alchemy and Great Alchemist';
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_DISPLAY_TARGET', fullName: 'Forbidden display target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT'
+  };
+  const state = game({
+    grave: [forbiddenSource],
+    unitZone: [alchemist, forbiddenTarget, null, null, null, null],
+    loseAtEndOfTurn: 6,
+    loseAtEndOfTurnSourceName: alchemist.fullName,
+    loseAtEndOfTurnSourceCardId: alchemist.gamecardId,
+  }, {}, { phase: 'END', turnCount: 6 });
+
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE';
+  await answerPendingQuery(state, 'BOT', [forbiddenSource.gamecardId]);
+  const forbiddenResolved = state.players.BOT.exile.some((card: Card) => card.gamecardId === forbiddenTarget.gamecardId);
+
+  await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    await answerPendingQuery(state, 'BOT', [alchemist.gamecardId]);
+  }
+  const lossResolved = state.gameStatus === 2 && state.winnerId === 'P1';
+
+  return askedOrder && forbiddenResolved && lossResolved
+    ? pass(name, `forbidden=${forbiddenResolved}, loss=${lossResolved}`)
+    : fail(name, `asked=${askedOrder}, forbidden=${forbiddenResolved}, loss=${lossResolved}, pending=${state.pendingQuery?.callbackKey || 'none'}, logs=${state.logs.slice(-5).join(' / ')}`);
+}
+
+async function testSerializedVirtualEndTriggersResolve(): Promise<ScenarioResult> {
+  const name = 'Serialized virtual end triggers still resolve Forbidden Alchemy and Great Alchemist';
+  const alchemist = cloneScriptCard(greatAlchemist as Card, 'UNIT');
+  const forbiddenSource = cloneScriptCard(forbiddenAlchemy as Card, 'GRAVE');
+  const forbiddenTarget = testCard({ id: 'FORBIDDEN_SERIALIZED_TARGET', fullName: 'Forbidden serialized target', type: 'UNIT', color: 'RED', cardlocation: 'UNIT', colorReq: {}, power: 1000, basePower: 1000 });
+  (forbiddenTarget as any).data = {
+    returnToExileAtEndTurn: 6,
+    returnToExileSourceName: forbiddenSource.fullName,
+    returnToExileSourceCardId: forbiddenSource.gamecardId,
+    returnToExileEffectOwnerUid: 'BOT',
+    returnToExileAtEndPredicateKey: 'STILL_IN_UNIT'
+  };
+  const state = game({
+    grave: [forbiddenSource],
+    unitZone: [alchemist, forbiddenTarget, null, null, null, null],
+    loseAtEndOfTurn: 6,
+    loseAtEndOfTurnSourceName: alchemist.fullName,
+    loseAtEndOfTurnSourceCardId: alchemist.gamecardId,
+    loseAtEndOfTurnSourceCardSnapshot: { ...alchemist },
+  }, {}, { phase: 'END', turnCount: 6 });
+
+  ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, 'BOT');
+  await ServerGameService.checkTriggeredEffects(state);
+  const askedOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE';
+
+  const rehydrated = JSON.parse(JSON.stringify(state));
+  ServerGameService.hydrateGameState(rehydrated);
+  await answerPendingQuery(rehydrated, 'BOT', [forbiddenSource.gamecardId]);
+  const exiledForbidden = rehydrated.players.BOT.exile.find((card: Card) => card.gamecardId === forbiddenTarget.gamecardId);
+  const forbiddenResolved = !!exiledForbidden && exiledForbidden.displayState === 'FRONT_UPRIGHT';
+
+  await ServerGameService.checkTriggeredEffects(rehydrated);
+  const rehydratedAgain = JSON.parse(JSON.stringify(rehydrated));
+  ServerGameService.hydrateGameState(rehydratedAgain);
+  if (rehydratedAgain.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+    await answerPendingQuery(rehydratedAgain, 'BOT', [alchemist.gamecardId]);
+  }
+  const lossResolved = rehydratedAgain.gameStatus === 2 && rehydratedAgain.winnerId === 'P1';
+  const sourceNameKept = rehydratedAgain.winSourceCardName === alchemist.fullName;
+
+  return askedOrder && forbiddenResolved && lossResolved && sourceNameKept
+    ? pass(name, `forbidden=${forbiddenResolved}/${exiledForbidden?.displayState}, loss=${lossResolved}, source=${rehydratedAgain.winSourceCardName}`)
+    : fail(name, `asked=${askedOrder}, forbidden=${forbiddenResolved}/${exiledForbidden?.displayState || 'none'}, loss=${lossResolved}, source=${rehydratedAgain.winSourceCardName || 'none'}, pending=${rehydratedAgain.pendingQuery?.callbackKey || 'none'}`);
 }
 
 const scenarios: ScenarioRun[] = [
@@ -1773,7 +2569,10 @@ const scenarios: ScenarioRun[] = [
   testPrayerSearchesKeyUnit,
   testLivianLeaveAndCounterWhenShingiPlaced,
   testBlueWealthCounterAndLogistics,
+  testBlueWealthCountUsesContinuousOnly,
+  testTradeExpertPreventsThisBattleDestroy,
   testBlueAketiTeteruAndRecord,
+  testBlueUntilNextOwnTurnStartLocksExpireOnOwnStart,
   testBlueCheckLetsOpponentPayOrCounters,
   testBlueSheathAndFuka,
   testGreenResonanceDrawBoostAndSearch,
@@ -1785,7 +2584,21 @@ const scenarios: ScenarioRun[] = [
   testRedTrainerLockAndCelia,
   testYellowPartsHickAndValkyrie,
   testYellowHighAlchemyChipAndGiant,
+  testAcademyFeijingMerchantLeaveTrigger,
+  testDivineAlchemyDamageAndEndsTurn,
+  testGreatAlchemistLoseAtEndOfTurn,
+  testGreatAlchemistLoseAfterLeavingField,
+  testElmontEnterTriggerIsOptional,
   testYellowDailyBlueprintTruthAndIly,
+  testYellowChocolate,
+  testEndTurnTriggerBucketOrder,
+  testSameBucketTriggerOrderChoice,
+  testNonEndTriggerBucketsUseUnifiedOrder,
+  testMainPhaseStartTriggersBeforeActions,
+  testAttackAndDamageTriggersUseUnifiedFlow,
+  testMandatoryEndTurnOrderWithValkyrieAndGreatAlchemist,
+  testTriggerOrderAcceptsDisplayedCardIds,
+  testSerializedVirtualEndTriggersResolve,
 ];
 
 async function main() {

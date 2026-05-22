@@ -9,16 +9,28 @@ import {
   putUnitOntoField
 } from './BaseUtil';
 
-const enteredFromDeckByEffect = (instance: Card, gameState: any) =>
-  (instance as any).data?.lastMovedFromZone === 'DECK' &&
-  (instance as any).data?.lastMovedToZone === 'UNIT' &&
-  (instance as any).data?.lastMovedByEffectTurn === gameState.turnCount;
+const enteredFromDeckByEffect = (instance: Card, gameState: any, event?: any) =>
+  (
+    event?.type === 'CARD_ENTERED_ZONE' &&
+    event?.sourceCardId === instance.gamecardId &&
+    event?.data?.sourceZone === 'DECK' &&
+    event?.data?.targetZone === 'UNIT' &&
+    event?.data?.isEffect
+  ) ||
+  (
+    (instance as any).data?.lastMovedFromZone === 'DECK' &&
+    (instance as any).data?.lastMovedToZone === 'UNIT' &&
+    (instance as any).data?.lastMovedByEffectTurn === gameState.turnCount
+  );
 
-const enteredFromDeckByAlchemy = (instance: Card, gameState: any) =>
+const enteredFromDeckByAlchemy = (instance: Card, gameState: any, event?: any) =>
   (instance as any).data?.enteredFromDeckByAlchemyTurn === gameState.turnCount ||
   (
-    enteredFromDeckByEffect(instance, gameState) &&
-    !!AtomicEffectExecutor.findCardById(gameState, (instance as any).data?.lastMoveEffectSourceCardId)?.fullName?.includes('炼金')
+    enteredFromDeckByEffect(instance, gameState, event) &&
+    !!AtomicEffectExecutor.findCardById(
+      gameState,
+      event?.data?.effectSourceCardId || (instance as any).data?.lastMoveEffectSourceCardId
+    )?.fullName?.includes('炼金')
   );
 
 const wasSentToGraveByAlchemyThisTurn = (gameState: any, card: Card) => {
@@ -45,12 +57,13 @@ const effect_105000353_alchemy_power: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE' as any,
+  isMandatory: false,
   description: '由卡名含有《炼金》的卡的效果从卡组进入战场时，放逐本回合因炼金效果送墓的1张菲晶单位：这张卡力量变为3000。',
   condition: (gameState, playerState, instance, event) =>
     instance.cardlocation === 'UNIT' &&
     event?.sourceCardId === instance.gamecardId &&
     event?.data?.zone === 'UNIT' &&
-    enteredFromDeckByAlchemy(instance, gameState) &&
+    enteredFromDeckByAlchemy(instance, gameState, event) &&
     getPowerCostCandidates(gameState, playerState).length > 0,
   execute: async (instance, gameState, playerState) => {
     createSelectCardQuery(
@@ -84,12 +97,13 @@ const effect_105000353_chain_copy: CardEffect = {
   triggerEvent: 'CARD_ENTERED_ZONE' as any,
   limitCount: 1,
   limitNameType: true,
+  isMandatory: true,
   description: '同名1回合1次，由卡效果从卡组进入战场时，将卡组1张《炼金晶片妖》以横置状态放置到战场。',
   condition: (gameState, playerState, instance, event) =>
     instance.cardlocation === 'UNIT' &&
     event?.sourceCardId === instance.gamecardId &&
     event?.data?.zone === 'UNIT' &&
-    enteredFromDeckByEffect(instance, gameState) &&
+    enteredFromDeckByEffect(instance, gameState, event) &&
     getSameNameDeckCandidates(playerState).length > 0,
   execute: async (instance, gameState, playerState) => {
     const target = getSameNameDeckCandidates(playerState)[0];

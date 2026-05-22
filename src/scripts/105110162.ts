@@ -7,6 +7,7 @@ const effect_105110162_goddess_trigger: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'GODDESS_TRANSFORMATION',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
   erosionTotalLimit: [10, 10],

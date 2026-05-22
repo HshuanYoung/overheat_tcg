@@ -12,6 +12,7 @@ const effect_102000277_enter_mill: CardEffect = {
   id: '102000277_enter_mill',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,
@@ -71,7 +72,7 @@ const card: Card = {
   effects: [effect_102000277_enter_mill],
   rarity: 'R',
   availableRarities: ['R'],
-  cardPackage: 'BT06',
+  cardPackage: 'SP02',
   uniqueId: null as any,
 };
 

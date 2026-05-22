@@ -46,6 +46,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: ['CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
+  isMandatory: false,
   isGlobal: true,
   limitCount: 1,
   description: '对手战场上的单位被破坏送入墓地时，可以将那个单位放逐。之后，将卡组或墓地中1张《异界狂蝠》放置到战场。',

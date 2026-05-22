@@ -5,6 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '102050087_destroy',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
     triggerLocation: ['UNIT'],
     description: '入场时，若你的<伊列宇王国>单位有4个以上，破坏对手1个非神蚀单位。',
     condition: (gameState, playerState, instance, event) =>

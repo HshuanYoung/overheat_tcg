@@ -1,15 +1,23 @@
 import { Card, CardEffect, GameEvent } from '../types/game';
-import { addInfluence, allCardsOnField, createSelectCardQuery, ensureData, getOpponentUid, moveCard, ownerUidOf } from './BaseUtil';
+import { addInfluence, allCardsOnField, createSelectCardQuery, ensureData, hasBattlefieldSpecialNameConflict, moveCard, ownerUidOf } from './BaseUtil';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+
+const getFieldSlotIndex = (gameState: any, ownerUid: string, card: Card) => {
+  const owner = gameState.players[ownerUid];
+  const zone = card.cardlocation;
+  const zoneCards = zone === 'ITEM' ? owner?.itemZone : zone === 'UNIT' ? owner?.unitZone : undefined;
+  return Array.isArray(zoneCards) ? zoneCards.findIndex((slot: Card | null) => slot?.gamecardId === card.gamecardId) : -1;
+};
 
 const cardEffects: CardEffect[] = [{
   id: '101140151_enter_exile',
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
+  isMandatory: false,
   limitCount: 1,
   limitNameType: true,
-  description: '进入战场时，放逐战场上1张其他卡，对手回合结束时横置回场。',
+  description: '进入战场时，放逐战场上1张其他卡。发动者的对方回合结束时，那张卡横置回场。',
   condition: (gameState, _playerState, instance, event?: GameEvent) =>
     event?.sourceCardId === instance.gamecardId &&
     event.data?.zone === 'UNIT' &&
@@ -23,16 +31,28 @@ const cardEffects: CardEffect[] = [{
     const ownerUid = ownerUidOf(gameState, target);
     if (!ownerUid) return;
     const originalZone = target.cardlocation;
-    moveCard(gameState, ownerUid, target, 'EXILE', instance);
+    const originalSlotIndex = getFieldSlotIndex(gameState, ownerUid, target);
+    const currentTurnPlayerUid = gameState.playerIds[gameState.currentTurnPlayer];
+    const returnTurn = gameState.turnCount + (currentTurnPlayerUid === playerState.uid ? 1 : 0);
+    moveCard(gameState, ownerUid, target, 'EXILE', instance, { faceDown: false });
     ensureData(target).escortReturn = {
       ownerUid,
       zone: originalZone,
-      returnOnOpponentEndAfterTurn: gameState.turnCount,
-      sourceName: instance.fullName
+      slotIndex: originalSlotIndex,
+      returnOnOpponentEndTurn: returnTurn,
+      sourceName: instance.fullName,
+      sourceCardId: instance.gamecardId
     };
-    addInfluence(target, instance, '对手回合结束时横置回场');
+    addInfluence(target, instance, '发动者的对方回合结束时横置回场');
     const returns = ((playerState as any).escortReturns || []) as any[];
-    returns.push({ cardId: target.gamecardId, ownerUid, zone: originalZone, afterTurn: gameState.turnCount });
+    returns.push({
+      cardId: target.gamecardId,
+      ownerUid,
+      zone: originalZone,
+      slotIndex: originalSlotIndex,
+      sourceCardId: instance.gamecardId,
+      returnTurn
+    });
     (playerState as any).escortReturns = returns;
   }
 }, {
@@ -41,24 +61,34 @@ const cardEffects: CardEffect[] = [{
   triggerEvent: 'TURN_END' as any,
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK'],
   isMandatory: true,
-  description: '对手回合结束时，将押送放逐的卡横置放回其持有者战场。',
-  condition: (gameState, playerState, _instance, event) =>
-    event?.playerUid === getOpponentUid(gameState, playerState.uid) &&
-    ((playerState as any).escortReturns || []).some((entry: any) => gameState.turnCount >= entry.afterTurn),
+  description: '发动者的对方回合结束时，将押送放逐的卡横置放回其持有者战场。',
+  condition: (gameState, playerState, instance, event) =>
+    event?.playerUid !== playerState.uid &&
+    ((playerState as any).escortReturns || []).some((entry: any) =>
+      entry.sourceCardId === instance.gamecardId &&
+      gameState.turnCount >= (entry.returnTurn ?? Number.POSITIVE_INFINITY)
+    ),
   execute: async (instance, gameState, playerState) => {
     const returns = ((playerState as any).escortReturns || []) as any[];
     if (returns.length === 0) return;
     const remaining: any[] = [];
     for (const entry of returns) {
-      if (gameState.turnCount < entry.afterTurn) {
+      const returnTurn = entry.returnTurn ?? Number.POSITIVE_INFINITY;
+      if (entry.sourceCardId !== instance.gamecardId || gameState.turnCount < returnTurn) {
         remaining.push(entry);
         continue;
       }
       const card = AtomicEffectExecutor.findCardById(gameState, entry.cardId);
       if (!card || card.cardlocation !== 'EXILE') continue;
       delete ensureData(card).escortReturn;
-      moveCard(gameState, entry.ownerUid, card, entry.zone, instance);
-      card.isExhausted = true;
+      const returnZone = entry.zone || 'UNIT';
+      if (hasBattlefieldSpecialNameConflict(gameState, entry.ownerUid, card, returnZone)) {
+        moveCard(gameState, entry.ownerUid, card, 'GRAVE', instance);
+        gameState.logs.push(`[${instance.fullName}] ${card.fullName} 因同专用名已存在，改为送入墓地。`);
+        continue;
+      }
+      moveCard(gameState, entry.ownerUid, card, returnZone, instance, { targetIndex: entry.slotIndex });
+      if (returnZone === 'UNIT') card.isExhausted = true;
       card.displayState = 'FRONT_UPRIGHT';
     }
     (playerState as any).escortReturns = remaining;

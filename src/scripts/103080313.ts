@@ -1,4 +1,59 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { canPutUnitOntoBattlefield, cardsInZones, putUnitOntoField, selectFromEntries } from './BaseUtil';
+
+const SWORD_TIGER = '利牙剑虎';
+
+const tigerTargets = (playerState: any) =>
+  cardsInZones(playerState, ['DECK', 'GRAVE'])
+    .filter(({ card }) =>
+      card.type === 'UNIT' &&
+      (card.id === '103080316' || card.fullName.includes(SWORD_TIGER)) &&
+      canPutUnitOntoBattlefield(playerState, card)
+    );
+
+const cardEffects: CardEffect[] = [{
+  id: '103080313_effect_leave_put_sword_tiger',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
+  triggerEvent: 'CARD_LEFT_FIELD',
+  sourceSnapshotOnLeftField: true,
+  limitCount: 1,
+  limitNameType: true,
+  description: '同名1回合1次：这个单位由于卡的效果从战场离开时，将卡组或墓地中1张《利牙剑虎》放置到战场。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.sourceZone === 'UNIT' &&
+    event.data?.isEffect === true &&
+    tigerTargets(playerState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    selectFromEntries(
+      gameState,
+      playerState.uid,
+      tigerTargets(playerState),
+      '选择利牙剑虎',
+      '选择你的卡组或墓地中的1张《利牙剑虎》，放置到战场。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '103080313_effect_leave_put_sword_tiger' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = AtomicEffectExecutor.findCardById(gameState, selections[0]);
+    if (!target || !canPutUnitOntoBattlefield(playerState, target)) return;
+    const fromDeck = target.cardlocation === 'DECK';
+    putUnitOntoField(gameState, playerState.uid, target, instance);
+    const moved = AtomicEffectExecutor.findCardById(gameState, target.gamecardId);
+    if (moved) {
+      (moved as any).data = {
+        ...((moved as any).data || {}),
+        enteredByCubEffectTurn: gameState.turnCount,
+        enteredByCubEffectSourceCardId: instance.gamecardId
+      };
+    }
+    if (fromDeck) await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +89,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT07',

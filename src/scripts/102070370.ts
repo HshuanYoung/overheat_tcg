@@ -1,4 +1,42 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { allCardsOnField, createSelectCardQuery, destroyByEffect, paymentCost } from './BaseUtil';
+
+const nonGodFieldCards = (gameState: any) =>
+  allCardsOnField(gameState).filter(card => !card.godMark);
+
+const cardEffects: CardEffect[] = [{
+  id: '102070370_entry_destroy',
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  cost: paymentCost(2),
+  description: '同名1回合1次：这个单位进入战场的回合中，支付AC+2，选择战场上1张非神蚀卡破坏。',
+  condition: (gameState, _playerState, instance) =>
+    instance.cardlocation === 'UNIT' &&
+    instance.playedTurn === gameState.turnCount &&
+    nonGodFieldCards(gameState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      nonGodFieldCards(gameState),
+      '选择破坏目标',
+      '选择战场上的1张非神蚀卡破坏。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '102070370_entry_destroy' },
+      card => card.cardlocation as any
+    );
+  },
+  onQueryResolve: async (instance, gameState, _playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (target && ['UNIT', 'ITEM'].includes(target.cardlocation || '') && !target.godMark) {
+      destroyByEffect(gameState, target, instance);
+    }
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +72,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SR',
   availableRarities: ['SR'],
   cardPackage: 'BT07',

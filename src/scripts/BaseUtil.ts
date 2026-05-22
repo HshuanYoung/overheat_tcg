@@ -167,6 +167,32 @@ export const isResonanceExileEvent = (event?: GameEvent, sourceCard?: Card) => {
   return !!data.resonanceSourceCardId;
 };
 
+export const hasAwakenAbility = (card: Card) =>
+  (card.effects || []).some(effect =>
+    /awaken/i.test(effect.id || '') ||
+    (effect.description || '').includes('唤醒') ||
+    (effect.description || '').includes('喚醒')
+  );
+
+export const awakenUnit = (gameState: GameState, playerUid: string, target: Card, source: Card) => {
+  const data = ensureData(target);
+  data.awakenedTurn = gameState.turnCount;
+  data.awakenedSourceCardId = source.gamecardId;
+  data.awakenedSourceName = source.fullName;
+  addInfluence(target, source, '适用唤醒');
+  EventEngine.dispatchEvent(gameState, {
+    type: 'UNIT_AWAKENED',
+    sourceCard: target,
+    sourceCardId: target.gamecardId,
+    playerUid,
+    data: {
+      unitId: target.gamecardId,
+      sourceCardId: source.gamecardId,
+      sourceName: source.fullName
+    }
+  });
+};
+
 export const resonanceEffect = (id: string): CardEffect => ({
   id,
   type: 'ACTIVATE',
@@ -201,6 +227,38 @@ export const resonanceEffect = (id: string): CardEffect => ({
     data.resonanceSourceEffectId = id;
     data.resonanceTurn = gameState.turnCount;
     moveCard(gameState, playerState.uid, target, 'EXILE', instance);
+  }
+});
+
+export const awakenEffect = (id: string): CardEffect => ({
+  id,
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  limitNameType: true,
+  description: '唤醒：1回合1次，你的主要阶段，选择你的战场上的1个单位，使其适用唤醒。',
+  condition: (gameState, playerState, instance) =>
+    instance.cardlocation === 'UNIT' &&
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    playerState.unitZone.some((unit): unit is Card => !!unit),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      playerState.unitZone.filter((unit): unit is Card => !!unit),
+      '选择唤醒单位',
+      '选择你的战场上的1个单位，使其适用唤醒。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: id, step: 'AWAKEN' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step !== 'AWAKEN') return;
+    const target = playerState.unitZone.find(unit => unit?.gamecardId === selections[0]);
+    if (target) awakenUnit(gameState, playerState.uid, target, instance);
   }
 });
 
@@ -367,6 +425,26 @@ export const isUnaffectedByCardEffect = (
   return false;
 };
 
+export const isProtectedGraveCardFromOpponentEffect = (
+  gameState: GameState,
+  target: Card,
+  sourceCard?: Card,
+  sourceUid?: string
+) => {
+  if (target.cardlocation !== 'GRAVE') return false;
+  const targetUid = ownerUidOf(gameState, target);
+  const effectSourceUid = sourceUid || (sourceCard ? ownerUidOf(gameState, sourceCard) : undefined);
+  if (!targetUid || !effectSourceUid || targetUid === effectSourceUid) return false;
+  const protectedBy = gameState.players[targetUid]?.itemZone.find(item =>
+    item?.effects?.some(effect => effect.type === 'CONTINUOUS' && effect.protectOwnGraveFromOpponentEffects)
+  );
+  if (protectedBy) {
+    gameState.logs.push(`[${protectedBy.fullName}] 防止墓地中的 [${target.fullName}] 成为对手效果的对象或被移动。`);
+    return true;
+  }
+  return false;
+};
+
 export const createSelectCardQuery = (
   gameState: GameState,
   playerUid: string,
@@ -379,7 +457,10 @@ export const createSelectCardQuery = (
   sourceResolver?: (card: Card) => TriggerLocation
 ) => {
   const sourceCard = context?.sourceCardId ? AtomicEffectExecutor.findCardById(gameState, context.sourceCardId) : undefined;
-  const selectableCards = cards.filter(card => !cannotBeChosenAsEffectTarget(card, sourceCard, gameState));
+  const selectableCards = cards.filter(card =>
+    !cannotBeChosenAsEffectTarget(card, sourceCard, gameState) &&
+    !isProtectedGraveCardFromOpponentEffect(gameState, card, sourceCard)
+  );
   if (selectableCards.length < minSelections) return;
   gameState.pendingQuery = {
     id: Math.random().toString(36).substring(7),
@@ -985,6 +1066,99 @@ export const addContinuousDamage = (target: Card, source: Card, amount: number) 
   target.damage = (target.damage || 0) + amount;
   addInfluence(target, source, `伤害${amount >= 0 ? '+' : ''}${amount}`);
 };
+
+export const recordUnitSentFromFieldToGrave = (gameState: GameState, playerUid: string, card: Card) => {
+  if (card.type !== 'UNIT') return;
+  const key = `unitsSentFromFieldToGraveTurn_${gameState.turnCount}`;
+  const idsKey = `${key}_ids`;
+  const player = gameState.players[playerUid] as any;
+  const ids = new Set<string>(player[idsKey] || []);
+  if (ids.has(card.gamecardId)) return;
+  ids.add(card.gamecardId);
+  player[idsKey] = [...ids];
+  player[key] = ids.size;
+
+  const globalIdsKey = `${key}_global_ids`;
+  const globalIds = new Set<string>((gameState as any)[globalIdsKey] || []);
+  if (globalIds.has(card.gamecardId)) return;
+  globalIds.add(card.gamecardId);
+  (gameState as any)[globalIdsKey] = [...globalIds];
+  (gameState as any)[`${key}_global`] = globalIds.size;
+};
+
+export const unitsSentFromFieldToGraveThisTurn = (gameState: GameState, playerState: PlayerState) =>
+  Number((playerState as any)[`unitsSentFromFieldToGraveTurn_${gameState.turnCount}`] || 0);
+
+export const totalUnitsSentFromFieldToGraveThisTurn = (gameState: GameState) =>
+  Number((gameState as any)[`unitsSentFromFieldToGraveTurn_${gameState.turnCount}_global`] || 0);
+
+export const soulDevourCountThisTurn = (gameState: GameState, playerState: PlayerState) =>
+  Number((playerState as any)[`soulDevourActivatedTurn_${gameState.turnCount}`] || 0);
+
+export const recordSoulDevourActivation = (gameState: GameState, playerState: PlayerState) => {
+  const key = `soulDevourActivatedTurn_${gameState.turnCount}`;
+  (playerState as any)[key] = soulDevourCountThisTurn(gameState, playerState) + 1;
+};
+
+export const isSoulDevourUnit = (card: Card) =>
+  card.type === 'UNIT' &&
+  (card.effects || []).some(effect =>
+    /soul_devour|souldevour/i.test(effect.id || '') ||
+    (effect.description || '').includes('噬魂')
+  );
+
+export const isThunderUnit = (card: Card) =>
+  card.type === 'UNIT' &&
+  (
+    String(card.faction || '').includes('雷霆') ||
+    card.fullName.includes('雷霆') ||
+    !!card.specialName?.includes('雷霆')
+  );
+
+export const addTemporaryAccessDiscount = (target: Card, source: Card, amount: number) => {
+  if (amount <= 0) return;
+  target.acValue = Math.max(0, (target.acValue || 0) - amount);
+  addInfluence(target, source, `ACCESS-${amount}`);
+};
+
+export const genericSoulDevourPowerEffect = (id: string): CardEffect => ({
+  id,
+  type: 'ACTIVATE',
+  triggerLocation: ['UNIT'],
+  limitCount: 1,
+  description: '噬魂：你的主要阶段，将这个单位以外的己方1个非神蚀单位送入墓地，本回合中你的所有单位力量+500。',
+  condition: (gameState, playerState, instance) =>
+    instance.cardlocation === 'UNIT' &&
+    playerState.isTurn &&
+    gameState.phase === 'MAIN' &&
+    ownUnits(playerState).some(unit => unit.gamecardId !== instance.gamecardId && !unit.godMark),
+  execute: async (instance, gameState, playerState) => {
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      ownUnits(playerState).filter(unit => unit.gamecardId !== instance.gamecardId && !unit.godMark),
+      '选择噬魂费用',
+      '选择这个单位以外的己方1个非神蚀单位送入墓地作为费用。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: id, step: 'SOUL_DEVOUR_COST' },
+      () => 'UNIT'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step !== 'SOUL_DEVOUR_COST') return;
+    const costUnit = playerState.unitZone.find(unit =>
+      unit?.gamecardId === selections[0] &&
+      unit.gamecardId !== instance.gamecardId &&
+      !unit.godMark
+    );
+    if (!costUnit) return;
+    moveCardAsCost(gameState, playerState.uid, costUnit, 'GRAVE', instance);
+    recordUnitSentFromFieldToGrave(gameState, playerState.uid, costUnit);
+    recordSoulDevourActivation(gameState, playerState);
+    ownUnits(playerState).forEach(unit => addTempPowerUntilEndOfTurn(unit, instance, 500, gameState));
+  }
+});
 
 export const addTempPower = (target: Card, source: Card, amount: number) => {
   const bonus = amount > 0 ? Number((target as any).data?.powerIncreaseBonus || 0) : 0;

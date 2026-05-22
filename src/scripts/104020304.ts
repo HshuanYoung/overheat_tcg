@@ -1,4 +1,56 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor, canPutItemOntoBattlefield, cardsInZones, moveCard, selectFromEntries } from './BaseUtil';
+
+const KYUBI = '九尾商会联盟';
+
+const isKyubiNonGodItem = (card: Card) =>
+  card.type === 'ITEM' &&
+  !card.godMark &&
+  (card.faction === KYUBI || card.fullName.includes('九尾商会联盟'));
+
+const itemTargets = (playerState: any) =>
+  cardsInZones(playerState, ['DECK', 'EROSION_FRONT'])
+    .filter(({ card }) =>
+      isKyubiNonGodItem(card) &&
+      (card.cardlocation !== 'EROSION_FRONT' || card.displayState === 'FRONT_UPRIGHT') &&
+      canPutItemOntoBattlefield(playerState, card)
+    );
+
+const cardEffects: CardEffect[] = [{
+  id: '104020304_enter_put_kyubi_item',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'CARD_ENTERED_ZONE',
+  limitCount: 1,
+  limitNameType: true,
+  description: '同名1回合1次：这个单位进入战场时，横置，将卡组或正面侵蚀区1张<九尾商会联盟>非神蚀道具放置到战场。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    event.data?.zone === 'UNIT' &&
+    instance.cardlocation === 'UNIT' &&
+    !instance.isExhausted &&
+    itemTargets(playerState).length > 0,
+  execute: async (instance, gameState, playerState) => {
+    instance.isExhausted = true;
+    selectFromEntries(
+      gameState,
+      playerState.uid,
+      itemTargets(playerState),
+      '选择九尾商会联盟道具',
+      '从你的卡组或正面侵蚀区选择1张<九尾商会联盟>非神蚀道具放置到战场。',
+      1,
+      1,
+      { sourceCardId: instance.gamecardId, effectId: '104020304_enter_put_kyubi_item' }
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections) => {
+    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
+    if (!target || !isKyubiNonGodItem(target) || !canPutItemOntoBattlefield(playerState, target)) return;
+    const fromDeck = target.cardlocation === 'DECK';
+    moveCard(gameState, playerState.uid, target, 'ITEM', instance);
+    if (fromDeck) await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +86,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT07',

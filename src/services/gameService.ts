@@ -107,6 +107,19 @@ const costDetails = (
 
 const getEffectivePlayCostDetails = (gameState: GameState | null, player: PlayerState, card: Card): EffectivePlayCostDetails => {
   const baseCost = card.id === '202000080' ? 6 : (card.baseAcValue ?? card.acValue ?? 0);
+  const soulDevourDiscount = gameState && card.cardlocation === 'HAND'
+    ? Number((player as any)[`soulDevourActivatedTurn_${gameState.turnCount}`] || 0)
+    : 0;
+  const isThunderUnit =
+    card.type === 'UNIT' &&
+    (
+      String(card.faction || '').includes('雷霆') ||
+      card.fullName.includes('雷霆') ||
+      !!card.specialName?.includes('雷霆')
+    );
+  if (soulDevourDiscount > 0 && (isThunderUnit || (card.color === 'RED' && !card.godMark))) {
+    return Math.max(0, baseCost - soulDevourDiscount);
+  }
   if (card.id === '101140062') {
     const unitCount = player.unitZone.filter(c => c !== null).length;
     return costDetails(baseCost, Math.max(0, baseCost - unitCount), card.fullName);

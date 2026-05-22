@@ -46,6 +46,7 @@ export type GameEventType =
   | 'CARD_EXILED'
   | 'CARD_LEFT_FIELD'
   | 'CARD_DISCARDED'
+  | 'UNIT_AWAKENED'
   | 'REVEAL_HAND'
   | 'REVEAL_DECK'
   | 'DECK_SHUFFLED';
@@ -275,6 +276,9 @@ export interface CardEffect {
   substitutionOnlyEffect?: boolean;
   substitutionOnlyOpponent?: boolean;
   movementReplacementDestination?: TriggerLocation; // Destination if this card's movement is replaced
+  replaceDeckToHandWithDiscard?: boolean; // If true, effect moves from deck to hand are replaced with grave
+  protectOwnGraveFromOpponentEffects?: boolean; // If true, own grave cards cannot be selected or moved by opponent effects
+  selfHandCostDiscount?: boolean; // If true, this card modifies its own effective play cost while in hand
   erosionKeepReplacement?: boolean; // If true, allows keeping a card during erosion phase that would be moved to grave
   limitGodmarkCount?: number; // New: Limit on the number of Godmark units on the field
 }

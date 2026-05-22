@@ -403,6 +403,9 @@ export class AtomicEffectExecutor {
 
   private static drawCards(gameState: GameState, playerUid: string, count: number) {
     const player = gameState.players[playerUid];
+    if (count > 0) {
+      (player as any).drawnByEffectTurn = gameState.turnCount;
+    }
     for (let i = 0; i < count; i++) {
       if (player.deck.length > 0) {
         const card = player.deck.pop()!;
@@ -1143,6 +1146,20 @@ export class AtomicEffectExecutor {
       previousSourceCardId = card.gamecardId;
       if (
         isEffect &&
+        fromZone === 'GRAVE' &&
+        options?.effectSourcePlayerUid &&
+        options.effectSourcePlayerUid !== playerUid
+      ) {
+        const protectedBy = sourcePlayer.itemZone.find(item =>
+          item?.effects?.some(effect => effect.type === 'CONTINUOUS' && effect.protectOwnGraveFromOpponentEffects)
+        );
+        if (protectedBy) {
+          gameState.logs.push(`[${protectedBy.fullName}] 防止墓地中的 [${card.fullName}] 成为对手效果的对象或被移动。`);
+          return;
+        }
+      }
+      if (
+        isEffect &&
         (fromZone === 'UNIT' || fromZone === 'ITEM') &&
         !['UNIT', 'ITEM'].includes(toZone) &&
         options?.effectSourcePlayerUid &&
@@ -1250,6 +1267,20 @@ export class AtomicEffectExecutor {
         card.canActivateEffect = card.baseCanActivateEffect;
       } else {
         card.canActivateEffect = true;
+      }
+    }
+
+    if (isEffect && fromZone === 'DECK' && toZone === 'HAND') {
+      const replacement = Object.values(gameState.players)
+        .flatMap(owner => [...owner.unitZone, ...owner.itemZone].filter((source): source is Card => !!source))
+        .flatMap(source => (source.effects || [])
+          .filter(effect => effect.type === 'CONTINUOUS' && effect.replaceDeckToHandWithDiscard)
+          .map(effect => ({ source, effect }))
+        )
+        .find(({ effect, source }) => !effect.condition || effect.condition(gameState, targetPlayer, source));
+      if (replacement) {
+        gameState.logs.push(`[${replacement.source.fullName}] 将从卡组加入手牌的 [${card.fullName}] 改为舍弃。`);
+        toZone = 'GRAVE';
       }
     }
 

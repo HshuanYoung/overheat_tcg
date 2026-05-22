@@ -6,7 +6,7 @@ import { getCardIdentity, getLocationLabel } from '../src/lib/utils';
 import { addBattleLog, cardToBattleLogRef, describeBattleLogTarget } from '../src/lib/battleLog';
 import { SERVER_CARD_LIBRARY } from './card_loader';
 import { GameService } from '../src/services/gameService';
-import { grantedTotemReviveFromGrave, isOpponentAcAtMost, standardizeChoiceOptions } from '../src/scripts/BaseUtil';
+import { grantedTotemReviveFromGrave, isOpponentAcAtMost, isProtectedGraveCardFromOpponentEffect, standardizeChoiceOptions } from '../src/scripts/BaseUtil';
 import { BotDifficulty, DeckAiProfile } from './ai/types';
 import { getDeckAiProfile } from './ai/deckProfiles';
 import { inferPlayerDeckProfile } from './ai/playerDeckProfile';
@@ -105,6 +105,19 @@ export const ServerGameService = {
 
   getEffectivePlayCost(player: PlayerState, card: Card, gameState?: GameState) {
     const baseCost = card.id === '202000080' ? 6 : (card.baseAcValue ?? card.acValue ?? 0);
+    const soulDevourDiscount = gameState && card.cardlocation === 'HAND'
+      ? Number((player as any)[`soulDevourActivatedTurn_${gameState.turnCount}`] || 0)
+      : 0;
+    const isThunderUnit =
+      card.type === 'UNIT' &&
+      (
+        String(card.faction || '').includes('雷霆') ||
+        card.fullName.includes('雷霆') ||
+        !!card.specialName?.includes('雷霆')
+      );
+    if (soulDevourDiscount > 0 && (isThunderUnit || (card.color === 'RED' && !card.godMark))) {
+      return Math.max(0, baseCost - soulDevourDiscount);
+    }
     if (card.id === '101140062') {
       const unitCount = player.unitZone.filter(c => c !== null).length;
       return Math.max(0, baseCost - unitCount);
@@ -1506,6 +1519,9 @@ export const ServerGameService = {
       card = sourceArray[index];
       if (options?.isEffect && options.effectSourceCardId) {
         const sourceCard = ServerGameService.findCardById(gameState, options.effectSourceCardId);
+        if (isProtectedGraveCardFromOpponentEffect(gameState, card, sourceCard, options.effectSourcePlayerUid)) {
+          return false;
+        }
         if (sourceCard && ServerGameService.isUnaffectedByCardEffect(gameState, card, sourceCard, options.effectSourcePlayerUid)) {
           return false;
         }
@@ -1583,6 +1599,20 @@ export const ServerGameService = {
       card.type === 'UNIT'
     ) {
       targetPlayer.unitFromGraveToFieldTurn = gameState.turnCount;
+    }
+
+    if (options?.isEffect && sourceZone === 'DECK' && targetZone === 'HAND') {
+      const replacement = Object.values(gameState.players)
+        .flatMap(owner => [...owner.unitZone, ...owner.itemZone].filter((source): source is Card => !!source))
+        .flatMap(source => (source.effects || [])
+          .filter(effect => effect.type === 'CONTINUOUS' && effect.replaceDeckToHandWithDiscard)
+          .map(effect => ({ source, effect }))
+        )
+        .find(({ effect, source }) => !effect.condition || effect.condition(gameState, targetPlayer, source));
+      if (replacement) {
+        gameState.logs.push(`[${replacement.source.fullName}] 将从卡组加入手牌的 [${card.fullName}] 改为舍弃。`);
+        targetZone = 'GRAVE';
+      }
     }
 
     // Movement Replacement logic (e.g. 104010484)
@@ -3127,8 +3157,13 @@ export const ServerGameService = {
         ServerGameService.createTriggerOrderQuery(gameState, bucket.ownerUid, bucket.records, bucket.mandatory);
         return;
       }
-      const trigger = ServerGameService.removeTriggerRecordById(gameState, ServerGameService.getTriggerQueueId(bucket.records[0]));
-      if (!trigger) {
+      card = liveSource.card;
+      const triggerLocation = (event?.type === 'REVEAL_DECK' && effect.triggerLocation?.includes('DECK'))
+        ? 'DECK'
+        : (event?.type === 'CARD_LEFT_FIELD' && effect.sourceSnapshotOnLeftField === true && event.data?.sourceZone)
+          ? event.data.sourceZone as TriggerLocation
+          : card.cardlocation as TriggerLocation;
+      if (!ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, card, effect, triggerLocation, event).valid) {
         await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
         return;
       }
@@ -5789,6 +5824,7 @@ export const ServerGameService = {
         delete (p as any).preventOpponentEffectDamageSourceName;
         delete (p as any).preventOpponentEffectDamageSourceCardId;
         delete (p as any).preventedOpponentEffectDamageThisTurn;
+        delete (p as any).drawnByEffectTurn;
 
         const allCards = [
           ...p.deck, ...p.hand, ...p.grave, ...p.exile,
@@ -5804,6 +5840,9 @@ export const ServerGameService = {
           if ((card as any).data?.fullEffectSilencedTurn !== undefined) {
             delete (card as any).data.fullEffectSilencedTurn;
             delete (card as any).data.fullEffectSilenceSource;
+          }
+          if ((card as any).data?.ohEffectDisabledUntilOwnStartUid === nextPlayerId) {
+            delete (card as any).data.ohEffectDisabledUntilOwnStartUid;
           }
           if ((card as any).data?.combatImmuneUntilOwnNextTurnStartUid === nextPlayerId) {
             delete (card as any).data.combatImmuneUntilOwnNextTurnStartUid;
@@ -6070,7 +6109,9 @@ export const ServerGameService = {
 
     const triggerLocation = (event?.type === 'REVEAL_DECK' && effect.triggerLocation?.includes('DECK'))
       ? 'DECK'
-      : liveCard.cardlocation as TriggerLocation;
+      : (event?.type === 'CARD_LEFT_FIELD' && effect.sourceSnapshotOnLeftField === true && event.data?.sourceZone)
+        ? event.data.sourceZone as TriggerLocation
+        : liveCard.cardlocation as TriggerLocation;
     const movementTriggerEvents = new Set(['CARD_ENTERED_ZONE', 'CARD_LEFT_ZONE', 'CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT']);
     if (effectIndex >= 0 && !movementTriggerEvents.has(event?.type)) {
       const triggerCheck = ServerGameService.checkEffectLimitsAndReqs(gameState, playerUid, liveCard, effect, triggerLocation, event);
@@ -6424,6 +6465,9 @@ export const ServerGameService = {
           if ((c as any).data?.fullEffectSilencedUntilOwnStartUid === player.uid) {
             delete (c as any).data.fullEffectSilencedUntilOwnStartUid;
             delete (c as any).data.fullEffectSilenceSource;
+          }
+          if ((c as any).data?.ohEffectDisabledUntilOwnStartUid === player.uid) {
+            delete (c as any).data.ohEffectDisabledUntilOwnStartUid;
           }
           if ((c as any).data?.combatImmuneUntilOwnNextTurnStartUid === player.uid) {
             delete (c as any).data.combatImmuneUntilOwnNextTurnStartUid;

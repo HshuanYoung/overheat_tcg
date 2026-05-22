@@ -1,4 +1,20 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { moveRandomGraveToDeckBottom } from './BaseUtil';
+
+const cardEffects: CardEffect[] = [{
+  id: '103080312_awaken_recover',
+  type: 'TRIGGER',
+  triggerLocation: ['UNIT'],
+  triggerEvent: 'UNIT_AWAKENED' as any,
+  limitCount: 1,
+  description: '1回合1次：这个单位适用唤醒时，恢复2。',
+  condition: (_gameState, playerState, instance, event) =>
+    event?.sourceCardId === instance.gamecardId &&
+    playerState.grave.length > 0,
+  execute: async (instance, gameState, playerState) => {
+    moveRandomGraveToDeckBottom(gameState, playerState.uid, Math.min(2, playerState.grave.length), instance);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -34,7 +50,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'C',
   availableRarities: ['C'],
   cardPackage: 'BT07',

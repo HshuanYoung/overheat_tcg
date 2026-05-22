@@ -1,4 +1,96 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { canPutUnitOntoBattlefield, cardsInZones, millTop, moveCard, putUnitOntoField, resonanceEffect, selectFromEntries } from './BaseUtil';
+
+const hasAwakenText = (card: Card) =>
+  (card.effects || []).some(effect =>
+    /awaken/i.test(effect.id || '') ||
+    (effect.description || '').includes('唤醒') ||
+    (effect.description || '').includes('喚醒')
+  );
+
+const awakenUnitEntries = (playerState: any) =>
+  cardsInZones(playerState, ['DECK', 'GRAVE'])
+    .filter(({ card }) =>
+      card.type === 'UNIT' &&
+      hasAwakenText(card) &&
+      canPutUnitOntoBattlefield(playerState, card)
+    );
+
+const cardEffects: CardEffect[] = [
+  {
+    ...resonanceEffect('103080317_resonance'),
+    erosionBackLimit: [1, 10],
+    cost: async (gameState, playerState, instance) => {
+      if (playerState.deck.length < 2) return false;
+      millTop(gameState, playerState.uid, 2, instance);
+      return true;
+    },
+    condition: (gameState, playerState, instance) =>
+      instance.cardlocation === 'UNIT' &&
+      playerState.isTurn &&
+      gameState.phase === 'MAIN' &&
+      playerState.grave.length > 0 &&
+      playerState.deck.length >= 2
+  },
+  {
+    id: '103080317_revive_self_after_own_unit_effect_leave',
+    type: 'TRIGGER',
+    triggerLocation: ['GRAVE'],
+    triggerEvent: 'CARD_LEFT_FIELD',
+    isGlobal: true,
+    limitCount: 1,
+    limitNameType: true,
+    description: '同名1回合1次：你的单位由于卡的效果从战场离开时，将墓地中的这张卡放置到战场。',
+    condition: (_gameState, playerState, instance, event) =>
+      instance.cardlocation === 'GRAVE' &&
+      event?.playerUid === playerState.uid &&
+      event.data?.sourceZone === 'UNIT' &&
+      event.data?.isEffect === true &&
+      canPutUnitOntoBattlefield(playerState, instance),
+    execute: async (instance, gameState, playerState) => {
+      putUnitOntoField(gameState, playerState.uid, instance, instance);
+    }
+  },
+  {
+    id: '103080317_put_awaken_unit',
+    type: 'ACTIVATE',
+    triggerLocation: ['HAND', 'UNIT'],
+    erosionBackLimit: [2, 10],
+    limitCount: 1,
+    limitNameType: true,
+    description: '创痕2：同名1回合1次，将手牌或战场上的这张卡送入墓地，将卡组或墓地中1张具有唤醒的单位卡放置到战场。',
+    condition: (_gameState, playerState, instance) =>
+      ['HAND', 'UNIT'].includes(instance.cardlocation || '') &&
+      awakenUnitEntries(playerState).length > 0,
+    execute: async (instance, gameState, playerState) => {
+      const fromZone = instance.cardlocation;
+      moveCard(gameState, playerState.uid, instance, 'GRAVE', instance);
+      (instance as any).data = {
+        ...((instance as any).data || {}),
+        paidSelfToGraveForAwakenTurn: gameState.turnCount,
+        paidSelfToGraveFromZone: fromZone
+      };
+      selectFromEntries(
+        gameState,
+        playerState.uid,
+        awakenUnitEntries(playerState),
+        '选择唤醒单位',
+        '选择你的卡组或墓地中的1张具有唤醒的单位卡放置到战场。',
+        1,
+        1,
+        { sourceCardId: instance.gamecardId, effectId: '103080317_put_awaken_unit' }
+      );
+    },
+    onQueryResolve: async (instance, gameState, playerState, selections) => {
+      const target = AtomicEffectExecutor.findCardById(gameState, selections[0]);
+      if (!target || target.type !== 'UNIT' || !hasAwakenText(target) || !canPutUnitOntoBattlefield(playerState, target)) return;
+      const fromDeck = target.cardlocation === 'DECK';
+      putUnitOntoField(gameState, playerState.uid, target, instance);
+      if (fromDeck) await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);
+    }
+  }
+];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -35,7 +127,7 @@ const card: Card = {
   canAttack: true,
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'SER',
   availableRarities: ['SER'],
   cardPackage: 'BT07',

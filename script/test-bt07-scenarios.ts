@@ -14,7 +14,58 @@ import bt07W09 from '../src/scripts/301140059';
 import bt07W10 from '../src/scripts/301130060';
 import bt07W11 from '../src/scripts/101130380';
 import bt07W12 from '../src/scripts/201000114';
-import { moveCardAsCost } from '../src/scripts/BaseUtil';
+import bt07B01 from '../src/scripts/104020304';
+import bt07B02 from '../src/scripts/104030305';
+import bt07B03 from '../src/scripts/104030306';
+import bt07B04 from '../src/scripts/104030307';
+import bt07B05 from '../src/scripts/104010308';
+import bt07B06 from '../src/scripts/104000309';
+import bt07B07 from '../src/scripts/204000091';
+import bt07B08 from '../src/scripts/204000092';
+import bt07B09 from '../src/scripts/304020050';
+import bt07B10 from '../src/scripts/304010051';
+import bt07B11 from '../src/scripts/104020310';
+import bt07G01 from '../src/scripts/103090311';
+import bt07G02 from '../src/scripts/103080312';
+import bt07G03 from '../src/scripts/103080313';
+import bt07G04 from '../src/scripts/103080314';
+import bt07G05 from '../src/scripts/103080315';
+import bt07G06 from '../src/scripts/103080316';
+import bt07G07 from '../src/scripts/103080317';
+import bt07G08 from '../src/scripts/203000093';
+import bt07G09 from '../src/scripts/203000094';
+import bt07G10 from '../src/scripts/303000052';
+import bt07G11 from '../src/scripts/103000318';
+import bt07R01 from '../src/scripts/102050319';
+import bt07R02 from '../src/scripts/102060320';
+import bt07R03 from '../src/scripts/102060321';
+import bt07R04 from '../src/scripts/102060369';
+import bt07R05 from '../src/scripts/102070370';
+import bt07R06 from '../src/scripts/102070371';
+import bt07R07 from '../src/scripts/102000372';
+import bt07R08 from '../src/scripts/202000107';
+import bt07R09 from '../src/scripts/202000108';
+import bt07R10 from '../src/scripts/302000058';
+import bt07R11 from '../src/scripts/102060373';
+import bt07Y01 from '../src/scripts/105110381';
+import bt07Y02 from '../src/scripts/105110382';
+import bt07Y03 from '../src/scripts/105110383';
+import bt07Y04 from '../src/scripts/105000384';
+import bt07Y05 from '../src/scripts/105000385';
+import bt07Y06 from '../src/scripts/205000111';
+import bt07Y07 from '../src/scripts/205000112';
+import bt07Y08 from '../src/scripts/305110061';
+import bt07Y09 from '../src/scripts/305000062';
+import bt07Y10 from '../src/scripts/305000063';
+import bt07Y11 from '../src/scripts/105110386';
+import {
+  awakenUnit,
+  destroyByEffect,
+  moveCardAsCost,
+  revealDeckCards,
+  totalUnitsSentFromFieldToGraveThisTurn,
+  wealthCount
+} from '../src/scripts/BaseUtil';
 
 type ScenarioResult = {
   name: string;
@@ -162,6 +213,14 @@ async function confirmTrigger(state: any, playerUid: string) {
   if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
     await answerPendingQuery(state, playerUid, ['YES']);
   }
+}
+
+function optionIdByValue(state: any, value: string): string {
+  const option = (state.pendingQuery?.options || []).find((entry: any) =>
+    entry.value === value || entry.id === value || entry.optionCode === value
+  );
+  if (!option) throw new Error(`No option ${value} in pending query`);
+  return option.id;
 }
 
 async function testPrepWorkerDestroysAfterShingiCostExile(): Promise<ScenarioResult> {
@@ -694,6 +753,1068 @@ async function testEmptyFantasyRecoverAndPreventEffectDamage(): Promise<Scenario
     : fail(name, `recovered=${recovered}, exiled=${exiled}, prevented=${prevented}`);
 }
 
+async function testBlueMerchantPutsOnlyKyubiNonGodItems(): Promise<ScenarioResult> {
+  const name = 'BT07-B01 White Tail Merchant puts only Kyubi non-god items';
+  const merchant = cloneScriptCard(bt07B01 as Card, 'UNIT');
+  const validDeckItem = testCard({ id: 'B01_VALID_DECK', fullName: 'Kyubi Item', type: 'ITEM', faction: '九尾商会联盟', color: 'BLUE', godMark: false, cardlocation: 'DECK' });
+  const validErosionItem = testCard({ id: 'B01_VALID_EROSION', fullName: 'Kyubi Erosion Item', type: 'ITEM', faction: '九尾商会联盟', color: 'BLUE', godMark: false, cardlocation: 'EROSION_FRONT' });
+  const godItem = testCard({ id: 'B01_GOD', fullName: 'God Item', type: 'ITEM', faction: '九尾商会联盟', godMark: true, cardlocation: 'DECK' });
+  const wrongFaction = testCard({ id: 'B01_WRONG', fullName: 'Wrong Item', type: 'ITEM', faction: 'Other', godMark: false, cardlocation: 'DECK' });
+  const state = game({
+    unitZone: [merchant, null, null, null, null, null],
+    deck: [validDeckItem, godItem, wrongFaction, ...deckCards(3, 'B01_FILL')],
+    erosionFront: [validErosionItem],
+  });
+  EventEngine.dispatchEvent(state, {
+    type: 'CARD_ENTERED_ZONE',
+    playerUid: 'BOT',
+    sourceCard: merchant,
+    sourceCardId: merchant.gamecardId,
+    data: { zone: 'UNIT', sourceZone: 'HAND', targetZone: 'UNIT' }
+  });
+  await confirmTrigger(state, 'BOT');
+  if (state.pendingQuery?.context?.effectId === '104020304_enter_put_kyubi_item') {
+    const optionIds = (state.pendingQuery.options || []).map((option: any) => option.card.gamecardId);
+    if (!optionIds.includes(validDeckItem.gamecardId) || !optionIds.includes(validErosionItem.gamecardId) || optionIds.includes(godItem.gamecardId) || optionIds.includes(wrongFaction.gamecardId)) {
+      return fail(name, `options=${optionIds.join(',')}`);
+    }
+    await answerPendingQuery(state, 'BOT', [validDeckItem.gamecardId]);
+  }
+  const placed = state.players.BOT.itemZone.some((item: Card | null) => item?.gamecardId === validDeckItem.gamecardId);
+  return placed && merchant.isExhausted
+    ? pass(name, `placed=${placed}, exhausted=${merchant.isExhausted}`)
+    : fail(name, `placed=${placed}, exhausted=${merchant.isExhausted}`);
+}
+
+async function testBlueAishaRecoversAfterOpponentExileAndHouseRevives(): Promise<ScenarioResult> {
+  const name = 'BT07-B02/B09 Aisha recovers after exile and House revives on leave';
+  const aisha = cloneScriptCard(bt07B02 as Card, 'UNIT');
+  const victim = testCard({ id: 'B02_VICTIM', fullName: 'Victim Unit', cardlocation: 'UNIT' });
+  const opponentSource = testCard({ id: 'B02_OPP_SOURCE', fullName: 'Opponent Exile Source', cardlocation: 'UNIT' });
+  const erosionUnit = testCard({ id: 'B02_EROSION_UNIT', fullName: 'Recoverable Unit', cardlocation: 'EROSION_FRONT', displayState: 'FRONT_UPRIGHT' });
+  const state = game({
+    unitZone: [aisha, victim, null, null, null, null],
+    erosionFront: [erosionUnit],
+  }, {
+    unitZone: [opponentSource, null, null, null, null, null],
+  });
+
+  ServerGameService.moveCard(state, 'BOT', 'UNIT', 'BOT', 'EXILE', victim.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: opponentSource.gamecardId,
+  });
+  await confirmTrigger(state, 'BOT');
+  if (state.pendingQuery?.context?.effectId !== '104030305_recover_after_own_unit_exiled' || state.pendingQuery.context.step !== 'TARGET') {
+    return fail(name, `expected Aisha target query, got ${state.pendingQuery?.context?.effectId || 'none'}:${state.pendingQuery?.context?.step || 'none'}`);
+  }
+  await answerPendingQuery(state, 'BOT', [erosionUnit.gamecardId]);
+  if (state.pendingQuery?.context?.step !== 'MODE') {
+    return fail(name, `expected Aisha mode query, got ${state.pendingQuery?.context?.step || 'none'}`);
+  }
+  await answerPendingQuery(state, 'BOT', ['FIELD']);
+  const aishaRecoveredToField = state.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === erosionUnit.gamecardId);
+
+  const house = cloneScriptCard(bt07B09 as Card, 'ITEM');
+  const wealthCarrier = testCard({
+    id: 'B09_WEALTH_CARRIER',
+    fullName: 'Wealth Carrier',
+    type: 'UNIT',
+    cardlocation: 'UNIT',
+    data: { wealthValue: 1 },
+  } as any);
+  const reviveTarget = testCard({
+    id: 'B09_REVIVE_TARGET',
+    fullName: 'Kyubi Revive Target',
+    type: 'UNIT',
+    faction: (bt07B11 as Card).faction,
+    cardlocation: 'GRAVE',
+  });
+  const leaveSource = testCard({ id: 'B09_OPP_SOURCE', fullName: 'Opponent Destroy Source', cardlocation: 'UNIT' });
+  const houseState = game({
+    unitZone: [wealthCarrier, null, null, null, null, null],
+    itemZone: [house],
+    grave: [reviveTarget],
+  }, {
+    unitZone: [leaveSource, null, null, null, null, null],
+  });
+  (house as any).data = { wealthBeforeLeftField: 1 };
+  ServerGameService.moveCard(houseState, 'BOT', 'ITEM', 'BOT', 'GRAVE', house.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: leaveSource.gamecardId,
+  });
+  await confirmTrigger(houseState, 'BOT');
+  if (houseState.pendingQuery?.context?.effectId === '304020050_revive_on_opponent_effect_leave') {
+    await answerPendingQuery(houseState, 'BOT', [reviveTarget.gamecardId]);
+  }
+  const houseRevived = houseState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === reviveTarget.gamecardId);
+
+  return aishaRecoveredToField && houseRevived
+    ? pass(name, `aishaRecovered=${aishaRecoveredToField}, houseRevived=${houseRevived}`)
+    : fail(name, `aishaRecovered=${aishaRecoveredToField}, houseRevived=${houseRevived}, pending=${houseState.pendingQuery?.context?.effectId || 'none'}`);
+}
+
+async function testBlueAdventurerSupportAndErosionEntry(): Promise<ScenarioResult> {
+  const name = 'BT07-B03/B04 adventurer pair support and erosion entry';
+  const hammo = cloneScriptCard(bt07B03 as Card, 'UNIT');
+  const amy = cloneScriptCard(bt07B04 as Card, 'UNIT');
+  const ally = testCard({ id: 'B03_ALLY', fullName: 'Adventurer Ally', faction: '冒险家公会', cardlocation: 'UNIT' });
+  const state = game({
+    unitZone: [hammo, amy, ally, null, null, null],
+  });
+  EventEngine.recalculateContinuousEffects(state);
+  const amyDamage = amy.damage;
+  const amyBattleProtected = !!(amy as any).data?.preventNextBattleDestroy;
+  const destroyed = await ServerGameService.destroyUnit(state, 'BOT', ally.gamecardId, true, 'P1');
+  const allyProtected = destroyed === false && state.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === ally.gamecardId);
+
+  const erosionHammo = cloneScriptCard(bt07B03 as Card, 'EROSION_FRONT', { gamecardId: 'B03_EROSION_HAMMO' });
+  const discard = testCard({ id: 'B03_DISCARD', cardlocation: 'HAND' });
+  const entryState = game({
+    hand: [discard],
+    unitZone: [
+      testCard({ id: 'B03_FIELD_1', faction: '冒险家公会', cardlocation: 'UNIT' }),
+      testCard({ id: 'B03_FIELD_2', faction: '冒险家公会', cardlocation: 'UNIT' }),
+      null, null, null, null
+    ],
+    erosionFront: [
+      erosionHammo,
+      testCard({ id: 'B03_EF_1', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'B03_EF_2', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'B03_EF_3', cardlocation: 'EROSION_FRONT' }),
+    ],
+  });
+  const effectIndex = erosionHammo.effects?.findIndex(effect => effect.id === '104030306_enter_from_erosion') ?? -1;
+  await ServerGameService.activateEffect(entryState, 'BOT', erosionHammo.gamecardId, effectIndex);
+  if (entryState.pendingQuery?.callbackKey === 'ACTIVATE_COST_RESOLVE') {
+    await answerPendingQuery(entryState, 'BOT', [discard.gamecardId]);
+  }
+  await ServerGameService.passConfrontation(entryState, entryState.priorityPlayerId);
+  const entered = entryState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === erosionHammo.gamecardId);
+
+  return amyDamage === 3 && amyBattleProtected && allyProtected && entered
+    ? pass(name, `amyDamage=${amyDamage}, allyProtected=${allyProtected}, entered=${entered}`)
+    : fail(name, `amyDamage=${amyDamage}, battleProtected=${amyBattleProtected}, allyProtected=${allyProtected}, entered=${entered}`);
+}
+
+async function testBlueElenaReplacesDeckSearchAndTriggers(): Promise<ScenarioResult> {
+  const name = 'BT07-B05 Elena replaces deck-to-hand search and triggers from discard';
+  const elena = cloneScriptCard(bt07B05 as Card, 'UNIT');
+  const searched = testCard({ id: 'B05_SEARCHED', cardlocation: 'DECK' });
+  const state = game({
+    unitZone: [elena, null, null, null, null, null],
+    deck: [searched, ...deckCards(3, 'B05_FILL')],
+  });
+  AtomicEffectExecutor.moveCard(state, 'BOT', 'DECK', 'BOT', 'HAND', searched.gamecardId, true, { effectSourcePlayerUid: 'BOT', effectSourceCardId: elena.gamecardId });
+  const replacedToGrave = state.players.BOT.grave.some((card: Card) => card.gamecardId === searched.gamecardId);
+
+  const discardedElena = cloneScriptCard(bt07B05 as Card, 'HAND', { gamecardId: 'B05_DISCARDED_ELENA' });
+  const triggerState = game({
+    hand: [discardedElena],
+    deck: deckCards(3, 'B05_DRAW'),
+    erosionFront: [
+      testCard({ id: 'B05_EF_0', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'B05_EF_1', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'B05_EF_2', cardlocation: 'EROSION_FRONT' }),
+    ],
+  });
+  AtomicEffectExecutor.moveCard(triggerState, 'BOT', 'HAND', 'BOT', 'GRAVE', discardedElena.gamecardId, true, { effectSourcePlayerUid: 'BOT', effectSourceCardId: discardedElena.gamecardId });
+  await confirmTrigger(triggerState, 'BOT');
+  if (triggerState.pendingQuery?.context?.step === 'MODE') {
+    const optionId = triggerState.pendingQuery.options?.find((option: any) => option.value === 'PUT_EXHAUSTED' || option.id === 'PUT_EXHAUSTED')?.id || 'PUT_EXHAUSTED';
+    await answerPendingQuery(triggerState, 'BOT', [optionId]);
+  }
+  const putExhausted = triggerState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === discardedElena.gamecardId && unit.isExhausted);
+
+  return replacedToGrave && putExhausted
+    ? pass(name, `replaced=${replacedToGrave}, putExhausted=${putExhausted}`)
+    : fail(name, `replaced=${replacedToGrave}, putExhausted=${putExhausted}`);
+}
+
+async function testBlueMahoragaMeditationAndTenkoOrder(): Promise<ScenarioResult> {
+  const name = 'BT07-B06/B07/B08 Mahoraga Meditation and Tenko Order resolve';
+  const mahoraga = cloneScriptCard(bt07B06 as Card, 'UNIT');
+  const nonGodTarget = testCard({ id: 'B06_TARGET', fullName: 'Non God Target', type: 'ITEM', godMark: false, cardlocation: 'ITEM' });
+  const state = game({
+    unitZone: [mahoraga, null, null, null, null, null],
+    erosionBack: [testCard({ id: 'B06_BACK_0', cardlocation: 'EROSION_BACK' }), testCard({ id: 'B06_BACK_1', cardlocation: 'EROSION_BACK' })],
+  }, {
+    itemZone: [nonGodTarget],
+  });
+  (state.players.BOT as any).drawnByEffectTurn = state.turnCount;
+  const destroyIndex = mahoraga.effects?.findIndex(effect => effect.id === '104000309_draw_effect_destroy') ?? -1;
+  await ServerGameService.activateEffect(state, 'BOT', mahoraga.gamecardId, destroyIndex);
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  if (state.pendingQuery?.context?.effectId === '104000309_draw_effect_destroy') {
+    await answerPendingQuery(state, 'BOT', [nonGodTarget.gamecardId]);
+  }
+  const destroyed = state.players.P1.grave.some((card: Card) => card.gamecardId === nonGodTarget.gamecardId);
+
+  const ohTarget = testCard({ id: 'B06_OH_TARGET', fullName: 'OH Target', cardlocation: 'UNIT' });
+  const ohState = game({
+    unitZone: [cloneScriptCard(bt07B06 as Card, 'UNIT'), null, null, null, null, null],
+  }, {
+    deck: deckCards(4, 'B06_OPP_DECK'),
+    unitZone: [ohTarget, null, null, null, null, null],
+  });
+  const ohSource = ohState.players.BOT.unitZone[0] as Card;
+  const ohIndex = ohSource.effects?.findIndex(effect => effect.id === '104000309_oh_exhaust_mill') ?? -1;
+  await ServerGameService.activateEffect(ohState, 'BOT', ohSource.gamecardId, ohIndex);
+  await ServerGameService.passConfrontation(ohState, ohState.priorityPlayerId);
+  if (ohState.pendingQuery?.context?.effectId === '104000309_oh_exhaust_mill') {
+    await answerPendingQuery(ohState, 'BOT', [ohTarget.gamecardId]);
+  }
+  const ohResolved = ohTarget.isExhausted &&
+    ohState.players.P1.deck.length === 2 &&
+    ohState.players.P1.grave.length === 2 &&
+    !!(ohSource as any).data?.ohEffectDisabledUntilOwnStartUid;
+
+  const meditation = cloneScriptCard(bt07B07 as Card, 'PLAY');
+  const meditateTarget = testCard({ id: 'B07_TARGET', fullName: 'Meditate Target', cardlocation: 'UNIT' });
+  const meditateState = game({
+    deck: deckCards(3, 'B07_DRAW'),
+    playZone: [meditation],
+  }, {
+    unitZone: [meditateTarget, null, null, null, null, null],
+  });
+  const meditationEffect = meditation.effects?.[0];
+  await meditationEffect?.execute?.(meditation, meditateState, meditateState.players.BOT);
+  if (meditateState.pendingQuery?.context?.effectId === '204000091_meditation') {
+    await answerPendingQuery(meditateState, 'BOT', [meditateTarget.gamecardId]);
+  }
+  const meditated = meditateTarget.isExhausted && !!(meditateTarget as any).data?.fullEffectSilencedUntilOwnStartUid && meditateState.players.BOT.hand.length === 1;
+
+  const order = cloneScriptCard(bt07B08 as Card, 'PLAY');
+  const yellow = testCard({ id: 'B08_YELLOW', color: 'YELLOW', acValue: 3, godMark: false, cardlocation: 'UNIT' });
+  const highYellow = testCard({ id: 'B08_HIGH', color: 'YELLOW', acValue: 4, godMark: false, cardlocation: 'UNIT' });
+  const orderState = game({
+    playZone: [order],
+  }, {
+    unitZone: [yellow, highYellow, null, null, null, null],
+  });
+  const orderEffect = order.effects?.[0];
+  await orderEffect?.execute?.(order, orderState, orderState.players.BOT);
+  if (orderState.pendingQuery?.context?.step === 'DESTROY_TARGET') {
+    const optionIds = (orderState.pendingQuery.options || []).map((option: any) => option.card.gamecardId);
+    if (!optionIds.includes(yellow.gamecardId) || optionIds.includes(highYellow.gamecardId)) {
+      return fail(name, `order options=${optionIds.join(',')}`);
+    }
+    await answerPendingQuery(orderState, 'BOT', [yellow.gamecardId]);
+  }
+  const orderDestroyed = orderState.players.P1.grave.some((card: Card) => card.gamecardId === yellow.gamecardId);
+
+  const counterOrder = cloneScriptCard(bt07B08 as Card, 'PLAY', { gamecardId: 'B08_COUNTER_ORDER' });
+  const opponentPlay = testCard({ id: 'B08_YELLOW_PLAY', fullName: 'Yellow Play', type: 'UNIT', color: 'YELLOW', acValue: 3, godMark: false, cardlocation: 'PLAY' });
+  const counterState = game({
+    playZone: [counterOrder],
+    erosionBack: [testCard({ id: 'B08_BACK', cardlocation: 'EROSION_BACK' })],
+  }, {
+    playZone: [opponentPlay],
+  }, {
+    phase: 'COUNTERING',
+    previousPhase: 'MAIN',
+    counterStack: [{
+      type: 'PLAY',
+      card: opponentPlay,
+      ownerUid: 'P1',
+      timestamp: Date.now(),
+    }],
+  });
+  const counterEffect = counterOrder.effects?.[0];
+  await counterEffect?.onQueryResolve?.(counterOrder, counterState, counterState.players.BOT, ['COUNTER'], { step: 'MODE' });
+  const orderCountered = !!counterState.counterStack[0]?.isNegated;
+
+  return destroyed && ohResolved && meditated && orderDestroyed && orderCountered
+    ? pass(name, `destroyed=${destroyed}, oh=${ohResolved}, meditated=${meditated}, orderDestroyed=${orderDestroyed}, countered=${orderCountered}`)
+    : fail(name, `destroyed=${destroyed}, oh=${ohResolved}, meditated=${meditated}, orderDestroyed=${orderDestroyed}, countered=${orderCountered}`);
+}
+
+async function testBlueWealthCoreAndEquipment(): Promise<ScenarioResult> {
+  const name = 'BT07-B09/B10/B11 wealth core and equipment resolve';
+  const house = cloneScriptCard(bt07B09 as Card, 'ITEM');
+  const kosako = cloneScriptCard(bt07B11 as Card, 'UNIT');
+  const granted = testCard({ id: 'B09_GRANTED', fullName: 'Blue Unit', type: 'UNIT', color: 'BLUE', cardlocation: 'UNIT' });
+  const state = game({
+    unitZone: [kosako, granted, null, null, null, null],
+    itemZone: [house],
+    erosionFront: [
+      testCard({ id: 'B09_EF_0', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'B09_EF_1', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'B09_EF_2', cardlocation: 'EROSION_FRONT' }),
+    ],
+  });
+  EventEngine.recalculateContinuousEffects(state);
+  EventEngine.dispatchEvent(state, {
+    type: 'CARD_ENTERED_ZONE',
+    playerUid: 'BOT',
+    sourceCard: granted,
+    sourceCardId: granted.gamecardId,
+    data: { zone: 'UNIT', sourceZone: 'HAND', targetZone: 'UNIT' }
+  });
+  await confirmTrigger(state, 'BOT');
+  if (state.pendingQuery?.context?.effectId === '304020050_grant_wealth_to_blue_unit') {
+    await answerPendingQuery(state, 'BOT', [granted.gamecardId]);
+  }
+  const grantedWealth = Number((granted as any).data?.wealthValue || 0) === 1;
+  EventEngine.recalculateContinuousEffects(state);
+  const kosakoWealth = wealthCount(state.players.BOT) >= 2;
+
+  const sword = cloneScriptCard(bt07B10 as Card, 'GRAVE');
+  const equipDiscard = testCard({ id: 'B10_DISCARD', cardlocation: 'HAND' });
+  const target = testCard({ id: 'B10_TARGET', fullName: '剑仙 Target', specialName: '剑仙 Target', faction: 'Other', cardlocation: 'UNIT' });
+  const equipState = game({
+    hand: [equipDiscard],
+    grave: [sword],
+    unitZone: [target, null, null, null, null, null],
+  });
+  const equipIndex = sword.effects?.findIndex(effect => effect.id === '304010051_revive_and_equip') ?? -1;
+  await ServerGameService.activateEffect(equipState, 'BOT', sword.gamecardId, equipIndex);
+  if (equipState.pendingQuery?.callbackKey === 'ACTIVATE_COST_RESOLVE') {
+    await answerPendingQuery(equipState, 'BOT', [equipDiscard.gamecardId]);
+  }
+  await ServerGameService.passConfrontation(equipState, equipState.priorityPlayerId);
+  if (equipState.pendingQuery?.context?.effectId === '304010051_revive_and_equip') {
+    await answerPendingQuery(equipState, 'BOT', [target.gamecardId]);
+  }
+  EventEngine.recalculateContinuousEffects(equipState);
+  const equipped = equipState.players.BOT.itemZone.some((item: Card | null) => item?.gamecardId === sword.gamecardId && item.equipTargetId === target.gamecardId);
+  const targetDamage = target.damage;
+
+  const discardedKosako = cloneScriptCard(bt07B11 as Card, 'HAND', { gamecardId: 'B11_DISCARD_KOSAKO' });
+  const kosakoState = game({
+    hand: [discardedKosako],
+  });
+  AtomicEffectExecutor.moveCard(kosakoState, 'BOT', 'HAND', 'BOT', 'GRAVE', discardedKosako.gamecardId, true, { effectSourcePlayerUid: 'BOT', effectSourceCardId: discardedKosako.gamecardId });
+  await confirmTrigger(kosakoState, 'BOT');
+  const putKosako = kosakoState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === discardedKosako.gamecardId);
+
+  return grantedWealth && kosakoWealth && equipped && targetDamage === 2 && putKosako
+    ? pass(name, `grantedWealth=${grantedWealth}, equipped=${equipped}, damage=${targetDamage}, putKosako=${putKosako}`)
+    : fail(name, `grantedWealth=${grantedWealth}, kosakoWealth=${kosakoWealth}, equipped=${equipped}, damage=${targetDamage}, putKosako=${putKosako}`);
+}
+
+async function testGreenResonanceAndCubTigerChain(): Promise<ScenarioResult> {
+  const name = 'BT07-G01/G03/G06 resonance and cub tiger chain';
+  const elder = cloneScriptCard(bt07G01 as Card, 'UNIT');
+  const graveCost = testCard({ id: 'G01_GRAVE_COST', fullName: 'Grave Cost', cardlocation: 'GRAVE' });
+  const sernobuDeck = testCard({ id: 'G01_SERNOBU', fullName: '瑟诺布 Candidate', faction: '瑟诺布', godMark: false, cardlocation: 'DECK' });
+  const state = game({
+    unitZone: [elder, null, null, null, null, null],
+    grave: [graveCost],
+    deck: [sernobuDeck, ...deckCards(3, 'G01_FILL')],
+  });
+  const resonanceIndex = elder.effects?.findIndex(effect => effect.id === '103090311_resonance') ?? -1;
+  await ServerGameService.activateEffect(state, 'BOT', elder.gamecardId, resonanceIndex);
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  if (state.pendingQuery?.context?.effectId === '103090311_resonance') {
+    await answerPendingQuery(state, 'BOT', [graveCost.gamecardId]);
+  }
+  await confirmTrigger(state, 'BOT');
+  if (state.pendingQuery?.context?.effectId === '103090311_mill_sernobu_after_grave_exile') {
+    await answerPendingQuery(state, 'BOT', [sernobuDeck.gamecardId]);
+  }
+  const exiledByResonance = state.players.BOT.exile.some((card: Card) => card.gamecardId === graveCost.gamecardId);
+  const milledSernobu = state.players.BOT.grave.some((card: Card) => card.gamecardId === sernobuDeck.gamecardId);
+
+  const cub = cloneScriptCard(bt07G03 as Card, 'UNIT');
+  const source = testCard({ id: 'G03_SOURCE', cardlocation: 'UNIT' });
+  const swordTiger = cloneScriptCard(bt07G06 as Card, 'DECK');
+  const cubState = game({
+    unitZone: [cub, null, null, null, null, null],
+    deck: [swordTiger, ...deckCards(3, 'G03_FILL')],
+  }, {
+    unitZone: [source, null, null, null, null, null],
+  });
+  ServerGameService.moveCard(cubState, 'BOT', 'UNIT', 'BOT', 'GRAVE', cub.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: source.gamecardId,
+  });
+  await confirmTrigger(cubState, 'BOT');
+  if (cubState.pendingQuery?.context?.effectId === '103080313_effect_leave_put_sword_tiger') {
+    await answerPendingQuery(cubState, 'BOT', [swordTiger.gamecardId]);
+  }
+  const tigerOnField = cubState.players.BOT.unitZone.find((unit: Card | null) => unit?.id === '103080316') as Card | undefined;
+  if (tigerOnField) {
+    awakenUnit(cubState, 'BOT', tigerOnField, cub);
+    await confirmTrigger(cubState, 'BOT');
+  }
+  const tigerReadyAnnihilation = !!tigerOnField && !tigerOnField.isExhausted && !!tigerOnField.isAnnihilation;
+
+  return exiledByResonance && milledSernobu && tigerReadyAnnihilation
+    ? pass(name, `resonance=${exiledByResonance}, milled=${milledSernobu}, tiger=${tigerReadyAnnihilation}`)
+    : fail(name, `resonance=${exiledByResonance}, milled=${milledSernobu}, tiger=${tigerReadyAnnihilation}`);
+}
+
+async function testGreenAwakenSnowRabbitAndCliffRescue(): Promise<ScenarioResult> {
+  const name = 'BT07-G02/G04/G05/G08 awaken, snow rabbit and cliff rescue';
+  const totem = cloneScriptCard(bt07G02 as Card, 'UNIT');
+  const graveA = testCard({ id: 'G02_GRAVE_A', cardlocation: 'GRAVE' });
+  const graveB = testCard({ id: 'G02_GRAVE_B', cardlocation: 'GRAVE' });
+  const totemState = game({
+    unitZone: [totem, null, null, null, null, null],
+    grave: [graveA, graveB],
+  });
+  awakenUnit(totemState, 'BOT', totem, totem);
+  await confirmTrigger(totemState, 'BOT');
+  const recovered = totemState.players.BOT.grave.length === 0 &&
+    totemState.players.BOT.deck.some((card: Card) => card.gamecardId === graveA.gamecardId) &&
+    totemState.players.BOT.deck.some((card: Card) => card.gamecardId === graveB.gamecardId);
+
+  const monkey = cloneScriptCard(bt07G04 as Card, 'UNIT');
+  const ally = testCard({ id: 'G04_ALLY', fullName: 'Ally', cardlocation: 'UNIT', power: 1000, basePower: 1000 });
+  const monkeyState = game({
+    unitZone: [monkey, ally, null, null, null, null],
+  });
+  const monkeyAwakenIndex = monkey.effects?.findIndex(effect => effect.id === '103080314_awaken') ?? -1;
+  await ServerGameService.activateEffect(monkeyState, 'BOT', monkey.gamecardId, monkeyAwakenIndex);
+  await ServerGameService.passConfrontation(monkeyState, monkeyState.priorityPlayerId);
+  if (monkeyState.pendingQuery?.context?.effectId === '103080314_awaken') {
+    await answerPendingQuery(monkeyState, 'BOT', [ally.gamecardId]);
+  }
+  await confirmTrigger(monkeyState, 'BOT');
+  if (monkeyState.pendingQuery?.context?.effectId === '103080314_awaken_boost_bottom') {
+    await answerPendingQuery(monkeyState, 'BOT', [ally.gamecardId]);
+  }
+  const boostedAndMarked = ally.power === 2000 && (ally as any).data?.returnToDeckBottomAtTurnEnd === monkeyState.turnCount;
+
+  const snowRabbit = cloneScriptCard(bt07G05 as Card, 'UNIT');
+  const returnedUnit = testCard({ id: 'G05_RETURNED', cardlocation: 'UNIT' });
+  const revive = testCard({ id: 'G05_REVIVE', type: 'UNIT', godMark: false, cardlocation: 'GRAVE' });
+  const discard = testCard({ id: 'G05_DISCARD', color: 'GREEN', cardlocation: 'HAND' });
+  const rabbitState = game({
+    hand: [discard],
+    unitZone: [snowRabbit, returnedUnit, null, null, null, null],
+    grave: [revive],
+  });
+  ServerGameService.moveCard(rabbitState, 'BOT', 'UNIT', 'BOT', 'DECK', returnedUnit.gamecardId, {
+    insertAtBottom: true,
+    isEffect: true,
+    effectSourcePlayerUid: 'BOT',
+    effectSourceCardId: snowRabbit.gamecardId,
+  });
+  await confirmTrigger(rabbitState, 'BOT');
+  if (rabbitState.pendingQuery?.callbackKey === 'ACTIVATE_COST_RESOLVE') {
+    await answerPendingQuery(rabbitState, 'BOT', [discard.gamecardId]);
+  }
+  if (rabbitState.pendingQuery?.context?.effectId === '103080315_unit_to_deck_put_grave_unit') {
+    await answerPendingQuery(rabbitState, 'BOT', [revive.gamecardId]);
+  }
+  const rabbitRevived = rabbitState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === revive.gamecardId);
+
+  const rescue = cloneScriptCard(bt07G08 as Card, 'PLAY');
+  const erosionUnit = testCard({ id: 'G08_EROSION', type: 'UNIT', cardlocation: 'EROSION_FRONT', displayState: 'FRONT_UPRIGHT' });
+  const greenDiscard = testCard({ id: 'G08_DISCARD', color: 'GREEN', cardlocation: 'HAND' });
+  const rescueState = game({
+    playZone: [rescue],
+    hand: [greenDiscard],
+    erosionBack: [testCard({ id: 'G08_BACK', cardlocation: 'EROSION_BACK' })],
+    erosionFront: [erosionUnit],
+  });
+  const rescueEffect = rescue.effects?.[0];
+  await rescueEffect?.execute?.(rescue, rescueState, rescueState.players.BOT);
+  if (rescueState.pendingQuery?.context?.step === 'TARGET') {
+    await answerPendingQuery(rescueState, 'BOT', [erosionUnit.gamecardId]);
+  }
+  if (rescueState.pendingQuery?.context?.step === 'DISCARD') {
+    await answerPendingQuery(rescueState, 'BOT', [greenDiscard.gamecardId]);
+  }
+  const rescued = rescueState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === erosionUnit.gamecardId) &&
+    rescueState.players.BOT.exile.some((card: Card) => card.gamecardId === rescue.gamecardId);
+
+  return recovered && boostedAndMarked && rabbitRevived && rescued
+    ? pass(name, `recovered=${recovered}, boosted=${boostedAndMarked}, rabbit=${rabbitRevived}, rescued=${rescued}`)
+    : fail(name, `recovered=${recovered}, boosted=${boostedAndMarked}, rabbit=${rabbitRevived}, rescued=${rescued}`);
+}
+
+async function testGreenGrienOrderSanctuaryAndMessenger(): Promise<ScenarioResult> {
+  const name = 'BT07-G07/G09/G10/G11 Grien order sanctuary and messenger';
+  const grien = cloneScriptCard(bt07G07 as Card, 'GRAVE');
+  const graveCost = testCard({ id: 'G07_GRAVE_COST', cardlocation: 'GRAVE' });
+  const selfState = game({
+    unitZone: [testCard({ id: 'G07_LEAVER', cardlocation: 'UNIT' }), null, null, null, null, null],
+    grave: [grien, graveCost],
+  });
+  ServerGameService.moveCard(selfState, 'BOT', 'UNIT', 'BOT', 'GRAVE', selfState.players.BOT.unitZone[0]!.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'BOT',
+    effectSourceCardId: selfState.players.BOT.unitZone[0]!.gamecardId,
+  });
+  await confirmTrigger(selfState, 'BOT');
+  const grienRevived = selfState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === grien.gamecardId);
+
+  const order = cloneScriptCard(bt07G09 as Card, 'PLAY');
+  const red = testCard({ id: 'G09_RED', color: 'RED', acValue: 3, godMark: false, cardlocation: 'UNIT' });
+  const orderState = game({ playZone: [order] }, { unitZone: [red, null, null, null, null, null] });
+  await order.effects?.[0]?.execute?.(order, orderState, orderState.players.BOT);
+  if (orderState.pendingQuery?.context?.step === 'DESTROY_TARGET') {
+    await answerPendingQuery(orderState, 'BOT', [red.gamecardId]);
+  }
+  const orderDestroyed = orderState.players.P1.grave.some((card: Card) => card.gamecardId === red.gamecardId);
+
+  const counterOrder = cloneScriptCard(bt07G09 as Card, 'PLAY', { gamecardId: 'G09_COUNTER_ORDER' });
+  const redPlay = testCard({ id: 'G09_RED_PLAY', type: 'UNIT', color: 'RED', acValue: 3, godMark: false, cardlocation: 'PLAY' });
+  const counterState = game({
+    playZone: [counterOrder],
+    erosionBack: [testCard({ id: 'G09_BACK', cardlocation: 'EROSION_BACK' })],
+  }, {
+    playZone: [redPlay],
+  }, {
+    phase: 'COUNTERING',
+    previousPhase: 'MAIN',
+    counterStack: [{ type: 'PLAY', card: redPlay, ownerUid: 'P1', timestamp: Date.now() }],
+  });
+  await counterOrder.effects?.[0]?.onQueryResolve?.(counterOrder, counterState, counterState.players.BOT, ['COUNTER'], { step: 'MODE' });
+  const orderCountered = !!counterState.counterStack[0]?.isNegated;
+
+  const sanctuary = cloneScriptCard(bt07G10 as Card, 'ITEM');
+  const protectedGrave = testCard({ id: 'G10_GRAVE', cardlocation: 'GRAVE' });
+  const source = testCard({ id: 'G10_SOURCE', cardlocation: 'UNIT' });
+  const shinboku = testCard({ id: 'G10_SHINBOKU', fullName: '神木森 Unit', faction: '神木森', cardlocation: 'UNIT', power: 1000, basePower: 1000 });
+  const sanctuaryState = game({
+    grave: [protectedGrave],
+    itemZone: [sanctuary],
+    unitZone: [shinboku, null, null, null, null, null],
+    erosionFront: [testCard({ id: 'G10_EROSION', cardlocation: 'EROSION_FRONT' })],
+  }, {
+    unitZone: [source, null, null, null, null, null],
+  });
+  const moved = ServerGameService.moveCard(sanctuaryState, 'BOT', 'GRAVE', 'BOT', 'EXILE', protectedGrave.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: source.gamecardId,
+  });
+  EventEngine.recalculateContinuousEffects(sanctuaryState);
+  const sanctuaryProtected = moved === false && sanctuaryState.players.BOT.grave.some((card: Card) => card.gamecardId === protectedGrave.gamecardId);
+  const sanctuaryBuffed = shinboku.power === 1500;
+
+  const messenger = cloneScriptCard(bt07G11 as Card, 'UNIT');
+  const reviveTarget = testCard({ id: 'G11_REVIVE', type: 'UNIT', color: 'GREEN', godMark: false, cardlocation: 'GRAVE' });
+  const messengerState = game({
+    unitZone: [messenger, null, null, null, null, null],
+    grave: [reviveTarget],
+  });
+  EventEngine.dispatchEvent(messengerState, {
+    type: 'CARD_ENTERED_ZONE',
+    playerUid: 'BOT',
+    sourceCard: messenger,
+    sourceCardId: messenger.gamecardId,
+    data: { zone: 'UNIT', sourceZone: 'HAND', targetZone: 'UNIT' }
+  });
+  await confirmTrigger(messengerState, 'BOT');
+  if (messengerState.pendingQuery?.context?.effectId === '103000318_enter_or_leave_revive_green') {
+    await answerPendingQuery(messengerState, 'BOT', [reviveTarget.gamecardId]);
+  }
+  const messengerRevived = messengerState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === reviveTarget.gamecardId);
+
+  return grienRevived && orderDestroyed && orderCountered && sanctuaryProtected && sanctuaryBuffed && messengerRevived
+    ? pass(name, `grien=${grienRevived}, order=${orderDestroyed}/${orderCountered}, sanctuary=${sanctuaryProtected}/${sanctuaryBuffed}, messenger=${messengerRevived}`)
+    : fail(name, `grien=${grienRevived}, order=${orderDestroyed}/${orderCountered}, sanctuary=${sanctuaryProtected}/${sanctuaryBuffed}, messenger=${messengerRevived}`);
+}
+
+async function testRedShieldSoulDevourAndDiscounts(): Promise<ScenarioResult> {
+  const name = 'BT07-R01/R02/R03 shield exile, soul devour and discounts';
+  const shield = cloneScriptCard(bt07R01 as Card, 'UNIT');
+  const priest = cloneScriptCard(bt07R03 as Card, 'UNIT');
+  const goblin = cloneScriptCard(bt07R02 as Card, 'UNIT');
+  const deckGoblin = cloneScriptCard(bt07R02 as Card, 'DECK', { gamecardId: 'R02_DECK_COPY' });
+  const redHand = testCard({
+    id: 'R03_RED_HAND',
+    fullName: 'Red Discount Hand',
+    type: 'STORY',
+    color: 'RED',
+    cardlocation: 'HAND',
+    acValue: 2,
+    baseAcValue: 2,
+    godMark: false,
+  });
+  const thunderHand = cloneScriptCard(bt07R02 as Card, 'HAND', {
+    gamecardId: 'R03_THUNDER_HAND',
+    color: 'BLUE',
+    acValue: 2,
+    baseAcValue: 2,
+  });
+  const exileSource = testCard({ id: 'R01_SOURCE', fullName: 'Opponent Exile Source', cardlocation: 'UNIT' });
+  const destroyTarget = testCard({ id: 'R01_TARGET', fullName: 'Opponent Non-God Target', godMark: false, cardlocation: 'UNIT' });
+  const state = game({
+    hand: [redHand, thunderHand],
+    unitZone: [shield, priest, goblin, null, null, null],
+    deck: [deckGoblin, ...deckCards(4, 'R02_FILL', 'RED')],
+  }, {
+    unitZone: [destroyTarget, exileSource, null, null, null, null],
+  });
+
+  ServerGameService.moveCard(state, 'BOT', 'UNIT', 'BOT', 'EXILE', shield.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: exileSource.gamecardId,
+  });
+  await confirmTrigger(state, 'BOT');
+  if (state.pendingQuery?.context?.effectId === '102050319_exiled_by_opponent_destroy') {
+    await answerPendingQuery(state, 'BOT', [destroyTarget.gamecardId]);
+  }
+  const shieldDestroyedTarget = state.players.P1.grave.some((card: Card) => card.gamecardId === destroyTarget.gamecardId);
+
+  const soulIndex = priest.effects?.findIndex(effect => effect.id === '102060321_soul_devour_power') ?? -1;
+  await priest.effects?.[soulIndex]?.execute?.(priest, state, state.players.BOT);
+  if (state.pendingQuery?.context?.effectId === '102060321_soul_devour_power') {
+    await answerPendingQuery(state, 'BOT', [goblin.gamecardId]);
+  }
+  await confirmTrigger(state, 'BOT');
+  if (state.pendingQuery?.context?.effectId === '102060320_cost_grave_put_copy') {
+    await answerPendingQuery(state, 'BOT', [deckGoblin.gamecardId]);
+  }
+  EventEngine.recalculateContinuousEffects(state);
+
+  const soulCount = (state.players.BOT as any)[`soulDevourActivatedTurn_${state.turnCount}`] === 1;
+  const sentCount = totalUnitsSentFromFieldToGraveThisTurn(state) >= 1;
+  const copiedGoblin = state.players.BOT.unitZone.find((unit: Card | null) => unit?.gamecardId === deckGoblin.gamecardId);
+  const copiedExhausted = !!copiedGoblin?.isExhausted;
+  const discounted = redHand.acValue === 1 && thunderHand.acValue === 1;
+
+  return shieldDestroyedTarget && soulCount && sentCount && copiedExhausted && discounted
+    ? pass(name, `shield=${shieldDestroyedTarget}, soul=${soulCount}, copy=${copiedExhausted}, discount=${redHand.acValue}/${thunderHand.acValue}`)
+    : fail(name, `shield=${shieldDestroyedTarget}, soul=${soulCount}, sent=${sentCount}, copy=${!!copiedGoblin}/${copiedGoblin?.isExhausted}, discount=${redHand.acValue}/${thunderHand.acValue}`);
+}
+
+async function testRedBatBladeItemAndTamiThresholds(): Promise<ScenarioResult> {
+  const name = 'BT07-R05/R06/R10/R11 bat blade item and Tami thresholds';
+  const bat = cloneScriptCard(bt07R05 as Card, 'UNIT', { playedTurn: 6 });
+  const payer = testCard({ id: 'R05_PAYER', fullName: 'Red Payer', color: 'RED', cardlocation: 'UNIT' });
+  const batTarget = testCard({ id: 'R05_TARGET', fullName: 'Bat Target', godMark: false, cardlocation: 'UNIT' });
+  const batState = game({
+    unitZone: [bat, payer, null, null, null, null],
+    deck: deckCards(5, 'R05_PAY', 'RED'),
+  }, {
+    unitZone: [batTarget, null, null, null, null, null],
+  });
+  const batIndex = bat.effects?.findIndex(effect => effect.id === '102070370_entry_destroy') ?? -1;
+  await ServerGameService.activateEffect(batState, 'BOT', bat.gamecardId, batIndex, undefined, { resumeFromQuery: true });
+  if (batState.pendingQuery?.type === 'SELECT_PAYMENT') {
+    await answerPendingQuery(batState, 'BOT', [JSON.stringify({ exhaustUnitIds: [payer.gamecardId] })]);
+  }
+  await ServerGameService.resolveCounterStack(batState);
+  if (batState.pendingQuery?.context?.effectId === '102070370_entry_destroy') {
+    await answerPendingQuery(batState, 'BOT', [batTarget.gamecardId]);
+  }
+  const batDestroyed = batState.players.P1.grave.some((card: Card) => card.gamecardId === batTarget.gamecardId);
+
+  const blade = cloneScriptCard(bt07R06 as Card, 'UNIT');
+  const vessel = cloneScriptCard(bt07R10 as Card, 'ITEM', { equipTargetId: blade.gamecardId });
+  const recruit = cloneScriptCard(bt07R04 as Card, 'DECK', { gamecardId: 'R06_RECRUIT' });
+  const bladeState = game({
+    unitZone: [blade, null, null, null, null, null],
+    itemZone: [vessel],
+    deck: [recruit, ...deckCards(3, 'R10_DRAW', 'RED')],
+  });
+  const bladeIndex = blade.effects?.findIndex(effect => effect.id === '102070371_self_cost_put_soul_devour') ?? -1;
+  await blade.effects?.[bladeIndex]?.execute?.(blade, bladeState, bladeState.players.BOT);
+  if (bladeState.pendingQuery?.context?.effectId === '102070371_self_cost_put_soul_devour') {
+    await answerPendingQuery(bladeState, 'BOT', [recruit.gamecardId]);
+  }
+  await confirmTrigger(bladeState, 'BOT');
+  const recruited = bladeState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === recruit.gamecardId);
+  const itemDrew = bladeState.players.BOT.hand.length === 1;
+  const bladeCounted = totalUnitsSentFromFieldToGraveThisTurn(bladeState) >= 1;
+
+  const tami = cloneScriptCard(bt07R11 as Card, 'UNIT');
+  const ally = testCard({ id: 'R11_ALLY', fullName: 'Tami Ally', color: 'RED', cardlocation: 'UNIT', power: 1000, basePower: 1000 });
+  const tamiTarget = testCard({ id: 'R11_TARGET', fullName: 'Tami Target', cardlocation: 'UNIT' });
+  const tamiState = game({
+    unitZone: [tami, ally, null, null, null, null],
+  }, {
+    unitZone: [tamiTarget, null, null, null, null, null],
+  });
+  (tamiState as any)[`unitsSentFromFieldToGraveTurn_${tamiState.turnCount}_global`] = 6;
+  EventEngine.recalculateContinuousEffects(tamiState);
+  const tamiThresholds =
+    tami.power === 4000 &&
+    ally.power === 2000 &&
+    !!tami.isrush &&
+    !!tami.isHeroic &&
+    !!tami.isShenyi &&
+    !!(ally as any).data?.canAttackAnyUnit;
+  const tamiDestroyIndex = tami.effects?.findIndex(effect => effect.id === '102060373_six_destroy_card') ?? -1;
+  await tami.effects?.[tamiDestroyIndex]?.execute?.(tami, tamiState, tamiState.players.BOT);
+  if (tamiState.pendingQuery?.context?.effectId === '102060373_six_destroy_card') {
+    await answerPendingQuery(tamiState, 'BOT', [tamiTarget.gamecardId]);
+  }
+  const tamiDestroyed = tamiState.players.P1.grave.some((card: Card) => card.gamecardId === tamiTarget.gamecardId);
+
+  return batDestroyed && recruited && itemDrew && bladeCounted && tamiThresholds && tamiDestroyed
+    ? pass(name, `bat=${batDestroyed}, blade=${recruited}/${itemDrew}, tami=${tamiThresholds}/${tamiDestroyed}`)
+    : fail(name, `bat=${batDestroyed}, recruited=${recruited}, itemDrew=${itemDrew}, bladeCounted=${bladeCounted}, tami=${tamiThresholds}/${tamiDestroyed}`);
+}
+
+async function testRedAsuraSacrificeAndHiyeOrder(): Promise<ScenarioResult> {
+  const name = 'BT07-R07/R08/R09 Asura sacrifice and Hiye order';
+  const asura = cloneScriptCard(bt07R07 as Card, 'UNIT');
+  const destroyedByOwnEffect = testCard({ id: 'R07_DESTROYED', fullName: 'Asura Trigger Target', type: 'UNIT', cardlocation: 'UNIT' });
+  const asuraState = game({
+    unitZone: [asura, null, null, null, null, null],
+  }, {
+    unitZone: [destroyedByOwnEffect, null, null, null, null, null],
+    deck: deckCards(5, 'R07_DAMAGE_DECK'),
+  });
+  destroyByEffect(asuraState, destroyedByOwnEffect, asura);
+  await confirmTrigger(asuraState, 'BOT');
+  const asuraDamaged = asuraState.players.P1.erosionFront.filter(Boolean).length === 2;
+
+  const ohAsura = cloneScriptCard(bt07R07 as Card, 'UNIT', { gamecardId: 'R07_OH_ASURA' });
+  const ohCost = testCard({ id: 'R07_OH_COST', color: 'RED', cardlocation: 'HAND' });
+  const ohTarget = testCard({ id: 'R07_OH_TARGET', godMark: false, cardlocation: 'UNIT' });
+  const ohState = game({
+    hand: [ohCost],
+    unitZone: [ohAsura, null, null, null, null, null],
+  }, {
+    unitZone: [ohTarget, null, null, null, null, null],
+  });
+  const ohIndex = ohAsura.effects?.findIndex(effect => effect.id === '102000372_oh_destroy_non_god') ?? -1;
+  await ServerGameService.activateEffect(ohState, 'BOT', ohAsura.gamecardId, ohIndex, undefined, { resumeFromQuery: true });
+  if (ohState.pendingQuery?.callbackKey === 'ACTIVATE_COST_RESOLVE') {
+    await answerPendingQuery(ohState, 'BOT', [ohCost.gamecardId]);
+  }
+  await ServerGameService.resolveCounterStack(ohState);
+  if (ohState.pendingQuery?.context?.effectId === '102000372_oh_destroy_non_god') {
+    await answerPendingQuery(ohState, 'BOT', [ohTarget.gamecardId]);
+  }
+  const asuraOhDestroyed = ohState.players.P1.grave.some((card: Card) => card.gamecardId === ohTarget.gamecardId);
+  const asuraOhDisabled = !!(ohAsura as any).data?.ohEffectDisabledUntilOwnStartUid;
+
+  const damageStory = cloneScriptCard(bt07R08 as Card, 'PLAY');
+  const damageCost = testCard({ id: 'R08_DAMAGE_COST', color: 'RED', cardlocation: 'HAND' });
+  const damageTarget = testCard({ id: 'R08_DAMAGE_TARGET', cardlocation: 'UNIT', damage: 1, baseDamage: 1 });
+  const damageState = game({
+    hand: [damageCost],
+    playZone: [damageStory],
+    unitZone: [damageTarget, null, null, null, null, null],
+  });
+  await damageStory.effects?.[0]?.execute?.(damageStory, damageState, damageState.players.BOT);
+  if (damageState.pendingQuery?.context?.step === 'MODE') {
+    await answerPendingQuery(damageState, 'BOT', [optionIdByValue(damageState, 'DAMAGE')]);
+  }
+  if (damageState.pendingQuery?.context?.step === 'DAMAGE_TARGET') {
+    await answerPendingQuery(damageState, 'BOT', [damageTarget.gamecardId]);
+  }
+  if (damageState.pendingQuery?.context?.step === 'DAMAGE_COST') {
+    await answerPendingQuery(damageState, 'BOT', [damageCost.gamecardId]);
+  }
+  const sacrificeDamage = damageTarget.damage === 3;
+
+  const retaliationStory = cloneScriptCard(bt07R08 as Card, 'PLAY', { gamecardId: 'R08_RETALIATION' });
+  const retaliationCost = testCard({ id: 'R08_RET_COST', color: 'BLUE', cardlocation: 'HAND' });
+  const victim = testCard({ id: 'R08_VICTIM', type: 'UNIT', cardlocation: 'UNIT' });
+  const retaliationSource = testCard({ id: 'R08_SOURCE', type: 'UNIT', cardlocation: 'UNIT' });
+  const retaliationState = game({
+    hand: [retaliationCost],
+    playZone: [retaliationStory],
+    unitZone: [victim, null, null, null, null, null],
+    deck: deckCards(4, 'R08_DRAW'),
+  }, {
+    unitZone: [retaliationSource, null, null, null, null, null],
+  });
+  await retaliationStory.effects?.[0]?.execute?.(retaliationStory, retaliationState, retaliationState.players.BOT);
+  if (retaliationState.pendingQuery?.context?.step === 'RETALIATION_COST') {
+    await answerPendingQuery(retaliationState, 'BOT', [retaliationCost.gamecardId]);
+  }
+  ServerGameService.moveCard(retaliationState, 'BOT', 'UNIT', 'BOT', 'EXILE', victim.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: retaliationSource.gamecardId,
+  });
+  await confirmTrigger(retaliationState, 'BOT');
+  const retaliationDestroyed = retaliationState.players.P1.grave.some((card: Card) => card.gamecardId === retaliationSource.gamecardId);
+  const retaliationDrew = retaliationState.players.BOT.hand.length === 2;
+
+  const order = cloneScriptCard(bt07R09 as Card, 'PLAY');
+  const white = testCard({ id: 'R09_WHITE', type: 'UNIT', color: 'WHITE', acValue: 3, godMark: false, cardlocation: 'UNIT' });
+  const orderState = game({ playZone: [order] }, { unitZone: [white, null, null, null, null, null] });
+  await order.effects?.[0]?.execute?.(order, orderState, orderState.players.BOT);
+  if (orderState.pendingQuery?.context?.step === 'DESTROY_TARGET') {
+    await answerPendingQuery(orderState, 'BOT', [white.gamecardId]);
+  }
+  const orderDestroyed = orderState.players.P1.grave.some((card: Card) => card.gamecardId === white.gamecardId);
+
+  const counterOrder = cloneScriptCard(bt07R09 as Card, 'PLAY', { gamecardId: 'R09_COUNTER_ORDER' });
+  const whitePlay = testCard({ id: 'R09_WHITE_PLAY', type: 'UNIT', color: 'WHITE', acValue: 3, godMark: false, cardlocation: 'PLAY' });
+  const counterState = game({
+    playZone: [counterOrder],
+    erosionBack: [testCard({ id: 'R09_BACK', cardlocation: 'EROSION_BACK' })],
+  }, {
+    playZone: [whitePlay],
+  }, {
+    phase: 'COUNTERING',
+    previousPhase: 'MAIN',
+    counterStack: [{ type: 'PLAY', card: whitePlay, ownerUid: 'P1', timestamp: Date.now() }],
+  });
+  await counterOrder.effects?.[0]?.onQueryResolve?.(counterOrder, counterState, counterState.players.BOT, ['COUNTER'], { step: 'MODE' });
+  const orderCountered = !!counterState.counterStack[0]?.isNegated;
+
+  return asuraDamaged && asuraOhDestroyed && asuraOhDisabled && sacrificeDamage && retaliationDestroyed && retaliationDrew && orderDestroyed && orderCountered
+    ? pass(name, `asura=${asuraDamaged}/${asuraOhDestroyed}, sacrifice=${sacrificeDamage}/${retaliationDestroyed}/${retaliationDrew}, order=${orderDestroyed}/${orderCountered}`)
+    : fail(name, `asura=${asuraDamaged}/${asuraOhDestroyed}/${asuraOhDisabled}, sacrifice=${sacrificeDamage}/${retaliationDestroyed}/${retaliationDrew}, order=${orderDestroyed}/${orderCountered}`);
+}
+
+async function testYellowPainterStephanieAndSteelPuppet(): Promise<ScenarioResult> {
+  const name = 'BT07-Y01/Y03/Y05 painter Stephanie and steel puppet';
+  const painter = cloneScriptCard(bt07Y01 as Card, 'UNIT');
+  const blueprintItem = cloneScriptCard(bt07Y08 as Card, 'DECK');
+  const painterState = game({
+    unitZone: [painter, null, null, null, null, null],
+    deck: [blueprintItem, ...deckCards(3, 'Y01_FILL', 'YELLOW')],
+  });
+  EventEngine.dispatchEvent(painterState, {
+    type: 'CARD_ENTERED_ZONE',
+    playerUid: 'BOT',
+    sourceCard: painter,
+    sourceCardId: painter.gamecardId,
+    data: { zone: 'UNIT', sourceZone: 'HAND', targetZone: 'UNIT' }
+  });
+  await confirmTrigger(painterState, 'BOT');
+  if (painterState.pendingQuery?.context?.effectId === '105110381_hand_enter_search_blueprint_item') {
+    await answerPendingQuery(painterState, 'BOT', [blueprintItem.gamecardId]);
+  }
+  const searchedBlueprint = painterState.players.BOT.hand.some((card: Card) => card.gamecardId === blueprintItem.gamecardId) && painter.isExhausted;
+
+  const stephanie = cloneScriptCard(bt07Y03 as Card, 'UNIT');
+  const costTop = testCard({ id: 'Y03_COST_TOP', cardlocation: 'DECK' });
+  const puppetFromTop = testCard({
+    id: 'Y03_NON_GOD_PUPPET',
+    fullName: '魔偶 Target',
+    type: 'UNIT',
+    color: 'YELLOW',
+    godMark: false,
+    acValue: 2,
+    cardlocation: 'DECK',
+  });
+  const otherReveal = testCard({ id: 'Y03_OTHER_REVEAL', fullName: 'Other Reveal', cardlocation: 'DECK' });
+  const stephanieState = game({
+    unitZone: [stephanie, null, null, null, null, null],
+    deck: [otherReveal, puppetFromTop, costTop],
+    erosionBack: [testCard({ id: 'Y03_BACK', cardlocation: 'EROSION_BACK' })],
+  });
+  const stephanieIndex = stephanie.effects?.findIndex(effect => effect.id === '105110383_creation_scar_put_top_blueprint_or_puppet') ?? -1;
+  await stephanie.effects?.[stephanieIndex]?.cost?.(stephanieState, stephanieState.players.BOT, stephanie);
+  await stephanie.effects?.[stephanieIndex]?.execute?.(stephanie, stephanieState, stephanieState.players.BOT);
+  if (stephanieState.pendingQuery?.context?.effectId === '105110383_creation_scar_put_top_blueprint_or_puppet') {
+    await answerPendingQuery(stephanieState, 'BOT', [puppetFromTop.gamecardId]);
+  }
+  EventEngine.recalculateContinuousEffects(stephanieState);
+  const stephanieBuffed = stephanie.power === 4000 && stephanie.damage === 4 && !!stephanie.isHeroic;
+  const stephaniePutPuppet = stephanieState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === puppetFromTop.gamecardId) &&
+    stephanieState.players.BOT.exile.some((card: Card) => card.gamecardId === costTop.gamecardId && card.displayState === 'FRONT_FACEDOWN');
+
+  const revealedSteel = cloneScriptCard(bt07Y05 as Card, 'DECK', { gamecardId: 'Y05_REVEALED_TOP' });
+  const revealState = game({
+    deck: [testCard({ id: 'Y05_BOTTOM', cardlocation: 'DECK' }), revealedSteel],
+  });
+  revealDeckCards(revealState, 'BOT', 1, revealedSteel);
+  await confirmTrigger(revealState, 'BOT');
+  EventEngine.recalculateContinuousEffects(revealState);
+  const selfPutSteel = revealState.players.BOT.unitZone.some((unit: Card | null) =>
+    unit?.gamecardId === revealedSteel.gamecardId &&
+    unit.power === 4000 &&
+    !!unit.isHeroic
+  );
+
+  return searchedBlueprint && stephanieBuffed && stephaniePutPuppet && selfPutSteel
+    ? pass(name, `search=${searchedBlueprint}, stephanie=${stephanieBuffed}/${stephaniePutPuppet}, steel=${selfPutSteel}`)
+    : fail(name, `search=${searchedBlueprint}, stephanie=${stephanieBuffed}/${stephaniePutPuppet}, steel=${selfPutSteel}`);
+}
+
+async function testYellowGuardRawStoneAndStories(): Promise<ScenarioResult> {
+  const name = 'BT07-Y02/Y04/Y06/Y07 guard raw stone and stories';
+  const guard = cloneScriptCard(bt07Y02 as Card, 'UNIT');
+  const recruit = testCard({ id: 'Y02_RECRUIT', fullName: 'Yellow Recruit', type: 'UNIT', color: 'YELLOW', godMark: false, acValue: 2, cardlocation: 'DECK' });
+  const revived = testCard({ id: 'Y02_OPP_REVIVED', type: 'UNIT', cardlocation: 'GRAVE' });
+  const reviveSource = testCard({ id: 'Y02_OPP_SOURCE', type: 'UNIT', cardlocation: 'UNIT' });
+  const guardState = game({
+    unitZone: [guard, null, null, null, null, null],
+    erosionBack: [testCard({ id: 'Y02_BACK', cardlocation: 'EROSION_BACK' })],
+    deck: [recruit, ...deckCards(3, 'Y02_FILL', 'YELLOW')],
+  }, {
+    grave: [revived],
+    unitZone: [reviveSource, null, null, null, null, null],
+  });
+  ServerGameService.moveCard(guardState, 'P1', 'GRAVE', 'P1', 'UNIT', revived.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: reviveSource.gamecardId,
+  });
+  await confirmTrigger(guardState, 'BOT');
+  if (guardState.pendingQuery?.context?.effectId === '105110382_opponent_grave_entry_recruit') {
+    await answerPendingQuery(guardState, 'BOT', [recruit.gamecardId]);
+  }
+  const guardedRecruit = guardState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === recruit.gamecardId);
+
+  const rawStone = cloneScriptCard(bt07Y04 as Card, 'UNIT');
+  const immortalStone = cloneScriptCard(bt07Y09 as Card, 'DECK');
+  const alchemySource = testCard({ id: 'Y04_ALCHEMY', fullName: '炼金 Source', type: 'UNIT', color: 'YELLOW', cardlocation: 'UNIT' });
+  const rawState = game({
+    unitZone: [rawStone, alchemySource, null, null, null, null],
+    deck: [immortalStone, ...deckCards(5, 'Y04_PAY', 'YELLOW')],
+  });
+  ServerGameService.moveCard(rawState, 'BOT', 'UNIT', 'BOT', 'GRAVE', rawStone.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'BOT',
+    effectSourceCardId: alchemySource.gamecardId,
+  });
+  await confirmTrigger(rawState, 'BOT');
+  if (rawState.pendingQuery?.type === 'SELECT_PAYMENT') {
+    await answerPendingQuery(rawState, 'BOT', [JSON.stringify({})]);
+  }
+  if (rawState.pendingQuery?.context?.effectId === '105000384_effect_grave_search_immortal_stone') {
+    await answerPendingQuery(rawState, 'BOT', [immortalStone.gamecardId]);
+  }
+  const rawSearched = rawState.players.BOT.hand.some((card: Card) => card.gamecardId === immortalStone.gamecardId);
+
+  const party = cloneScriptCard(bt07Y06 as Card, 'PLAY');
+  const partyTarget = testCard({ id: 'Y06_TARGET', type: 'UNIT', godMark: false, cardlocation: 'UNIT' });
+  const partyState = game({
+    playZone: [party],
+    deck: [
+      testCard({ id: 'Y06_BOTTOM', cardlocation: 'DECK' }),
+      testCard({ id: 'Y06_GOD', type: 'UNIT', godMark: true, cardlocation: 'DECK' }),
+      testCard({ id: 'Y06_TOP', cardlocation: 'DECK' }),
+    ],
+  }, {
+    unitZone: [partyTarget, null, null, null, null, null],
+  });
+  await party.effects?.[0]?.execute?.(party, partyState, partyState.players.BOT);
+  if (partyState.pendingQuery?.context?.effectId === '205000111_puppet_party') {
+    await answerPendingQuery(partyState, 'BOT', [partyTarget.gamecardId]);
+  }
+  const partyDestroyed = partyState.players.P1.grave.some((card: Card) => card.gamecardId === partyTarget.gamecardId) &&
+    partyState.players.BOT.exile.some((card: Card) => card.gamecardId === party.gamecardId);
+
+  const order = cloneScriptCard(bt07Y07 as Card, 'PLAY');
+  const green = testCard({ id: 'Y07_GREEN', type: 'UNIT', color: 'GREEN', acValue: 3, godMark: false, cardlocation: 'UNIT' });
+  const orderState = game({ playZone: [order] }, { unitZone: [green, null, null, null, null, null] });
+  await order.effects?.[0]?.execute?.(order, orderState, orderState.players.BOT);
+  if (orderState.pendingQuery?.context?.step === 'DESTROY_TARGET') {
+    await answerPendingQuery(orderState, 'BOT', [green.gamecardId]);
+  }
+  const orderDestroyed = orderState.players.P1.grave.some((card: Card) => card.gamecardId === green.gamecardId);
+
+  const counterOrder = cloneScriptCard(bt07Y07 as Card, 'PLAY', { gamecardId: 'Y07_COUNTER_ORDER' });
+  const greenPlay = testCard({ id: 'Y07_GREEN_PLAY', type: 'UNIT', color: 'GREEN', acValue: 3, godMark: false, cardlocation: 'PLAY' });
+  const counterState = game({
+    playZone: [counterOrder],
+    erosionBack: [testCard({ id: 'Y07_BACK', cardlocation: 'EROSION_BACK' })],
+  }, {
+    playZone: [greenPlay],
+  }, {
+    phase: 'COUNTERING',
+    previousPhase: 'MAIN',
+    counterStack: [{ type: 'PLAY', card: greenPlay, ownerUid: 'P1', timestamp: Date.now() }],
+  });
+  await counterOrder.effects?.[0]?.onQueryResolve?.(counterOrder, counterState, counterState.players.BOT, ['COUNTER'], { step: 'MODE' });
+  const orderCountered = !!counterState.counterStack[0]?.isNegated;
+
+  return guardedRecruit && rawSearched && partyDestroyed && orderDestroyed && orderCountered
+    ? pass(name, `guard=${guardedRecruit}, raw=${rawSearched}, party=${partyDestroyed}, order=${orderDestroyed}/${orderCountered}`)
+    : fail(name, `guard=${guardedRecruit}, raw=${rawSearched}, party=${partyDestroyed}, order=${orderDestroyed}/${orderCountered}`);
+}
+
+async function testYellowFortressBlueprintAnalysisAndImmortalStone(): Promise<ScenarioResult> {
+  const name = 'BT07-Y08/Y09/Y10/Y11 fortress blueprint analysis and immortal stone';
+  const fortressBlueprint = cloneScriptCard(bt07Y08 as Card, 'ITEM');
+  const defenseEngine = cloneScriptCard(bt07Y11 as Card, 'DECK');
+  const opponentNonGodA = testCard({ id: 'Y11_OPP_A', type: 'UNIT', godMark: false, cardlocation: 'UNIT' });
+  const opponentNonGodB = testCard({ id: 'Y11_OPP_B', type: 'ITEM', godMark: false, cardlocation: 'ITEM' });
+  const blueprintState = game({
+    itemZone: [fortressBlueprint],
+    deck: [defenseEngine, ...deckCards(3, 'Y08_FILL', 'YELLOW')],
+    exile: [
+      testCard({ id: 'Y08_EXILE_1', cardlocation: 'EXILE', displayState: 'FRONT_FACEDOWN' }),
+      testCard({ id: 'Y08_EXILE_2', cardlocation: 'EXILE', displayState: 'FRONT_FACEDOWN' }),
+      testCard({ id: 'Y08_EXILE_3', cardlocation: 'EXILE', displayState: 'FRONT_FACEDOWN' }),
+      testCard({ id: 'Y08_EXILE_4', cardlocation: 'EXILE', displayState: 'FRONT_FACEDOWN' }),
+    ],
+    erosionBack: [testCard({ id: 'Y11_BACK', cardlocation: 'EROSION_BACK' })],
+  }, {
+    unitZone: [opponentNonGodA, null, null, null, null, null],
+    itemZone: [opponentNonGodB],
+  });
+  const blueprintEffect = fortressBlueprint.effects?.find(effect => effect.id === '305110061_end_fortress_blueprint');
+  await blueprintEffect?.execute?.(fortressBlueprint, blueprintState, blueprintState.players.BOT);
+  if (blueprintState.pendingQuery?.context?.effectId === '305110061_end_fortress_blueprint') {
+    await answerPendingQuery(blueprintState, 'BOT', [defenseEngine.gamecardId]);
+  }
+  await confirmTrigger(blueprintState, 'BOT');
+  if (blueprintState.pendingQuery?.context?.effectId === '105110386_blueprint_entry_destroy') {
+    if (blueprintState.pendingQuery.context.step === 'MODE') {
+      await answerPendingQuery(blueprintState, 'BOT', [optionIdByValue(blueprintState, 'DESTROY_OPPONENT_NON_GOD')]);
+    }
+  }
+  EventEngine.recalculateContinuousEffects(blueprintState);
+  const defenseOnField = blueprintState.players.BOT.unitZone.find((unit: Card | null) => unit?.gamecardId === defenseEngine.gamecardId) as Card | undefined;
+  const blueprintResolved = !!defenseOnField &&
+    blueprintState.players.BOT.exile.filter((card: Card) => card.displayState === 'FRONT_FACEDOWN').length === 0 &&
+    blueprintState.players.P1.grave.some((card: Card) => card.gamecardId === opponentNonGodA.gamecardId) &&
+    blueprintState.players.P1.grave.some((card: Card) => card.gamecardId === opponentNonGodB.gamecardId) &&
+    defenseOnField.power === 5000 &&
+    defenseOnField.damage === 5 &&
+    !!defenseOnField.isHeroic &&
+    !!defenseOnField.isAnnihilation;
+
+  const immortalStone = cloneScriptCard(bt07Y09 as Card, 'ITEM');
+  const alchemySource = testCard({ id: 'Y09_ALCHEMY', fullName: '炼金 Tool', type: 'ITEM', cardlocation: 'ITEM' });
+  const alchemyGraveA = testCard({ id: 'Y09_ALCHEMY_A', fullName: '炼金 A', cardlocation: 'GRAVE' });
+  const alchemyGraveB = testCard({ id: 'Y09_ALCHEMY_B', fullName: '炼金 B', cardlocation: 'GRAVE' });
+  const stoneState = game({
+    itemZone: [immortalStone, alchemySource],
+    grave: [alchemyGraveA, alchemyGraveB],
+    deck: deckCards(3, 'Y09_DRAW', 'YELLOW'),
+  });
+  ServerGameService.moveCard(stoneState, 'BOT', 'ITEM', 'BOT', 'GRAVE', immortalStone.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'BOT',
+    effectSourceCardId: alchemySource.gamecardId,
+  });
+  await confirmTrigger(stoneState, 'BOT');
+  if (stoneState.pendingQuery?.context?.effectId === '305000062_alchemy_grave_bottom_draw_exile') {
+    await answerPendingQuery(stoneState, 'BOT', [alchemyGraveA.gamecardId, alchemyGraveB.gamecardId]);
+  }
+  const stoneResolved = stoneState.players.BOT.exile.some((card: Card) => card.gamecardId === immortalStone.gamecardId) &&
+    stoneState.players.BOT.hand.length === 1 &&
+    stoneState.players.BOT.deck.some((card: Card) => card.gamecardId === alchemyGraveA.gamecardId) &&
+    stoneState.players.BOT.deck.some((card: Card) => card.gamecardId === alchemyGraveB.gamecardId);
+
+  const analysis = cloneScriptCard(bt07Y10 as Card, 'ITEM');
+  const graveTarget = testCard({ id: 'Y10_TARGET_NAME', fullName: 'Analyzed Card', cardlocation: 'GRAVE' });
+  const sameHand = testCard({ id: 'Y10_TARGET_NAME', fullName: 'Analyzed Card', cardlocation: 'HAND' });
+  const analysisTop = testCard({ id: 'Y10_TOP', cardlocation: 'DECK' });
+  const analysisState = game({
+    itemZone: [analysis],
+    deck: [testCard({ id: 'Y10_BOTTOM', cardlocation: 'DECK' }), analysisTop],
+    erosionBack: [
+      testCard({ id: 'Y10_BACK_1', cardlocation: 'EROSION_BACK' }),
+      testCard({ id: 'Y10_BACK_2', cardlocation: 'EROSION_BACK' }),
+    ],
+  }, {
+    grave: [graveTarget],
+    hand: [sameHand],
+  });
+  const analysisIndex = analysis.effects?.findIndex(effect => effect.id === '305000063_analyze_same_name') ?? -1;
+  await analysis.effects?.[analysisIndex]?.cost?.(analysisState, analysisState.players.BOT, analysis);
+  await analysis.effects?.[analysisIndex]?.execute?.(analysis, analysisState, analysisState.players.BOT);
+  if (analysisState.pendingQuery?.context?.step === 'TARGET') {
+    await answerPendingQuery(analysisState, 'BOT', [graveTarget.gamecardId]);
+  }
+  if (analysisState.pendingQuery?.context?.step === 'SAME_NAME') {
+    await answerPendingQuery(analysisState, 'P1', [sameHand.gamecardId]);
+  }
+  const analysisResolved = analysis.isExhausted &&
+    analysisState.players.BOT.exile.some((card: Card) => card.gamecardId === analysisTop.gamecardId && card.displayState === 'FRONT_FACEDOWN') &&
+    analysisState.players.P1.grave.some((card: Card) => card.gamecardId === sameHand.gamecardId);
+
+  return blueprintResolved && stoneResolved && analysisResolved
+    ? pass(name, `blueprint=${blueprintResolved}, stone=${stoneResolved}, analysis=${analysisResolved}`)
+    : fail(name, `blueprint=${blueprintResolved}, stone=${stoneResolved}, analysis=${analysisResolved}`);
+}
+
 const scenarios: ScenarioRun[] = [
   testPrepWorkerDestroysAfterShingiCostExile,
   testTwilightGuardProtectsAlliance,
@@ -710,6 +1831,21 @@ const scenarios: ScenarioRun[] = [
   testDuskBarracksRecruitAndSubstitute,
   testYukatiaAllianceProtectionAndDestroy,
   testEmptyFantasyRecoverAndPreventEffectDamage,
+  testBlueMerchantPutsOnlyKyubiNonGodItems,
+  testBlueAishaRecoversAfterOpponentExileAndHouseRevives,
+  testBlueAdventurerSupportAndErosionEntry,
+  testBlueElenaReplacesDeckSearchAndTriggers,
+  testBlueMahoragaMeditationAndTenkoOrder,
+  testBlueWealthCoreAndEquipment,
+  testGreenResonanceAndCubTigerChain,
+  testGreenAwakenSnowRabbitAndCliffRescue,
+  testGreenGrienOrderSanctuaryAndMessenger,
+  testRedShieldSoulDevourAndDiscounts,
+  testRedBatBladeItemAndTamiThresholds,
+  testRedAsuraSacrificeAndHiyeOrder,
+  testYellowPainterStephanieAndSteelPuppet,
+  testYellowGuardRawStoneAndStories,
+  testYellowFortressBlueprintAnalysisAndImmortalStone,
 ];
 
 const results: ScenarioResult[] = [];

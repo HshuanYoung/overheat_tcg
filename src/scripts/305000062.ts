@@ -1,4 +1,84 @@
-import { Card } from '../types/game';
+import { Card, CardEffect } from '../types/game';
+import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import {
+  addTemporaryColor,
+  createSelectCardQuery,
+  isAlchemyCard,
+  moveCard,
+  nameContains
+} from './BaseUtil';
+
+const allColors = ['WHITE', 'BLUE', 'GREEN', 'RED', 'YELLOW'];
+
+const wasSentToGraveByAlchemyEffect = (gameState: any, instance: Card, event: any) => {
+  if (
+    event?.sourceCardId !== instance.gamecardId ||
+    event.data?.zone !== 'ITEM' ||
+    event.data?.targetZone !== 'GRAVE' ||
+    event.data?.isEffect !== true
+  ) {
+    return false;
+  }
+  const source = AtomicEffectExecutor.findCardById(gameState, event.data?.effectSourceCardId);
+  return !!source && nameContains(source, '炼金');
+};
+
+const alchemyGraveCards = (playerState: any) =>
+  playerState.grave.filter((card: Card) => isAlchemyCard(card));
+
+const drawAndExileSelf = async (instance: Card, gameState: any, playerState: any) => {
+  if (playerState.deck.length > 0) {
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 1 }, instance);
+  }
+  const liveSelf = AtomicEffectExecutor.findCardById(gameState, instance.gamecardId);
+  if (liveSelf?.cardlocation === 'GRAVE') {
+    moveCard(gameState, playerState.uid, liveSelf, 'EXILE', instance);
+  }
+};
+
+const cardEffects: CardEffect[] = [{
+  id: '305000062_all_colors_for_alchemy',
+  type: 'CONTINUOUS',
+  triggerLocation: ['ITEM'],
+  description: '卡名含有《炼金》的卡的效果将战场上的这张卡送入墓地时，这张卡视作具备所有颜色。',
+  applyContinuous: (_gameState, instance) => {
+    allColors.forEach(color => addTemporaryColor(instance, color));
+  }
+}, {
+  id: '305000062_alchemy_grave_bottom_draw_exile',
+  type: 'TRIGGER',
+  triggerLocation: ['ITEM', 'GRAVE'],
+  triggerEvent: 'CARD_LEFT_ZONE',
+  description: '这张卡被卡名含有《炼金》的卡的效果送入墓地时，可以将墓地最多2张《炼金》卡放置到卡组底。之后抽1张卡，将这张卡放逐。',
+  condition: (gameState, _playerState, instance, event) =>
+    wasSentToGraveByAlchemyEffect(gameState, instance, event),
+  execute: async (instance, gameState, playerState) => {
+    const candidates = alchemyGraveCards(playerState);
+    if (candidates.length === 0) {
+      await drawAndExileSelf(instance, gameState, playerState);
+      return;
+    }
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      candidates,
+      '选择炼金卡',
+      '选择墓地中最多2张卡名含有《炼金》的卡放置到卡组底。',
+      0,
+      Math.min(2, candidates.length),
+      { sourceCardId: instance.gamecardId, effectId: '305000062_alchemy_grave_bottom_draw_exile', step: 'BOTTOM_ALCHEMY' },
+      () => 'GRAVE'
+    );
+  },
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step !== 'BOTTOM_ALCHEMY') return;
+    selections.forEach(id => {
+      const selected = playerState.grave.find((card: Card) => card.gamecardId === id && isAlchemyCard(card));
+      if (selected) moveCard(gameState, playerState.uid, selected, 'DECK', instance, { insertAtBottom: true });
+    });
+    await drawAndExileSelf(instance, gameState, playerState);
+  }
+}];
 
 /**
  * Auto-generated from Card.xlsx + Card2.xlsx.
@@ -28,7 +108,7 @@ const card: Card = {
   displayState: 'FRONT_UPRIGHT',
   feijingMark: false,
   canResetCount: 0,
-  effects: [],
+  effects: cardEffects,
   rarity: 'R',
   availableRarities: ['R'],
   cardPackage: 'BT07',

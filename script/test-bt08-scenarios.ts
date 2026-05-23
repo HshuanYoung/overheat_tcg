@@ -1060,17 +1060,29 @@ async function testGreenSilverMusicDestroyAndBonuses(): Promise<ScenarioResult> 
   const battleZero = opponent.power === 0;
 
   const gladiator = cloneScriptCard(bt08G06 as Card, 'UNIT');
-  const stateE = game({ unitZone: [gladiator, null, null, null, null, null] });
+  const returnSource = testCard({ id: 'G06_RETURN_SOURCE', fullName: 'Return Source', type: 'UNIT', cardlocation: 'UNIT' });
+  const stateE = game({ unitZone: [gladiator, null, null, null, null, null] }, {
+    unitZone: [returnSource, null, null, null, null, null],
+  });
   EventEngine.recalculateContinuousEffects(stateE);
   const gated = (gladiator as any).data?.cannotAttackThisTurn === stateE.turnCount &&
     (gladiator as any).data?.cannotDefendTurn === stateE.turnCount;
+  const returnedByEffect = ServerGameService.moveCard(stateE, 'BOT', 'UNIT', 'BOT', 'DECK', gladiator.gamecardId, {
+    isEffect: true,
+    insertAtBottom: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: returnSource.gamecardId,
+  });
+  const preventedDeckReturn = returnedByEffect === false &&
+    stateE.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === gladiator.gamecardId) &&
+    !stateE.players.BOT.deck.some((card: Card) => card.gamecardId === gladiator.gamecardId);
   ensureData(gladiator).awakenedTurn = stateE.turnCount;
   EventEngine.recalculateContinuousEffects(stateE);
   const awakenedAllowed = (gladiator as any).data?.cannotAttackThisTurn !== stateE.turnCount;
 
-  return conductorDestroyed && dancerBuffed && dancerGated && girlsBuffed && girlsGated && battleZero && gated && awakenedAllowed
-    ? pass(name, `destroy=${conductorDestroyed}, dancer=${dancerBuffed}/${dancerGated}, girls=${girlsBuffed}/${girlsGated}, battle=${battleZero}, gate=${gated}`)
-    : fail(name, `destroy=${conductorDestroyed}, dancer=${dancerBuffed}/${dancerGated}, girls=${girlsBuffed}/${girlsGated}, battle=${battleZero}, gate=${gated}, awakened=${awakenedAllowed}`);
+  return conductorDestroyed && dancerBuffed && dancerGated && girlsBuffed && girlsGated && battleZero && gated && preventedDeckReturn && awakenedAllowed
+    ? pass(name, `destroy=${conductorDestroyed}, dancer=${dancerBuffed}/${dancerGated}, girls=${girlsBuffed}/${girlsGated}, battle=${battleZero}, gate=${gated}, return=${preventedDeckReturn}`)
+    : fail(name, `destroy=${conductorDestroyed}, dancer=${dancerBuffed}/${dancerGated}, girls=${girlsBuffed}/${girlsGated}, battle=${battleZero}, gate=${gated}, return=${preventedDeckReturn}, awakened=${awakenedAllowed}`);
 }
 
 async function testGreenResonanceAndSilverRecovery(): Promise<ScenarioResult> {

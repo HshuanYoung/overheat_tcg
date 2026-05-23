@@ -1544,6 +1544,19 @@ export const ServerGameService = {
           return false;
         }
       }
+      if (
+        options?.isEffect &&
+        sourceZone === 'UNIT' &&
+        targetZone === 'DECK' &&
+        card.effects?.some(effect =>
+          effect.type === 'CONTINUOUS' &&
+          effect.preventEffectReturnToDeck &&
+          ServerGameService.checkEffectLimitsAndReqs(gameState, sourcePlayerId, card, effect, sourceZone).valid
+        )
+      ) {
+        gameState.logs.push(`[${card.fullName}] 不会由于卡的效果返回卡组。`);
+        return false;
+      }
       previousSourceCardIdForMove = card.gamecardId;
       if (sourceZone === 'UNIT' || sourceZone === 'ITEM' || sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') {
         sourceArray[index] = null;

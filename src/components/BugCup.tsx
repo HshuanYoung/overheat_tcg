@@ -99,12 +99,14 @@ export const BugCup: React.FC = () => {
 
   const submittedDeckCount = registration?.deckCards?.length || 0;
   const selectedDecks = selectedDeckIds.map(id => myDecks.find(deck => deck.id === id) || null);
+  const hasDuplicateSelectedDecks = new Set(selectedDeckIds.filter(Boolean)).size !== selectedDeckIds.filter(Boolean).length;
   const selectedDeckErrors = selectedDecks
     .filter(Boolean)
     .map(deck => validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference))
     .filter(result => !result.valid)
     .map(result => result.error || '卡组不合法');
-  const canSubmitDecks = selectedDeckIds.filter(Boolean).length >= 1 && selectedDeckErrors.length === 0 && !!current?.canEditDecks;
+  const deckSelectionErrors = hasDuplicateSelectedDecks ? ['不能提交相同的卡组'] : selectedDeckErrors;
+  const canSubmitDecks = selectedDeckIds.filter(Boolean).length >= 1 && deckSelectionErrors.length === 0 && !!current?.canEditDecks;
 
   const loadData = async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -304,62 +306,19 @@ export const BugCup: React.FC = () => {
   const renderDeckPicker = (slot: number) => {
     const selected = myDecks.find(deck => deck.id === selectedDeckIds[slot]);
     return (
-      <div className="relative">
+      <div>
         <button
           type="button"
           disabled={!current?.canEditDecks}
-          onClick={() => setOpenPicker(openPicker === slot ? null : slot)}
+          onClick={() => setOpenPicker(slot)}
           className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-left disabled:opacity-70"
         >
           <span>
             <span className="block text-sm font-black text-white">{selected?.name || `选择卡组 ${slot + 1}`}</span>
             <span className="text-[10px] font-bold text-zinc-500">{selected ? `${selected.cards.length} 张` : '可留空第二套'}</span>
           </span>
-          <ChevronDown className={cn('h-4 w-4 text-zinc-500 transition-transform', openPicker === slot && 'rotate-180')} />
+          <ChevronDown className="h-4 w-4 text-zinc-500" />
         </button>
-
-        <AnimatePresence>
-          {openPicker === slot && (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl"
-            >
-              {slot === 1 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedDeckIds(ids => ids.slice(0, 1));
-                    setOpenPicker(null);
-                  }}
-                  className="mb-1 w-full rounded-lg px-3 py-3 text-left text-sm font-bold text-zinc-400 hover:bg-white/5"
-                >
-                  不提交第二套
-                </button>
-              )}
-              {myDecks.map(deck => {
-                const validation = validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference);
-                return (
-                  <button
-                    key={deck.id}
-                    type="button"
-                    onClick={() => updateDeckSelection(slot, deck.id)}
-                    className={cn('mb-1 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-white/5', !validation.valid && 'opacity-50')}
-                  >
-                    <span>
-                      <span className="block text-sm font-bold text-white">{deck.name}</span>
-                      <span className={cn('text-[10px] font-bold', validation.valid ? 'text-zinc-500' : 'text-red-400')}>
-                        {validation.valid ? `${deck.cards.length} 张` : validation.error}
-                      </span>
-                    </span>
-                    {selectedDeckIds[slot] === deck.id && <Check className="h-4 w-4 text-red-400" />}
-                  </button>
-                );
-              })}
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     );
   };
@@ -469,13 +428,13 @@ export const BugCup: React.FC = () => {
             )}
           </div>
 
-          {selectedDeckErrors.length > 0 && (
+          {deckSelectionErrors.length > 0 && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               className="relative mt-4 overflow-hidden rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-300 sm:text-sm"
             >
-              {selectedDeckErrors[0]}
+              {deckSelectionErrors[0]}
             </motion.div>
           )}
 
@@ -504,6 +463,21 @@ export const BugCup: React.FC = () => {
             </div>
           )}
         </section>
+
+        <DeckPickerModal
+          slot={openPicker}
+          decks={myDecks}
+          selectedDeckIds={selectedDeckIds}
+          selectedDeckId={openPicker === null ? undefined : selectedDeckIds[openPicker]}
+          cardsLoading={cardsLoading}
+          getCardByReference={getCardByReference}
+          onSelect={deckId => openPicker !== null && updateDeckSelection(openPicker, deckId)}
+          onClearSecond={() => {
+            setSelectedDeckIds(ids => ids.slice(0, 1));
+            setOpenPicker(null);
+          }}
+          onClose={() => setOpenPicker(null)}
+        />
 
         {!!registration && submittedDeckCount > 0 && (
           <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
@@ -890,6 +864,116 @@ const RulesModal = ({ open, onClose }: { open: boolean; onClose: () => void }) =
               <div className="text-sm font-black text-white">单淘</div>
               <p className="mt-2">瑞士轮按胜场和对手胜场决出前 4。半决赛为第 1 名对第 4 名、第 2 名对第 3 名；第二天半决赛胜者进行决赛，决出冠亚军。</p>
             </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+const DeckPickerModal = ({
+  slot,
+  decks,
+  selectedDeckIds,
+  selectedDeckId,
+  cardsLoading,
+  getCardByReference,
+  onSelect,
+  onClearSecond,
+  onClose
+}: {
+  slot: number | null;
+  decks: Deck[];
+  selectedDeckIds: string[];
+  selectedDeckId?: string;
+  cardsLoading: boolean;
+  getCardByReference: Parameters<typeof validateDeckForBattle>[1];
+  onSelect: (deckId: string) => void;
+  onClearSecond: () => void;
+  onClose: () => void;
+}) => (
+  <AnimatePresence>
+    {slot !== null && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 12 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+          className="flex max-h-[86vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-white shadow-2xl"
+          onClick={event => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+            <div>
+              <div className="text-[10px] font-black tracking-widest text-red-300">报名卡组</div>
+              <h2 className="mt-1 text-2xl font-black italic tracking-tight">选择第 {slot + 1} 套卡组</h2>
+              <p className="mt-1 text-xs font-bold text-zinc-500">会提交当前卡组快照，并同步发布到套牌广场。</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-white/10 bg-white/5 p-2 transition-colors hover:bg-white/10"
+              aria-label="关闭卡组选择"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto p-3">
+            {slot === 1 && (
+              <button
+                type="button"
+                onClick={onClearSecond}
+                className="mb-2 flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-black/25 px-4 py-3 text-left text-sm font-bold text-zinc-300 transition-colors hover:bg-white/5"
+              >
+                <span>
+                  <span className="block text-white">不提交第二套</span>
+                  <span className="text-[10px] text-zinc-500">只保留第 1 套报名卡组</span>
+                </span>
+                {!selectedDeckId && <Check className="h-4 w-4 text-red-400" />}
+              </button>
+            )}
+
+            {decks.map(deck => {
+              const validation = validateDeckForBattle(deck, cardsLoading ? undefined : getCardByReference);
+              const alreadySelectedInOtherSlot = slot !== null && selectedDeckIds.some((id, index) => index !== slot && id === deck.id);
+              const disabled = !validation.valid || alreadySelectedInOtherSlot;
+              return (
+                <button
+                  key={deck.id}
+                  type="button"
+                  onClick={() => !disabled && onSelect(deck.id)}
+                  disabled={disabled}
+                  className={cn(
+                    'mb-2 flex w-full items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-colors',
+                    selectedDeckId === deck.id
+                      ? 'border-red-500/50 bg-red-500/10'
+                      : 'border-zinc-800 bg-black/25 hover:bg-white/5',
+                    disabled && 'cursor-not-allowed opacity-50'
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black text-white">{deck.name}</span>
+                    <span className={cn('text-[10px] font-bold', validation.valid ? 'text-zinc-500' : 'text-red-400')}>
+                      {alreadySelectedInOtherSlot ? '已选择为另一套报名卡组' : validation.valid ? `${deck.cards.length} 张` : validation.error}
+                    </span>
+                  </span>
+                  {selectedDeckId === deck.id && <Check className="h-4 w-4 shrink-0 text-red-400" />}
+                </button>
+              );
+            })}
+
+            {decks.length === 0 && (
+              <div className="rounded-xl border border-zinc-800 bg-black/25 px-4 py-8 text-center text-sm font-bold text-zinc-500">
+                还没有可选择的卡组
+              </div>
+            )}
           </div>
         </motion.div>
       </motion.div>

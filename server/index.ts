@@ -2157,7 +2157,11 @@ app.delete('/api/user/decks/:id', async (req, res): Promise<void> => {
 
     try {
         const deckId = req.params.id;
+        const existingRows = await pool.query('SELECT id FROM decks WHERE id = ? AND user_id = ? LIMIT 1', [deckId, user.userId]);
+        if (existingRows.length === 0) { res.status(404).json({ error: 'Not found' }); return; }
+
         await pool.query('DELETE FROM decks WHERE id = ? AND user_id = ?', [deckId, user.userId]);
+        await repairBugCupRegistrationAfterDeckDelete(user, deckId);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'DB Error' });
@@ -2347,13 +2351,16 @@ async function upsertBugCupDeckSquarePost(user: any, slot: number, sourceDeckId:
 }
 
 async function readAndValidateBugCupDecks(user: any, deckIds: string[]) {
-    const uniqueDeckIds = deckIds.map(id => String(id || '').trim()).filter(Boolean).slice(0, 2);
-    if (uniqueDeckIds.length < 1 || uniqueDeckIds.length > 2) {
+    const requestedDeckIds = deckIds.map(id => String(id || '').trim()).filter(Boolean).slice(0, 2);
+    if (requestedDeckIds.length < 1 || requestedDeckIds.length > 2) {
         throw new Error('请选择 1 到 2 套卡组');
+    }
+    if (new Set(requestedDeckIds).size !== requestedDeckIds.length) {
+        throw new Error('不能提交相同的卡组');
     }
 
     const decks: { sourceId: string; name: string; cards: string[] }[] = [];
-    for (const deckId of uniqueDeckIds) {
+    for (const deckId of requestedDeckIds) {
         const rows = await pool.query('SELECT id, name, cards FROM decks WHERE id = ? AND user_id = ? LIMIT 1', [deckId, user.userId]);
         if (!rows.length) throw new Error('未找到选择的卡组');
 
@@ -2406,6 +2413,34 @@ async function syncExistingBugCupDecks(user: any) {
     const registration = await getBugCupRegistration(user.userId.toString());
     if (!registration) throw new Error('尚未报名');
     return saveBugCupRegistration(user, registration.deckSourceIds);
+}
+
+async function clearBugCupDeckSquarePosts(userId: string, postIds: string[]) {
+    for (const postId of postIds.filter(Boolean)) {
+        await pool.query('DELETE FROM deck_square_likes WHERE post_id = ?', [postId]);
+        await pool.query('DELETE FROM deck_square_posts WHERE id = ? AND user_id = ?', [postId, userId]);
+    }
+}
+
+async function repairBugCupRegistrationAfterDeckDelete(user: any, deletedDeckId: string) {
+    const registration = await getBugCupRegistration(user.userId.toString());
+    if (!registration || !registration.deckSourceIds.includes(deletedDeckId)) return;
+
+    if (!buildBugCupCurrent().canEditDecks) return;
+
+    const remainingDeckIds = registration.deckSourceIds.filter(sourceId => sourceId !== deletedDeckId);
+    if (remainingDeckIds.length > 0) {
+        const updatedRegistration = await saveBugCupRegistration(user, remainingDeckIds);
+        const activePostIds = new Set(updatedRegistration?.deckSquarePostIds || []);
+        await clearBugCupDeckSquarePosts(
+            user.userId.toString(),
+            (registration.deckSquarePostIds || []).filter(postId => !activePostIds.has(postId))
+        );
+        return;
+    }
+
+    await clearBugCupDeckSquarePosts(user.userId.toString(), registration.deckSquarePostIds || []);
+    await pool.query('DELETE FROM bug_cup_registrations WHERE edition = ? AND user_id = ?', [BUG_CUP_EDITION, user.userId]);
 }
 
 function resolveBugCupDeckCards(registration: any, deckIndex: number) {

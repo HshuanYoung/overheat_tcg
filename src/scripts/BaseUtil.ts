@@ -208,9 +208,14 @@ export const isResonanceExileEvent = (event?: GameEvent, sourceCard?: Card) => {
 
 export const hasAwakenAbility = (card: Card) =>
   (card.effects || []).some(effect =>
-    /awaken/i.test(effect.id || '') ||
-    (effect.description || '').includes('唤醒') ||
-    (effect.description || '').includes('喚醒')
+    effect.type === 'ACTIVATE' &&
+    (
+      /^.+_awaken$/i.test(effect.id || '') ||
+      (effect.description || '').startsWith('唤醒') ||
+      (effect.description || '').startsWith('喚醒') ||
+      (effect.description || '').includes('【启】唤醒') ||
+      (effect.description || '').includes('【启】喚醒')
+    )
   );
 
 export const awakenUnit = (gameState: GameState, playerUid: string, target: Card, source: Card) => {
@@ -1750,7 +1755,6 @@ export const destroyByEffect = (gameState: GameState, target: Card, source: Card
     const preventSource = sourceCardId ? AtomicEffectExecutor.findCardById(gameState, sourceCardId) : undefined;
     const preventSourceName = preventSource?.fullName || (gameState.players[uid] as any).preventOwnUnitsOpponentEffectDestroySourceName || '破坏防止';
     gameState.logs.push(`[${preventSourceName}] 防止了 [${target.fullName}] 将要被对手的卡的效果破坏。`);
-    void AtomicEffectExecutor.execute(gameState, uid, { type: 'DRAW', value: 2 }, preventSource || source);
     return;
   }
 

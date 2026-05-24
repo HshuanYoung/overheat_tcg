@@ -16,7 +16,7 @@ const isCardFullySilenced = (card: Card, context?: WealthContext) => {
   if (data?.fullEffectSilencedUntilOwnStartUid) return true;
   if (card.canActivateEffect === false) return true;
   if (context?.turnCount === undefined) return false;
-  if (data?.fullEffectSilencedTurn !== context.turnCount) return false;
+  if (data?.fullEffectSilencedTurn === undefined || data.fullEffectSilencedTurn < context.turnCount) return false;
   const zones = data.fullEffectSilencedZones as string[] | undefined;
   return !zones || zones.includes(card.cardlocation || '');
 };

@@ -1,14 +1,14 @@
 import { Card, CardEffect } from '../types/game';
 import {
   addInfluence,
-  backErosionCount,
   createSelectCardQuery,
   ensureData,
   isNonGodUnit,
   moveCardAsCost,
   nameContains,
   ownUnits,
-  silenceAllNonKeywordEffectsPermanently
+  silenceAllNonKeywordEffectsPermanently,
+  totalErosionCount
 } from './BaseUtil';
 
 const transformTargets = (playerState: any) =>
@@ -30,8 +30,8 @@ const cardEffects: CardEffect[] = [{
     instance.cardlocation === 'UNIT' &&
     playerState.isTurn &&
     gameState.phase === 'MAIN' &&
-    backErosionCount(playerState) >= 2 &&
-    backErosionCount(playerState) <= 5 &&
+    totalErosionCount(playerState) >= 2 &&
+    totalErosionCount(playerState) <= 5 &&
     handCosts(playerState, instance).length > 0 &&
     transformTargets(playerState).length > 0,
   execute: async (instance, gameState, playerState) => {

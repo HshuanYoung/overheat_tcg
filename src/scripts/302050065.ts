@@ -1,13 +1,13 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { addInfluence, ensureData, isSameFactionCard, ownUnits, totalErosionCount, wasPlacedByPromotion, wasPlacedByPromotionThisTurn } from './BaseUtil';
+import { addInfluence, ensureData, isFaction, ownUnits, totalErosionCount, wasPlacedByPromotion, wasPlacedByPromotionThisTurn } from './BaseUtil';
 
 const ownerOfItem = (gameState: any, instance: Card) =>
   Object.values(gameState.players)
     .find((player: any) => player.itemZone.some((item: Card | null) => item?.gamecardId === instance.gamecardId));
 
-const hasPromotionIleuUnit = (gameState: any, playerState: any, instance: Card) =>
-  ownUnits(playerState).some(unit => wasPlacedByPromotion(unit) && isSameFactionCard(unit, instance));
+const hasPromotionIleuUnit = (playerState: any) =>
+  ownUnits(playerState).some(unit => wasPlacedByPromotion(unit) && isFaction(unit, '伊列宇王国'));
 
 const ownFieldCards = (playerState: any) => [
   ...playerState.unitZone.filter((card: Card | null): card is Card => !!card),
@@ -21,10 +21,11 @@ const cardEffects: CardEffect[] = [{
   description: '你有由于晋升进入战场的同势力单位时，你战场上的卡每回合第一次因对手效果离场被防止。',
   applyContinuous: (gameState, instance) => {
     const owner = ownerOfItem(gameState, instance);
-    if (!owner || !hasPromotionIleuUnit(gameState, owner, instance)) return;
+    if (!owner || !hasPromotionIleuUnit(owner)) return;
     ownFieldCards(owner).forEach(card => {
       const data = ensureData(card);
       data.preventFirstOpponentEffectLeaveEachTurnSourceName = instance.fullName;
+      data.preventFirstOpponentEffectLeaveEachTurnSourceCardId = instance.gamecardId;
       addInfluence(card, instance, 'First opponent effect leave each turn is prevented');
     });
   }

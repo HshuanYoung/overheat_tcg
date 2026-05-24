@@ -11,7 +11,8 @@ const isFullEffectSilencedThisTurn = (gameState: GameState | null, card: Card) =
   (
     (card as any).data?.permanentEffectSilenced ||
     (card as any).data?.fullEffectSilencedUntilOwnStartUid ||
-    (card as any).data?.fullEffectSilencedTurn === gameState.turnCount
+    ((card as any).data?.fullEffectSilencedTurn !== undefined &&
+      (card as any).data.fullEffectSilencedTurn >= gameState.turnCount)
   ) &&
   (
     !(card as any).data?.fullEffectSilencedZones ||

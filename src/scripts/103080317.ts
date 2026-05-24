@@ -1,19 +1,12 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { canMeetBattlefieldColorRequirement, canPutUnitOntoBattlefield, cardsInZones, millTop, moveCard, putUnitOntoField, resonanceEffect, selectFromEntries } from './BaseUtil';
-
-const hasAwakenText = (card: Card) =>
-  (card.effects || []).some(effect =>
-    /awaken/i.test(effect.id || '') ||
-    (effect.description || '').includes('唤醒') ||
-    (effect.description || '').includes('喚醒')
-  );
+import { canMeetBattlefieldColorRequirement, canPutUnitOntoBattlefield, cardsInZones, hasAwakenAbility, millTop, moveCard, putUnitOntoField, resonanceEffect, selectFromEntries } from './BaseUtil';
 
 const awakenUnitEntries = (playerState: any) =>
   cardsInZones(playerState, ['DECK', 'GRAVE'])
     .filter(({ card }) =>
       card.type === 'UNIT' &&
-      hasAwakenText(card) &&
+      hasAwakenAbility(card) &&
       canPutUnitOntoBattlefield(playerState, card)
     );
 
@@ -90,7 +83,7 @@ const cardEffects: CardEffect[] = [
     },
     onQueryResolve: async (instance, gameState, playerState, selections) => {
       const target = AtomicEffectExecutor.findCardById(gameState, selections[0]);
-      if (!target || target.type !== 'UNIT' || !hasAwakenText(target) || !canPutUnitOntoBattlefield(playerState, target)) return;
+      if (!target || target.type !== 'UNIT' || !hasAwakenAbility(target) || !canPutUnitOntoBattlefield(playerState, target)) return;
       const fromDeck = target.cardlocation === 'DECK';
       putUnitOntoField(gameState, playerState.uid, target, instance);
       if (fromDeck) await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'SHUFFLE_DECK' }, instance);

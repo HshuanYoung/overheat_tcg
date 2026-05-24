@@ -1,28 +1,56 @@
 import { Card, CardEffect } from '../types/game';
 import { addContinuousDamage, addContinuousPower, ensureData, totalErosionCount } from './BaseUtil';
 
+const stackItemTargetsOwnField = (gameState: any, playerUid: string, item: any) => {
+  const ownFieldIds = new Set([
+    ...(gameState.players[playerUid]?.unitZone || []),
+    ...(gameState.players[playerUid]?.itemZone || [])
+  ].filter((card: Card | null): card is Card => !!card).map(card => card.gamecardId));
+  const declaredTargetIds = (item.declaredTargets || []).map((target: any) => target.gamecardId);
+  const directTargetIds = [
+    item.targetCardId,
+    item.data?.targetCardId,
+    item.data?.targetId,
+    ...(item.data?.targetCardIds || []),
+    ...(item.data?.targetIds || [])
+  ].filter(Boolean);
+  return [...declaredTargetIds, ...directTargetIds].some(id => ownFieldIds.has(id));
+};
+
+const containsDestroyEffect = (item: any) =>
+  /破坏|destroy/i.test(`${item.effect?.description || ''} ${item.effect?.content || ''} ${item.card?.fullName || ''}`);
+
+const isCounterableDestroyEffect = (gameState: any, playerUid: string, item: any) =>
+  item?.ownerUid &&
+  item.ownerUid !== playerUid &&
+  item.card &&
+  (
+    item.card.type === 'STORY' ||
+    item.effect?.type === 'ACTIVATE' ||
+    item.effect?.type === 'ACTIVATED'
+  ) &&
+  containsDestroyEffect(item) &&
+  stackItemTargetsOwnField(gameState, playerUid, item);
+
+const counterableDestroyEffectTarget = (gameState: any, playerUid: string) =>
+  [...((gameState as any).counterStack || [])].reverse().find((item: any) =>
+    isCounterableDestroyEffect(gameState, playerUid, item)
+  );
+
 const cardEffects: CardEffect[] = [{
   id: '103000418_counter_destroy_effect',
   type: 'ACTIVATE',
   triggerLocation: ['UNIT'],
   limitCount: 1,
   description: '1回合1次：反击对手使用的包含破坏你战场卡效果的【启】能力或故事卡。之后失去这个【启】能力。',
-  condition: (gameState, _playerState, instance) =>
+  condition: (gameState, playerState, instance) =>
     instance.cardlocation === 'UNIT' &&
     !(instance as any).data?.counterDestroyEffectLost &&
-    gameState.phase === 'COUNTERING',
-  execute: async (instance, gameState) => {
+    gameState.phase === 'COUNTERING' &&
+    !!counterableDestroyEffectTarget(gameState, playerState.uid),
+  execute: async (instance, gameState, playerState) => {
     ensureData(instance).counterDestroyEffectLost = true;
-    const stack = (gameState as any).counterStack || [];
-    const target = [...stack].reverse().find((item: any) =>
-      item?.card &&
-      (
-        item.card.type === 'STORY' ||
-        item.effect?.type === 'ACTIVATE' ||
-        item.effect?.type === 'ACTIVATED'
-      ) &&
-      /破坏|destroy/i.test(`${item.effect?.description || ''} ${item.card?.fullName || ''}`)
-    );
+    const target = counterableDestroyEffectTarget(gameState, playerState.uid);
     if (target) {
       target.isNegated = true;
       target.negated = true;

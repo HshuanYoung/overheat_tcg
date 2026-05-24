@@ -98,7 +98,7 @@ export const ServerGameService = {
     const data = (card as any).data;
     if (data?.permanentEffectSilenced) return true;
     if (data?.fullEffectSilencedUntilOwnStartUid) return true;
-    if (data?.fullEffectSilencedTurn !== gameState.turnCount) return false;
+    if (data?.fullEffectSilencedTurn === undefined || data.fullEffectSilencedTurn < gameState.turnCount) return false;
     const zones = data.fullEffectSilencedZones as TriggerLocation[] | undefined;
     return !zones || zones.includes(card.cardlocation as TriggerLocation);
   },
@@ -5429,7 +5429,6 @@ export const ServerGameService = {
       const preventSource = preventSourceCardId ? ServerGameService.findCardById(gameState, preventSourceCardId) : undefined;
       const sourceName = preventSource?.fullName || (player as any).preventOwnUnitsOpponentEffectDestroySourceName || '破坏防止';
       gameState.logs.push(`[${sourceName}] 防止了 [${unit.fullName}] 将要被对手的卡的效果破坏。`);
-      await AtomicEffectExecutor.execute(gameState, playerId, { type: 'DRAW', value: 2 }, preventSource);
       return false;
     }
 
@@ -5888,9 +5887,10 @@ export const ServerGameService = {
           if ((card as any).data?.clearMirrorActiveTurn !== undefined) {
             delete (card as any).data.clearMirrorActiveTurn;
           }
-          if ((card as any).data?.fullEffectSilencedTurn !== undefined) {
+          if ((card as any).data?.fullEffectSilencedTurn !== undefined && (card as any).data.fullEffectSilencedTurn < gameState.turnCount) {
             delete (card as any).data.fullEffectSilencedTurn;
             delete (card as any).data.fullEffectSilenceSource;
+            delete (card as any).data.fullEffectSilencedZones;
           }
           if ((card as any).data?.ohEffectDisabledUntilOwnStartUid === nextPlayerId) {
             delete (card as any).data.ohEffectDisabledUntilOwnStartUid;
@@ -6509,9 +6509,10 @@ export const ServerGameService = {
           if ((c as any).data?.clearMirrorActiveTurn !== undefined) {
             delete (c as any).data.clearMirrorActiveTurn;
           }
-          if ((c as any).data?.fullEffectSilencedTurn !== undefined) {
+          if ((c as any).data?.fullEffectSilencedTurn !== undefined && (c as any).data.fullEffectSilencedTurn < gameState.turnCount) {
             delete (c as any).data.fullEffectSilencedTurn;
             delete (c as any).data.fullEffectSilenceSource;
+            delete (c as any).data.fullEffectSilencedZones;
           }
           if ((c as any).data?.fullEffectSilencedUntilOwnStartUid === player.uid) {
             delete (c as any).data.fullEffectSilencedUntilOwnStartUid;

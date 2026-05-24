@@ -1,5 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor, canPutUnitOntoBattlefield, cardsInZones, createSelectCardQuery, discardHandCost, isNonGodUnit, moveCard, moveCardAsCost, putUnitOntoField } from './BaseUtil';
+import { AtomicEffectExecutor, canPutUnitOntoBattlefield, cardsInZones, createSelectCardQuery, discardHandCost, isNonGodUnit, moveCard, putUnitOntoField } from './BaseUtil';
 
 const ADVENTURER = '冒险家公会';
 
@@ -7,12 +7,17 @@ const isAdventurerNonGodUnit = (card: Card) =>
   isNonGodUnit(card) &&
   (card.faction === ADVENTURER || card.fullName.includes(ADVENTURER));
 
+const canCycleTargetThroughErosion = (playerState: any, card: Card) => {
+  if (!isAdventurerNonGodUnit(card)) return false;
+  if (card.cardlocation === 'UNIT') {
+    return playerState.unitZone.some((unit: Card | null) => unit === null || unit?.gamecardId === card.gamecardId);
+  }
+  return card.cardlocation === 'GRAVE' && canPutUnitOntoBattlefield(playerState, card);
+};
+
 const targets = (playerState: any) =>
   cardsInZones(playerState, ['UNIT', 'GRAVE'])
-    .filter(({ card }) =>
-      isAdventurerNonGodUnit(card) &&
-      canPutUnitOntoBattlefield(playerState, card)
-    );
+    .filter(({ card }) => canCycleTargetThroughErosion(playerState, card));
 
 const cardEffects: CardEffect[] = [{
   id: '104030415_cycle_adventurer_through_erosion',
@@ -37,10 +42,11 @@ const cardEffects: CardEffect[] = [{
       card => card.cardlocation as any
     );
   },
-  onQueryResolve: async (instance, gameState, playerState, selections) => {
+  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.costType === 'DISCARD_HAND_COST') return;
     const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
     if (!target || !targets(playerState).some(entry => entry.card.gamecardId === target.gamecardId)) return;
-    moveCardAsCost(gameState, playerState.uid, target, 'EROSION_FRONT', instance);
+    moveCard(gameState, playerState.uid, target, 'EROSION_FRONT', instance);
     const erosionCard = AtomicEffectExecutor.findCardById(gameState, target.gamecardId);
     if (erosionCard?.cardlocation === 'EROSION_FRONT') {
       putUnitOntoField(gameState, playerState.uid, erosionCard, instance);

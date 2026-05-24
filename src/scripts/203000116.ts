@@ -98,6 +98,13 @@ const cardEffects: CardEffect[] = [story('203000116_conveyed_thoughts', '选择1
       return;
     }
 
+    if (context?.step === 'DRAW_CHOICE') {
+      if (selections[0] === 'DRAW_TWO') {
+        await AtomicEffectExecutor.execute(gameState, playerState.uid, { type: 'DRAW', value: 2 }, instance);
+      }
+      return;
+    }
+
     if (context?.step !== 'DISCARD') return;
     const discarded = selections[0] ? playerState.hand.find((card: Card) => card.gamecardId === selections[0]) : undefined;
     if (!discarded) return;
@@ -117,6 +124,18 @@ const cardEffects: CardEffect[] = [story('203000116_conveyed_thoughts', '选择1
     player.preventOwnUnitsOpponentEffectDestroyTurn = gameState.turnCount;
     player.preventOwnUnitsOpponentEffectDestroySourceName = instance.fullName;
     player.preventOwnUnitsOpponentEffectDestroySourceCardId = instance.gamecardId;
+    createChoiceQuery(
+      gameState,
+      playerState.uid,
+      '抽卡选择',
+      '是否抽2张卡？',
+      [
+        { id: 'DRAW_TWO', label: '抽2张卡' },
+        { id: 'NO_DRAW', label: '不抽' }
+      ],
+      { sourceCardId: instance.gamecardId, effectId: '203000116_conveyed_thoughts', step: 'DRAW_CHOICE' }
+    );
+    return;
   }
 })];
 

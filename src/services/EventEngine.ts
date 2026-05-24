@@ -9,7 +9,7 @@ export class EventEngine {
     const data = (card as any).data;
     if (data?.permanentEffectSilenced) return true;
     if (data?.fullEffectSilencedUntilOwnStartUid) return true;
-    if (data?.fullEffectSilencedTurn !== gameState.turnCount) return false;
+    if (data?.fullEffectSilencedTurn === undefined || data.fullEffectSilencedTurn < gameState.turnCount) return false;
     const zones = data.fullEffectSilencedZones as TriggerLocation[] | undefined;
     return !zones || zones.includes(card.cardlocation as TriggerLocation);
   }
@@ -335,6 +335,8 @@ export class EventEngine {
             delete (card as any).data.canAttackExhausted;
             delete (card as any).data.canAttackReady;
             delete (card as any).data.cannotExhaustByEffect;
+            delete (card as any).data.preventFirstOpponentEffectLeaveEachTurnSourceName;
+            delete (card as any).data.preventFirstOpponentEffectLeaveEachTurnSourceCardId;
             if ((card as any).data.soulBindItemId) {
               const sourceStillActive = Object.values(gameState.players).some(player =>
                 player.itemZone.some(item => item?.gamecardId === (card as any).data.soulBindItemId)

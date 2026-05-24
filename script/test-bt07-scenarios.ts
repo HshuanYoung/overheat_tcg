@@ -868,10 +868,31 @@ async function testPrFantasyStories(): Promise<ScenarioResult> {
     await answerPendingQuery(thoughtsState, 'BOT', [greenDiscard.gamecardId]);
   }
   const thoughtsResolved = boostTarget.power === 1500 && boostTarget.isAnnihilation === true;
+  const protectThoughts = cloneScriptCard(prConveyedThoughts as Card, 'PLAY', { gamecardId: 'PR_THOUGHTS_PROTECT' });
+  const protectDiscard = testCard({ id: 'PR_THOUGHTS_PROTECT_DISCARD', cardlocation: 'HAND' });
+  const drawA = testCard({ id: 'PR_THOUGHTS_DRAW_A', cardlocation: 'DECK' });
+  const drawB = testCard({ id: 'PR_THOUGHTS_DRAW_B', cardlocation: 'DECK' });
+  const protectState = game({
+    hand: [protectDiscard],
+    deck: [drawA, drawB],
+    playZone: [protectThoughts],
+  });
+  await protectThoughts.effects?.[0]?.execute?.(protectThoughts, protectState, protectState.players.BOT);
+  if (protectState.pendingQuery?.context?.step === 'MODE') {
+    await answerPendingQuery(protectState, 'BOT', [optionIdByValue(protectState, 'PROTECT_DESTROY_DRAW')]);
+  }
+  if (protectState.pendingQuery?.context?.step === 'DISCARD') {
+    await answerPendingQuery(protectState, 'BOT', [protectDiscard.gamecardId]);
+  }
+  if (protectState.pendingQuery?.context?.step === 'DRAW_CHOICE') {
+    await answerPendingQuery(protectState, 'BOT', [optionIdByValue(protectState, 'DRAW_TWO')]);
+  }
+  const thoughtsDraw = protectState.players.BOT.hand.some((card: Card) => card.gamecardId === drawA.gamecardId) &&
+    protectState.players.BOT.hand.some((card: Card) => card.gamecardId === drawB.gamecardId);
 
-  return snowResolved && otherworldResolved && deepSeaResolved && thoughtsResolved
-    ? pass(name, `snow=${snowResolved}, otherworld=${otherworldResolved}, deep=${deepSeaResolved}, thoughts=${thoughtsResolved}`)
-    : fail(name, `snow=${snowResolved}, otherworld=${otherworldResolved}, deep=${deepSeaResolved}, thoughts=${thoughtsResolved}`);
+  return snowResolved && otherworldResolved && deepSeaResolved && thoughtsResolved && thoughtsDraw
+    ? pass(name, `snow=${snowResolved}, otherworld=${otherworldResolved}, deep=${deepSeaResolved}, thoughts=${thoughtsResolved}/${thoughtsDraw}`)
+    : fail(name, `snow=${snowResolved}, otherworld=${otherworldResolved}, deep=${deepSeaResolved}, thoughts=${thoughtsResolved}/${thoughtsDraw}`);
 }
 
 async function testBlueMerchantPutsOnlyKyubiNonGodItems(): Promise<ScenarioResult> {
@@ -1342,15 +1363,16 @@ async function testGreenResonanceAndCubTigerChain(): Promise<ScenarioResult> {
     await answerPendingQuery(cubState, 'BOT', [swordTiger.gamecardId]);
   }
   const tigerOnField = cubState.players.BOT.unitZone.find((unit: Card | null) => unit?.id === '103080316') as Card | undefined;
+  const tigerNoBaseAnnihilation = !!tigerOnField && !tigerOnField.isAnnihilation;
   if (tigerOnField) {
     awakenUnit(cubState, 'BOT', tigerOnField, cub);
     await confirmTrigger(cubState, 'BOT');
   }
   const tigerReadyAnnihilation = !!tigerOnField && !tigerOnField.isExhausted && !!tigerOnField.isAnnihilation;
 
-  return exiledByResonance && milledSernobu && tigerReadyAnnihilation
-    ? pass(name, `resonance=${exiledByResonance}, milled=${milledSernobu}, tiger=${tigerReadyAnnihilation}`)
-    : fail(name, `resonance=${exiledByResonance}, milled=${milledSernobu}, tiger=${tigerReadyAnnihilation}`);
+  return exiledByResonance && milledSernobu && tigerNoBaseAnnihilation && tigerReadyAnnihilation
+    ? pass(name, `resonance=${exiledByResonance}, milled=${milledSernobu}, tigerBase=${tigerNoBaseAnnihilation}, tiger=${tigerReadyAnnihilation}`)
+    : fail(name, `resonance=${exiledByResonance}, milled=${milledSernobu}, tigerBase=${tigerNoBaseAnnihilation}, tiger=${tigerReadyAnnihilation}`);
 }
 
 async function testGreenAwakenSnowRabbitAndCliffRescue(): Promise<ScenarioResult> {
@@ -1457,9 +1479,10 @@ async function testGreenGrienOrderSanctuaryAndMessenger(): Promise<ScenarioResul
 
   const grienActive = cloneScriptCard(bt07G07 as Card, 'HAND', { gamecardId: 'G07_ACTIVE' });
   const awakenDeckUnit = cloneScriptCard(bt07G05 as Card, 'DECK', { gamecardId: 'G07_AWAKEN_TARGET' });
+  const awakenTextOnlyUnit = cloneScriptCard(bt07G06 as Card, 'DECK', { gamecardId: 'G07_TEXT_ONLY_AWAKEN' });
   const awakenPutState = game({
     hand: [grienActive],
-    deck: [awakenDeckUnit],
+    deck: [awakenDeckUnit, awakenTextOnlyUnit],
     erosionBack: [testCard({ id: 'G07_BACK', cardlocation: 'EROSION_BACK' })],
   });
   const awakenPutIndex = grienActive.effects?.findIndex(effect => effect.id === '103080317_put_awaken_unit') ?? -1;
@@ -1471,10 +1494,14 @@ async function testGreenGrienOrderSanctuaryAndMessenger(): Promise<ScenarioResul
     'HAND'
   ).valid;
   await grienActive.effects?.[awakenPutIndex]?.execute?.(grienActive, awakenPutState, awakenPutState.players.BOT);
+  const grienAwakenOptions = (awakenPutState.pendingQuery?.options || []).map((option: any) => option.card.gamecardId);
+  const grienOnlyTrueAwakenTargets = grienAwakenOptions.includes(awakenDeckUnit.gamecardId) &&
+    !grienAwakenOptions.includes(awakenTextOnlyUnit.gamecardId);
   if (awakenPutState.pendingQuery?.context?.effectId === '103080317_put_awaken_unit') {
     await answerPendingQuery(awakenPutState, 'BOT', [awakenDeckUnit.gamecardId]);
   }
   const grienScar1Put = grienScar1Valid &&
+    grienOnlyTrueAwakenTargets &&
     awakenPutState.players.BOT.grave.some((card: Card) => card.gamecardId === grienActive.gamecardId) &&
     awakenPutState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === awakenDeckUnit.gamecardId);
 

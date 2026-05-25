@@ -121,6 +121,9 @@ function getActiveTimerPlayerUid(gameState: any): string | undefined {
     }
     if (gameState.pendingQuery) return gameState.pendingQuery.playerUid;
     if (gameState.priorityPlayerId) return gameState.priorityPlayerId;
+    if (gameState.phase === 'DEFENSE_DECLARATION') {
+        return gameState.playerIds.find((uid: string) => uid !== gameState.playerIds[gameState.currentTurnPlayer]);
+    }
     if (gameState.phase === 'DISCARD') return gameState.playerIds[gameState.currentTurnPlayer];
     return gameState.playerIds[gameState.currentTurnPlayer];
 }
@@ -2211,6 +2214,7 @@ const buildDeckSquarePost = (row: any, likedPostIds: Set<string>) => ({
 const BUG_CUP_EDITION = 1;
 const BUG_CUP_NAME = 'bug杯';
 const BUG_CUP_TAG = '第1届bug杯杯赛';
+const BUG_CUP_TURN_TIMER_SECONDS = 600;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BUG_CUP_START = Date.parse('2026-05-18T00:00:00+08:00');
 const BUG_CUP_SWISS_START = BUG_CUP_START + 7 * DAY_MS;
@@ -2461,7 +2465,7 @@ async function createBugCupGame(match: any, player1DeckIndex: number, player2Dec
     const p1Cards = resolveBugCupDeckCards(p1Reg, player1DeckIndex);
     const p2Cards = resolveBugCupDeckCards(p2Reg, player2DeckIndex);
     const gameId = `bugcup_${match.id}_${Math.random().toString(36).slice(2, 7)}`;
-    const gameState = await ServerGameService.createMatchGameState(match.player1_id, p1Cards, match.player2_id, p2Cards);
+    const gameState = await ServerGameService.createMatchGameState(match.player1_id, p1Cards, match.player2_id, p2Cards, BUG_CUP_TURN_TIMER_SECONDS);
     gameState.gameId = gameId;
     gameState.mode = 'bugCup';
     (gameState as any).bugCupMatchId = match.id;

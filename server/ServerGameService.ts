@@ -2328,6 +2328,25 @@ export const ServerGameService = {
     return `${parts.join('，')}。`;
   },
 
+  getTurnTimerLimitMs(gameState: GameState) {
+    return gameState.turnTimerLimit ? gameState.turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL;
+  },
+
+  chargeTimer(gameState: GameState, playerUid: string | undefined, elapsed: number) {
+    if (!playerUid || elapsed <= 0) return;
+    const player = gameState.players[playerUid];
+    if (!player) return;
+    player.timeRemaining = Math.max(0, (player.timeRemaining ?? ServerGameService.getTurnTimerLimitMs(gameState)) - elapsed);
+  },
+
+  getTimedPlayerForSharedPhase(gameState: GameState, fallbackPlayerUid?: string) {
+    if (gameState.phase === 'DEFENSE_DECLARATION') {
+      const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      return gameState.playerIds.find(uid => uid !== turnPlayerId);
+    }
+    return fallbackPlayerUid;
+  },
+
   enterCountering(gameState: GameState, sourcePlayerId: string, stackItem: StackItem) {
     const now = Date.now();
     const elapsed = now - (gameState.phaseTimerStart || now);
@@ -2335,13 +2354,14 @@ export const ServerGameService = {
     const isUncounterable = ServerGameService.isStackItemUncounterable(gameState, sourcePlayerId, stackItem);
 
     if (gameState.phase !== 'COUNTERING') {
-      // If we are leaving a shared phase (MAIN, BATTLE_DECLARATION, BATTLE_FREE), subtract from turn budget
-      const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
+      // If we are leaving a shared phase, subtract from the acting side's turn budget.
+      const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'DEFENSE_DECLARATION', 'BATTLE_FREE'];
       if (sharedPhases.includes(gameState.phase)) {
-        const actingPlayer = gameState.players[sourcePlayerId];
-        if (actingPlayer) {
-          actingPlayer.timeRemaining = Math.max(0, (actingPlayer.timeRemaining ?? GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
-        }
+        ServerGameService.chargeTimer(
+          gameState,
+          ServerGameService.getTimedPlayerForSharedPhase(gameState, sourcePlayerId),
+          elapsed
+        );
       }
 
       gameState.previousPhase = gameState.phase;
@@ -2802,6 +2822,10 @@ export const ServerGameService = {
       if (onUpdate) await onUpdate(gameState);
 
       if (nextPhase) {
+        if (nextPhase === 'DAMAGE_CALCULATION' && ServerGameService.checkBattleInterruption(gameState)) {
+          await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+          return gameState;
+        }
         return ServerGameService.advancePhase(gameState, nextPhase, undefined, onUpdate);
       }
       return gameState;
@@ -3569,7 +3593,7 @@ export const ServerGameService = {
         gameState.logs.push(`[${sourceName || '效果'}] 不重置 [${unit.fullName}]。`);
       }
 
-      if (gameState.phase === 'DAMAGE_CALCULATION') {
+      if (gameState.phase === 'DAMAGE_CALCULATION' && gameState.battleState) {
         await ServerGameService.resolveDamage(gameState);
       }
       return gameState;
@@ -3586,7 +3610,7 @@ export const ServerGameService = {
             gameState.battleState.resolvedUnitIds.push(targetUnitId);
           }
         }
-        if (gameState.phase === 'DAMAGE_CALCULATION') {
+        if (gameState.phase === 'DAMAGE_CALCULATION' && gameState.battleState) {
           await ServerGameService.resolveDamage(gameState);
         }
         return gameState;
@@ -3635,7 +3659,7 @@ export const ServerGameService = {
         }
       }
 
-      if (gameState.phase === 'DAMAGE_CALCULATION') {
+      if (gameState.phase === 'DAMAGE_CALCULATION' && gameState.battleState) {
         await ServerGameService.resolveDamage(gameState);
       }
       return gameState;
@@ -4075,7 +4099,7 @@ export const ServerGameService = {
       }
 
       // Resume battle resolution if in damage calculation
-      if (gameState.phase === 'DAMAGE_CALCULATION') {
+      if (gameState.phase === 'DAMAGE_CALCULATION' && gameState.battleState) {
         await ServerGameService.resolveDamage(gameState);
       }
 
@@ -4586,6 +4610,9 @@ export const ServerGameService = {
     if (gameState.phase !== 'DEFENSE_DECLARATION') throw new Error('Not in defense declaration phase');
     if (!gameState.battleState) throw new Error('No battle state found');
 
+    const now = Date.now();
+    ServerGameService.chargeTimer(gameState, playerId, now - (gameState.phaseTimerStart || now));
+
     const player = gameState.players[playerId];
 
     if (defenderId) {
@@ -4777,7 +4804,7 @@ export const ServerGameService = {
             isAlliance: !!gameState.battleState.isAlliance
           }
         });
-        if (gameState.pendingQuery) return gameState;
+        if (gameState.pendingQuery || !gameState.battleState) return gameState;
       }
     } else {
       // Unit combat
@@ -4815,6 +4842,7 @@ export const ServerGameService = {
           if (!gameState.battleState.resolvedUnitIds.includes(defendingUnit.gamecardId)) {
             const destroyed = await ServerGameService.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
             if (destroyed === undefined) return gameState; // Wait for substitution choice
+            if (!gameState.battleState) return gameState;
             if (destroyed !== false) {
               gameState.logs.push(`${attackingUnit.fullName} 破坏了 ${defendingUnit.fullName}`);
               gameState.battleState.resolvedUnitIds.push(defendingUnit.gamecardId);
@@ -4871,6 +4899,7 @@ export const ServerGameService = {
           if (!gameState.battleState.resolvedUnitIds.includes(attackingUnit.gamecardId)) {
             const destroyed = await ServerGameService.destroyUnit(gameState, attackerId, attackingUnit.gamecardId);
             if (destroyed === undefined) return gameState; // Wait for substitution choice
+            if (!gameState.battleState) return gameState;
             if (destroyed !== false) {
               gameState.logs.push(`${defendingUnit.fullName} 破坏了 ${attackingUnit.fullName}`);
               gameState.battleState.resolvedUnitIds.push(attackingUnit.gamecardId);
@@ -4883,9 +4912,12 @@ export const ServerGameService = {
 
           if (!alreadyA || !alreadyD) {
             const destroyedA = alreadyA ? true : await ServerGameService.destroyUnit(gameState, attackerId, attackingUnit.gamecardId);
+            if (destroyedA === undefined) return gameState;
+            if (!gameState.battleState) return gameState;
             const destroyedD = alreadyD ? true : await ServerGameService.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
+            if (destroyedD === undefined) return gameState;
+            if (!gameState.battleState) return gameState;
 
-            if (destroyedA === undefined || destroyedD === undefined) return gameState; // Wait for substitution choice
             if (destroyedA !== false && !alreadyA) gameState.battleState.resolvedUnitIds.push(attackingUnit.gamecardId);
             if (destroyedD !== false && !alreadyD) gameState.battleState.resolvedUnitIds.push(defendingUnit.gamecardId);
 
@@ -4922,6 +4954,7 @@ export const ServerGameService = {
           if (already) return true;
           const destroyed = await ServerGameService.destroyUnit(gameState, attackerId, unit.gamecardId);
           if (destroyed === undefined) return destroyed;
+          if (!gameState.battleState) return undefined;
           if (destroyed !== false) {
             gameState.battleState!.resolvedUnitIds.push(unit.gamecardId);
           }
@@ -4933,6 +4966,7 @@ export const ServerGameService = {
           if (already) return true;
           const destroyed = await ServerGameService.destroyUnit(gameState, defenderId, defendingUnit.gamecardId);
           if (destroyed === undefined) return destroyed;
+          if (!gameState.battleState) return undefined;
           if (destroyed !== false) {
             gameState.battleState!.resolvedUnitIds.push(defendingUnit.gamecardId);
           }
@@ -5015,6 +5049,7 @@ export const ServerGameService = {
     // Re-trigger check for Goddard effects like 302050014 that depend on combat state/phase
     // Process triggers while still in DAMAGE_CALCULATION and with valid battleState
     await ServerGameService.checkTriggeredEffects(gameState);
+    if (!gameState.battleState) return gameState;
 
     // Now set phase back to MAIN or SHENYI if triggered
     if ((gameState.phase as GamePhase) !== 'SHENYI_CHOICE') {
@@ -5030,10 +5065,12 @@ export const ServerGameService = {
         }
       });
       if (gameState.pendingQuery) return gameState;
+      if (!gameState.battleState) return gameState;
       gameState.phase = 'MAIN';
       gameState.phaseTimerStart = Date.now();
       await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_END' } });
       if (gameState.pendingQuery) return gameState;
+      if (!gameState.battleState) return gameState;
       gameState.logs.push(`${attacker.displayName} 进入主要阶段 (战斗结算后)`);
     }
 
@@ -6101,8 +6138,8 @@ export const ServerGameService = {
       contextPhase = gameState.previousPhase || gameState.phase;
     }
 
-    const battlePhases: GamePhase[] = ['BATTLE_DECLARATION', 'DEFENSE_DECLARATION', 'BATTLE_FREE', 'DAMAGE_CALCULATION'];
-    if (!battlePhases.includes(contextPhase)) return false;
+    const preDamageBattlePhases: GamePhase[] = ['BATTLE_DECLARATION', 'DEFENSE_DECLARATION', 'BATTLE_FREE'];
+    if (!preDamageBattlePhases.includes(contextPhase)) return false;
 
     const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const opponentId = gameState.playerIds[gameState.currentTurnPlayer === 0 ? 1 : 0];
@@ -6156,7 +6193,7 @@ export const ServerGameService = {
         }
       } else {
         gameState.phase = 'MAIN';
-        if (gameState.previousPhase && battlePhases.includes(gameState.previousPhase)) {
+        if (gameState.previousPhase && preDamageBattlePhases.includes(gameState.previousPhase)) {
           gameState.previousPhase = undefined;
         }
         gameState.phaseTimerStart = Date.now();
@@ -6344,7 +6381,7 @@ export const ServerGameService = {
 
     const now = Date.now();
     const elapsed = now - (gameState.phaseTimerStart || now);
-    const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'BATTLE_FREE'];
+    const sharedPhases: GamePhase[] = ['MAIN', 'BATTLE_DECLARATION', 'DEFENSE_DECLARATION', 'BATTLE_FREE'];
     const isWaiting = (gameState.counterStack && gameState.counterStack.length > 0) ||
       (gameState.battleState && gameState.battleState.askConfront) ||
       gameState.isResolvingStack ||
@@ -6352,9 +6389,11 @@ export const ServerGameService = {
       gameState.pendingQuery;
 
     if (sharedPhases.includes(gameState.phase) && !isWaiting) {
-      if (actingPlayer) {
-        actingPlayer.timeRemaining = Math.max(0, (actingPlayer.timeRemaining ?? GAME_TIMEOUTS.MAIN_PHASE_TOTAL) - elapsed);
-      }
+      ServerGameService.chargeTimer(
+        gameState,
+        ServerGameService.getTimedPlayerForSharedPhase(gameState, actingPlayerId),
+        elapsed
+      );
     }
     gameState.phaseTimerStart = now;
 
@@ -6465,6 +6504,10 @@ export const ServerGameService = {
 
         if (action === 'PROPOSE_DAMAGE_CALCULATION' || action === 'DAMAGE_CALCULATION') {
           if (action === 'DAMAGE_CALCULATION') {
+            if (ServerGameService.checkBattleInterruption(gameState)) {
+              await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+              return gameState;
+            }
             gameState.phase = 'DAMAGE_CALCULATION';
             gameState.logs.push(`[阶段切换] 进入伤害计算阶段`);
             await ServerGameService.resolveDamage(gameState);
@@ -9743,7 +9786,12 @@ export const ServerGameService = {
 
     // Damage Calculation Phase
     if (gameState.phase === 'DAMAGE_CALCULATION') {
-      await ServerGameService.resolveDamage(gameState);
+      if (gameState.battleState) {
+        await ServerGameService.resolveDamage(gameState);
+      } else {
+        gameState.phase = 'MAIN';
+        gameState.phaseTimerStart = Date.now();
+      }
       return;
     }
   },

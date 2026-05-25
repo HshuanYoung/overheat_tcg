@@ -514,7 +514,11 @@ export const BattleField: React.FC = () => {
         game.pendingQuery ||
         (game.battleState && game.battleState.askConfront);
 
-      let remaining = me ? Math.max(0, (me.timeRemaining || 0) - ((!isWaiting && me.uid === (game.priorityPlayerId || game.playerIds[game.currentTurnPlayer])) ? elapsed : 0)) : 0;
+      const activeTimerUid = game.priorityPlayerId ||
+        (game.phase === 'DEFENSE_DECLARATION'
+          ? game.playerIds.find(uid => uid !== game.playerIds[game.currentTurnPlayer])
+          : game.playerIds[game.currentTurnPlayer]);
+      let remaining = me ? Math.max(0, (me.timeRemaining || 0) - ((!isWaiting && me.uid === activeTimerUid) ? elapsed : 0)) : 0;
 
       const newTimerValue = Math.ceil(remaining / 1000);
       setTimer(prev => prev !== newTimerValue ? newTimerValue : prev);
@@ -581,7 +585,34 @@ export const BattleField: React.FC = () => {
       if (newState.gameId !== gameId) return;
 
       hydrateGameState(newState);
-      setGame(newState);
+      setGame(prev => {
+        if (!prev) return newState;
+        const isSameTimerWindow =
+          prev.phase === newState.phase &&
+          prev.currentTurnPlayer === newState.currentTurnPlayer &&
+          Math.abs((prev.phaseTimerStart || 0) - (newState.phaseTimerStart || 0)) < 2000;
+        const next = {
+          ...newState,
+          players: { ...newState.players }
+        } as GameState;
+        for (const [uid, player] of Object.entries(newState.players || {})) {
+          const previousPlayer = prev.players?.[uid];
+          const nextPlayer = player as any;
+          if (
+            isSameTimerWindow &&
+            previousPlayer &&
+            previousPlayer.timeRemaining !== undefined &&
+            nextPlayer.timeRemaining !== undefined &&
+            previousPlayer.timeRemaining < nextPlayer.timeRemaining
+          ) {
+            next.players[uid] = {
+              ...nextPlayer,
+              timeRemaining: previousPlayer.timeRemaining
+            };
+          }
+        }
+        return next;
+      });
 
       // Robust clearing of query-related state
       // Only clear if we are not in a local play card flow and there's no pending query

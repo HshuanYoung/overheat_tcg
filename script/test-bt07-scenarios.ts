@@ -1770,6 +1770,54 @@ async function testSoulDevourTriggersThunderLeaderAndClearsInterruptedBattle(): 
     : fail(name, `leaderPrompted=${leaderPrompted}, pending=${state.pendingQuery?.context?.effectId || 'none'}, phase=${battleState.phase}, battle=${!!battleState.battleState}, attacking=${!!(battleLeader as any).isAttacking}, defending=${!!(attackCost as any).isDefending}`);
 }
 
+async function testNormalBattleDestroyDoesNotCountAsInterruptedBattle(): Promise<ScenarioResult> {
+  const name = 'Normal battle destruction does not count as interrupted battle';
+  const attacker = testCard({
+    id: 'NORMAL_ATTACKER',
+    fullName: 'Normal Attacker',
+    type: 'UNIT',
+    cardlocation: 'UNIT',
+    power: 3000,
+    basePower: 3000,
+    damage: 1,
+    isAttacking: true,
+  } as any);
+  const defender = testCard({
+    id: 'NORMAL_DEFENDER',
+    fullName: 'Normal Defender',
+    type: 'UNIT',
+    cardlocation: 'UNIT',
+    power: 1000,
+    basePower: 1000,
+    isDefending: true,
+  } as any);
+  const state = game({
+    unitZone: [attacker, null, null, null, null, null],
+  }, {
+    unitZone: [defender, null, null, null, null, null],
+  }, {
+    phase: 'DAMAGE_CALCULATION',
+    battleState: {
+      attackers: [attacker.gamecardId],
+      defender: defender.gamecardId,
+      resolvedUnitIds: [],
+    },
+  });
+
+  await ServerGameService.resolveDamage(state);
+
+  const defenderDestroyed = state.players.P1.grave.some((card: Card) => card.gamecardId === defender.gamecardId);
+  const returnedMain = state.phase === 'MAIN' && !state.battleState;
+  const exhaustedAttacker = !!state.players.BOT.unitZone.find((unit: Card | null) => unit?.gamecardId === attacker.gamecardId)?.isExhausted;
+  const noInterruptedLog = !state.logs.some((log: any) =>
+    String(typeof log === 'string' ? log : log?.text || '').includes('战斗中止')
+  );
+
+  return defenderDestroyed && returnedMain && exhaustedAttacker && noInterruptedLog
+    ? pass(name, `destroyed=${defenderDestroyed}, phase=${state.phase}, exhausted=${exhaustedAttacker}`)
+    : fail(name, `destroyed=${defenderDestroyed}, phase=${state.phase}, battle=${!!state.battleState}, exhausted=${exhaustedAttacker}, interruptedLog=${!noInterruptedLog}`);
+}
+
 async function testRedAsuraSacrificeAndHiyeOrder(): Promise<ScenarioResult> {
   const name = 'BT07-R07/R08/R09 Asura sacrifice and Hiye order';
   const asura = cloneScriptCard(bt07R07 as Card, 'UNIT');
@@ -2226,6 +2274,7 @@ const scenarios: ScenarioRun[] = [
   testRedShieldSoulDevourAndDiscounts,
   testRedBatBladeItemAndTamiThresholds,
   testSoulDevourTriggersThunderLeaderAndClearsInterruptedBattle,
+  testNormalBattleDestroyDoesNotCountAsInterruptedBattle,
   testRedAsuraSacrificeAndHiyeOrder,
   testYellowPainterStephanieAndSteelPuppet,
   testYellowGuardRawStoneAndStories,

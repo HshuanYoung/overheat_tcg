@@ -59,6 +59,9 @@ import bt08Y10 from '../src/scripts/305110083';
 import bt08Y11 from '../src/scripts/105110409';
 import bt04R07 from '../src/scripts/102060433';
 import bt04R09 from '../src/scripts/202060130';
+import bt05R07 from '../src/scripts/102060244';
+import bt07R04 from '../src/scripts/102060369';
+import bt07R11 from '../src/scripts/102060373';
 import { canPutUnitOntoBattlefield, destroyByEffect, ensureData, moveCard, moveCardAsCost, wealthCount } from '../src/scripts/BaseUtil';
 
 type ScenarioResult = {
@@ -1014,6 +1017,34 @@ async function testThunderLeaderPowerSearch(): Promise<ScenarioResult> {
   return triggered && searched
     ? pass(name, `triggered=${triggered}, searched=${searched}`)
     : fail(name, `triggered=${triggered}, searched=${searched}, pending=${state.pendingQuery?.context?.effectId || 'none'}`);
+}
+
+function testThunderWarriorRushAfterTamiBoost(): ScenarioResult {
+  const name = 'BT07-R04 gains damage/rush after Tami+Rafa and Tami attack permission expires';
+  const warrior = cloneScriptCard(bt07R04 as Card, 'UNIT');
+  const tami = cloneScriptCard(bt07R11 as Card, 'UNIT');
+  const rafa = cloneScriptCard(bt05R07 as Card, 'UNIT');
+  const ally = testCard({ id: 'TAMI_ALLY', fullName: 'Tami Ally', type: 'UNIT', cardlocation: 'UNIT' });
+  const state = game({
+    unitZone: [warrior, tami, rafa, ally, null, null],
+  });
+  (state as any)[`unitsSentFromFieldToGraveTurn_${state.turnCount}_global`] = 4;
+
+  EventEngine.recalculateContinuousEffects(state);
+
+  const boostedByTamiAndRafa = warrior.power === (warrior.basePower || 0) + 1500;
+  const thresholdApplied = warrior.damage === (warrior.baseDamage || 0) + 1 && warrior.isrush === true;
+  const attackPermissionThisTurn = !!(ally as any).data?.canAttackAnyUnit;
+  const activeStats = `${warrior.power}/${warrior.damage}`;
+  const activeRush = !!warrior.isrush;
+
+  state.turnCount += 1;
+  EventEngine.recalculateContinuousEffects(state);
+  const attackPermissionExpired = !(ally as any).data?.canAttackAnyUnit;
+
+  return boostedByTamiAndRafa && thresholdApplied && attackPermissionThisTurn && attackPermissionExpired
+    ? pass(name, `active=${activeStats}, rush=${activeRush}, any=${attackPermissionThisTurn}->expired:${attackPermissionExpired}`)
+    : fail(name, `active=${activeStats}, base=${warrior.basePower}/${warrior.baseDamage}, rush=${activeRush}, any=${attackPermissionThisTurn}->expired:${attackPermissionExpired}`);
 }
 
 async function testPromotionEquipmentAndSquare(): Promise<ScenarioResult> {
@@ -2085,6 +2116,7 @@ const scenarios: { name: string; run: ScenarioRun }[] = [
   { name: 'BT08-R05/R06 grant attacking opponent units after promotion or hand reveal', run: testRedAttackUnitGrants },
   { name: 'BT08-R07 sends own non-god as cost, boosts units, and draws at erosion 5-8', run: testSoulDevourPowerAndDraw },
   { name: 'BT04-R07 searches Thunder when power reaches 3500', run: testThunderLeaderPowerSearch },
+  { name: 'BT07-R04 gains damage/rush after Tami+Rafa and Tami attack permission expires', run: testThunderWarriorRushAfterTamiBoost },
   { name: 'BT08-R09 equips promoted unit and R10 protects first opponent-effect leave/draws', run: testPromotionEquipmentAndSquare },
   { name: 'BT08-G01/G03/G04/G05/G06 silver music destroy, stats, combat and awaken gate', run: testGreenSilverMusicDestroyAndBonuses },
   { name: 'BT08-G02/G08/G09 resonance and silver music recovery', run: testGreenResonanceAndSilverRecovery },

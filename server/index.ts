@@ -398,6 +398,20 @@ async function getAuthenticatedUserFromHeader(req: express.Request, res: express
     return user;
 }
 
+function isAdminUser(user: any) {
+    return String(user?.role || '').toUpperCase() === 'ADMIN';
+}
+
+async function getAuthenticatedAdminFromHeader(req: express.Request, res: express.Response) {
+    const user = await getAuthenticatedUserFromHeader(req, res);
+    if (!user) return null;
+    if (!isAdminUser(user)) {
+        res.status(403).json({ error: '需要管理员权限' });
+        return null;
+    }
+    return user;
+}
+
 async function issueTokenForUser(userId: string) {
     const rows = await pool.query(
         'SELECT id, username, display_name, email, role, session_version FROM users WHERE id = ? LIMIT 1',
@@ -2380,6 +2394,80 @@ async function readAndValidateBugCupDecks(user: any, deckIds: string[]) {
     return decks;
 }
 
+function decodeAndValidateBugCupDeckShareCode(deckCode: string, deckName?: string) {
+    const refs = decodeDeckShareCode(String(deckCode || ''), getServerCatalogRefs());
+    const cards = refs.map(ref => SERVER_CARD_LIBRARY[ref]).filter((card): card is Card => !!card);
+    if (cards.length !== refs.length) throw new Error('卡组码包含服务器未找到的卡牌');
+
+    const validation = ServerGameService.validateDeck(cards as any);
+    if (!validation.valid) throw new Error(`卡组不合法：${validation.error}`);
+
+    const name = String(deckName || '').trim() || `后台更新卡组 ${new Date().toLocaleString('zh-CN', { hour12: false })}`;
+    return {
+        sourceId: `admin-share:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        cards: refs
+    };
+}
+
+async function adminUpdateBugCupDeckFromShareCode(userId: string, slot: number, deckCode: string, deckName?: string) {
+    if (!Number.isInteger(slot) || slot < 0 || slot > 1) throw new Error('卡组槽位必须是 1 或 2');
+
+    const registration = await getBugCupRegistration(userId);
+    if (!registration) throw new Error('未找到该玩家的杯赛报名');
+    if (slot > 0 && !(registration.deckCards || [])[0]) throw new Error('更新第 2 套前，该玩家必须已有第 1 套杯赛卡组');
+
+    const userRows = await pool.query('SELECT id, username, display_name FROM users WHERE id = ? LIMIT 1', [userId]);
+    const targetUser = userRows[0] || {
+        id: userId,
+        username: registration.displayName || userId,
+        display_name: registration.displayName || userId
+    };
+    const target = {
+        userId,
+        username: targetUser.username,
+        displayName: targetUser.display_name || registration.displayName || targetUser.username || userId
+    };
+
+    const deck = decodeAndValidateBugCupDeckShareCode(deckCode, deckName);
+    const deckSourceIds = [...(registration.deckSourceIds || [])];
+    const deckNames = [...(registration.deckNames || [])];
+    const deckCards = [...(registration.deckCards || [])];
+    const deckSquarePostIds = [...(registration.deckSquarePostIds || [])];
+
+    deckSourceIds[slot] = deck.sourceId;
+    deckNames[slot] = deck.name;
+    deckCards[slot] = deck.cards;
+    deckSquarePostIds[slot] = await upsertBugCupDeckSquarePost(target, slot, deck.sourceId, deck.name, deck.cards);
+
+    const nextLength = Math.max(1, Math.min(2, Math.max(deckSourceIds.length, slot + 1)));
+    const trimToLength = (values: any[]) => values.slice(0, nextLength);
+    const now = Date.now();
+
+    await pool.query(
+        `UPDATE bug_cup_registrations
+         SET deck_source_ids = ?, deck_names = ?, deck_cards = ?, deck_square_post_ids = ?, updated_at = ?
+         WHERE edition = ? AND user_id = ?`,
+        [
+            JSON.stringify(trimToLength(deckSourceIds)),
+            JSON.stringify(trimToLength(deckNames)),
+            JSON.stringify(trimToLength(deckCards)),
+            JSON.stringify(trimToLength(deckSquarePostIds)),
+            now,
+            BUG_CUP_EDITION,
+            userId
+        ]
+    );
+
+    const stalePostIds = (registration.deckSquarePostIds || [])
+        .filter((postId: string, index: number) => index === slot && postId && postId !== deckSquarePostIds[slot]);
+    if (stalePostIds.length > 0) {
+        await clearBugCupDeckSquarePosts(userId, stalePostIds);
+    }
+
+    return getBugCupRegistration(userId);
+}
+
 async function saveBugCupRegistration(user: any, deckIds: string[]) {
     if (!buildBugCupCurrent().canEditDecks) {
         throw new Error('瑞士轮开始后卡组已锁定，无法修改');
@@ -2754,6 +2842,32 @@ app.post('/api/bug-cup/decks/sync', async (req, res): Promise<void> => {
     }
 });
 
+app.post('/api/bug-cup/admin/deck-code', async (req, res): Promise<void> => {
+    const admin = await getAuthenticatedAdminFromHeader(req, res);
+    if (!admin) { return; }
+
+    try {
+        const userId = String(req.body?.userId || '').trim();
+        const slot = Number(req.body?.slot);
+        const deckCode = String(req.body?.deckCode || '').trim();
+        const deckName = typeof req.body?.deckName === 'string' ? req.body.deckName.trim() : undefined;
+
+        if (!userId) {
+            res.status(400).json({ error: '请输入玩家ID' });
+            return;
+        }
+        if (!deckCode) {
+            res.status(400).json({ error: '请输入卡组码' });
+            return;
+        }
+
+        const registration = await adminUpdateBugCupDeckFromShareCode(userId, slot, deckCode, deckName);
+        res.json({ registration, current: buildBugCupCurrent() });
+    } catch (err: any) {
+        res.status(400).json({ error: err?.message || '更新杯赛卡组失败' });
+    }
+});
+
 app.get('/api/bug-cup/me', async (req, res): Promise<void> => {
     const user = await getAuthenticatedUserFromHeader(req, res);
     if (!user) { return; }
@@ -2784,7 +2898,8 @@ app.get('/api/bug-cup/me', async (req, res): Promise<void> => {
                 opponentId: getBugCupMatchOpponent(row, userId),
                 player1Name: row.player1_name || row.player1_id,
                 player2Name: row.player2_name || row.player2_id
-            }))
+            })),
+            isAdmin: isAdminUser(user)
         });
     } catch (err) {
         console.error('Bug cup me error:', err);

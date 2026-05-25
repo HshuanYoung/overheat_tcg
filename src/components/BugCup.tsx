@@ -50,6 +50,13 @@ interface BugCupMatch {
   winnerName?: string;
 }
 
+interface BugCupMeResponse {
+  current?: BugCupCurrent;
+  registration?: BugCupRegistration | null;
+  matches?: BugCupMatch[];
+  isAdmin?: boolean;
+}
+
 interface Standing {
   rank: number;
   userId: string;
@@ -91,6 +98,12 @@ export const BugCup: React.FC = () => {
   const [standings, setStandings] = useState<Standing[]>([]);
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [selectedBattleDeckIndex, setSelectedBattleDeckIndex] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminUpdating, setAdminUpdating] = useState(false);
+  const [adminDeckUserId, setAdminDeckUserId] = useState('');
+  const [adminDeckSlot, setAdminDeckSlot] = useState(0);
+  const [adminDeckName, setAdminDeckName] = useState('');
+  const [adminDeckCode, setAdminDeckCode] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [openPicker, setOpenPicker] = useState<number | null>(null);
@@ -107,6 +120,10 @@ export const BugCup: React.FC = () => {
     .map(result => result.error || '卡组不合法');
   const deckSelectionErrors = hasDuplicateSelectedDecks ? ['不能提交相同的卡组'] : selectedDeckErrors;
   const canSubmitDecks = selectedDeckIds.filter(Boolean).length >= 1 && deckSelectionErrors.length === 0 && !!current?.canEditDecks;
+  const registeredPlayerOptions = useMemo(
+    () => [...standings].sort((a, b) => a.rank - b.rank),
+    [standings]
+  );
 
   const loadData = async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -117,7 +134,7 @@ export const BugCup: React.FC = () => {
         fetch(`${BACKEND_URL}/api/bug-cup/standings`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       const deckData = await deckRes.json();
-      const meData = await meRes.json();
+      const meData: BugCupMeResponse = await meRes.json();
       const standingData = await standingsRes.json();
 
       setMyDecks(deckData.decks || []);
@@ -127,6 +144,14 @@ export const BugCup: React.FC = () => {
       setEliminationMatches(standingData.eliminationMatches || []);
       setSpectatableMatches(standingData.spectatableMatches || []);
       setStandings(standingData.standings || []);
+      setIsAdmin(!!meData.isAdmin);
+      if (meData.isAdmin && standingData.standings?.length) {
+        setAdminDeckUserId(currentId => (
+          standingData.standings.some((item: Standing) => item.userId === currentId)
+            ? currentId
+            : standingData.standings[0].userId
+        ));
+      }
       if (meData.registration?.deckSourceIds?.length) {
         setSelectedDeckIds(meData.registration.deckSourceIds);
       } else if (!selectedDeckIds.length && deckData.decks?.length) {
@@ -201,6 +226,34 @@ export const BugCup: React.FC = () => {
       setError(e.message || '提交失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const updateBugCupDeckByCode = async () => {
+    if (!isAdmin || adminUpdating) return;
+    setAdminUpdating(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/bug-cup/admin/deck-code`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: adminDeckUserId.trim(),
+          slot: adminDeckSlot,
+          deckName: adminDeckName.trim(),
+          deckCode: adminDeckCode.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '更新失败');
+      setNotice('已用卡组码更新杯赛卡组，并同步套牌广场');
+      setAdminDeckCode('');
+      await loadData(false);
+    } catch (e: any) {
+      setError(e.message || '更新失败');
+    } finally {
+      setAdminUpdating(false);
     }
   };
 
@@ -478,6 +531,74 @@ export const BugCup: React.FC = () => {
           }}
           onClose={() => setOpenPicker(null)}
         />
+
+        {isAdmin && (
+          <section className="relative overflow-hidden rounded-3xl border border-amber-400/20 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.04] to-transparent pointer-events-none" />
+            <div className="relative mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-black italic tracking-tight">后台更新杯赛卡组</h2>
+                <p className="mt-1 text-xs font-bold text-zinc-500">输入玩家ID和卡组码，直接覆盖该玩家已报名的杯赛卡组快照。</p>
+              </div>
+              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[10px] font-black tracking-widest text-amber-200">
+                ADMIN
+              </span>
+            </div>
+
+            <div className="relative grid gap-3 lg:grid-cols-[1.2fr_0.7fr_1.2fr]">
+              <select
+                value={adminDeckUserId}
+                onChange={event => setAdminDeckUserId(event.target.value)}
+                disabled={registeredPlayerOptions.length === 0}
+                className="min-w-0 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm font-bold text-white outline-none transition focus:border-amber-400/50 disabled:opacity-50"
+                title="已报名玩家"
+              >
+                {registeredPlayerOptions.length === 0 ? (
+                  <option value="">暂无已报名玩家</option>
+                ) : registeredPlayerOptions.map(player => (
+                  <option key={player.userId} value={player.userId}>
+                    #{player.rank} {player.displayName} · {player.userId}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={adminDeckSlot}
+                onChange={event => setAdminDeckSlot(Number(event.target.value))}
+                className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm font-bold text-white outline-none transition focus:border-amber-400/50"
+                title="杯赛卡组槽位"
+              >
+                <option value={0}>第 1 套</option>
+                <option value={1}>第 2 套</option>
+              </select>
+              <input
+                value={adminDeckName}
+                onChange={event => setAdminDeckName(event.target.value)}
+                placeholder="卡组名（可选）"
+                className="min-w-0 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm font-bold text-white outline-none transition focus:border-amber-400/50"
+              />
+            </div>
+
+            <textarea
+              value={adminDeckCode}
+              onChange={event => setAdminDeckCode(event.target.value)}
+              placeholder="粘贴卡组码"
+              rows={3}
+              className="relative mt-3 w-full resize-y rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400/50"
+            />
+
+            <div className="relative mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={updateBugCupDeckByCode}
+                disabled={adminUpdating || !adminDeckUserId.trim() || !adminDeckCode.trim()}
+                className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-black text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+              >
+                {adminUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                更新杯赛卡组
+              </button>
+            </div>
+          </section>
+        )}
 
         {!!registration && submittedDeckCount > 0 && (
           <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-xl sm:p-6 md:p-8">

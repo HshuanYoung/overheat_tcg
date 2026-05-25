@@ -24,11 +24,16 @@ function readDbConfig(prefix: DbPrefix): DbConfig {
     process.env[`${prefix}_DB_${name}`] ||
     (fallbackPrefix ? process.env[`${fallbackPrefix}_${name}`] : undefined) ||
     fallback;
+  const password =
+    process.env[`${prefix}_DB_PASSWORD`] ||
+    process.env[`${prefix}_DB_PASS`] ||
+    (fallbackPrefix ? process.env.DB_PASSWORD || process.env.DB_PASS : undefined) ||
+    '';
 
   return {
     host: read('HOST', 'localhost')!,
     user: read('USER', 'root')!,
-    password: read('PASSWORD', process.env[`${prefix}_DB_PASS`] || '')!,
+    password,
     database: read('NAME', 'overheat')!,
     port: Number(read('PORT', '3306'))
   };
@@ -102,8 +107,16 @@ async function main() {
   let targetConn: mariadb.PoolConnection | undefined;
 
   try {
-    sourceConn = await sourcePool.getConnection();
-    targetConn = await targetPool.getConnection();
+    try {
+      sourceConn = await sourcePool.getConnection();
+    } catch (err) {
+      throw new Error(`连接源库失败：${sourceConfig.user}@${sourceConfig.host}:${sourceConfig.port}/${sourceConfig.database}`, { cause: err });
+    }
+    try {
+      targetConn = await targetPool.getConnection();
+    } catch (err) {
+      throw new Error(`连接目标库失败：${targetConfig.user}@${targetConfig.host}:${targetConfig.port}/${targetConfig.database}`, { cause: err });
+    }
 
     await ensureUsersTable(targetConn);
 

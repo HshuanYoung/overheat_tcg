@@ -1264,12 +1264,21 @@ export class AtomicEffectExecutor {
       gameState.logs.push(`[替换效果] [${card.fullName}] 将要被送入墓地，改为放逐。`);
     }
 
+    let exileWhenLeavesFieldReplacementData: Record<string, unknown> | undefined;
     if (
       (fromZone === 'UNIT' || fromZone === 'ITEM') &&
       toZone !== 'EXILE' &&
       !['UNIT', 'ITEM'].includes(toZone) &&
       (card as any).data?.exileWhenLeavesFieldSourceName
     ) {
+      const data = (card as any).data || {};
+      exileWhenLeavesFieldReplacementData = {
+        exileWhenLeavesFieldSourceName: data.exileWhenLeavesFieldSourceName,
+        exileWhenLeavesFieldSourceCardId: data.exileWhenLeavesFieldSourceCardId,
+        exileWhenLeavesFieldMillControllerUid: data.exileWhenLeavesFieldMillControllerUid,
+        exileWhenLeavesFieldMillTargetUid: data.exileWhenLeavesFieldMillTargetUid,
+        exileWhenLeavesFieldMillAmount: data.exileWhenLeavesFieldMillAmount
+      };
       toZone = 'EXILE';
       gameState.logs.push(`[替换效果] [${card.fullName}] 离开战场时改为放逐。`);
     }
@@ -1391,7 +1400,8 @@ export class AtomicEffectExecutor {
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
         effectSourceCardId: options?.effectSourceCardId,
         previousSourceCardId,
-        onlyLeftFieldEvent: true
+        onlyLeftFieldEvent: true,
+        extraData: exileWhenLeavesFieldReplacementData
       });
       clearBattlefieldState(card);
     }
@@ -1543,7 +1553,8 @@ export class AtomicEffectExecutor {
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
         effectSourceCardId: options?.effectSourceCardId,
         previousSourceCardId,
-        skipLeftFieldEvent: clearsBattlefieldState
+        skipLeftFieldEvent: clearsBattlefieldState,
+        extraData: exileWhenLeavesFieldReplacementData
       });
     } else {
       this.dispatchMovementEvents(gameState, playerUid, card, fromZone, toZone, isEffect, options);

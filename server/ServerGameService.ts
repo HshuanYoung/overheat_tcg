@@ -1641,12 +1641,21 @@ export const ServerGameService = {
       gameState.logs.push(`[替换效果] [${card.fullName}] 将要被送入墓地，改为放逐。`);
     }
 
+    let exileWhenLeavesFieldReplacementData: Record<string, unknown> | undefined;
     if (
       (sourceZone === 'UNIT' || sourceZone === 'ITEM') &&
       targetZone !== 'EXILE' &&
       !['UNIT', 'ITEM'].includes(targetZone) &&
       (card as any).data?.exileWhenLeavesFieldSourceName
     ) {
+      const data = (card as any).data || {};
+      exileWhenLeavesFieldReplacementData = {
+        exileWhenLeavesFieldSourceName: data.exileWhenLeavesFieldSourceName,
+        exileWhenLeavesFieldSourceCardId: data.exileWhenLeavesFieldSourceCardId,
+        exileWhenLeavesFieldMillControllerUid: data.exileWhenLeavesFieldMillControllerUid,
+        exileWhenLeavesFieldMillTargetUid: data.exileWhenLeavesFieldMillTargetUid,
+        exileWhenLeavesFieldMillAmount: data.exileWhenLeavesFieldMillAmount
+      };
       targetZone = 'EXILE';
       gameState.logs.push(`[替换效果] [${card.fullName}] 离开战场时改为放逐。`);
     }
@@ -1721,7 +1730,8 @@ export const ServerGameService = {
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
         effectSourceCardId: options?.effectSourceCardId,
         previousSourceCardId: previousSourceCardIdForMove,
-        onlyLeftFieldEvent: true
+        onlyLeftFieldEvent: true,
+        extraData: exileWhenLeavesFieldReplacementData
       });
       clearBattlefieldState(card);
     }
@@ -1854,7 +1864,8 @@ export const ServerGameService = {
       effectSourcePlayerUid: options?.effectSourcePlayerUid,
       effectSourceCardId: options?.effectSourceCardId,
       previousSourceCardId: previousSourceCardIdForMove,
-      skipLeftFieldEvent: clearsBattlefieldState
+      skipLeftFieldEvent: clearsBattlefieldState,
+      extraData: exileWhenLeavesFieldReplacementData
     });
 
     if (

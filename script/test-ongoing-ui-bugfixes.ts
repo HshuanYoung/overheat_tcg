@@ -1,8 +1,14 @@
 import { ServerGameService } from '../server/ServerGameService';
+import { EventEngine } from '../src/services/EventEngine';
 import { GameService } from '../src/services/gameService';
 import { Card, GameState, PlayerState, TriggerLocation } from '../src/types/game';
 import { getPlayerOngoingEffects } from '../src/lib/playerOngoingEffects';
+import tami from '../src/scripts/102060373';
 import thunderPriest from '../src/scripts/102060321';
+import sprout from '../src/scripts/203000074';
+import cord from '../src/scripts/105000406';
+import bahamut from '../src/scripts/105000407';
+import crowQueen from '../src/scripts/105000408';
 
 let seq = 0;
 
@@ -184,10 +190,125 @@ const testFinalizeBattleAfterPendingQueryClearsMarkers = async () => {
   assert((defender as any).isDefending === false, 'defender marker should be cleared');
 };
 
+const testTamiShowsUnitsSentCount = () => {
+  const card = cloneCard(tami, 'UNIT');
+  const state = makeGame({
+    unitZone: [card, null, null, null, null, null]
+  });
+  (state as any)[`unitsSentFromFieldToGraveTurn_${state.turnCount}_global`] = 3;
+
+  EventEngine.recalculateContinuousEffects(state);
+
+  assert(
+    card.influencingEffects?.some(effect =>
+      effect.sourceCardName === card.fullName &&
+      effect.description === '本回合从战场送入墓地的单位数量：3'
+    ),
+    `expected Tami influenced by sent count, got ${card.influencingEffects?.map(effect => effect.description).join(' | ')}`
+  );
+};
+
+const testSproutRequiresValidGraveTarget = () => {
+  const card = cloneCard(sprout, 'HAND', {
+    acValue: 0,
+    baseAcValue: 0,
+    colorReq: {},
+    baseColorReq: {}
+  });
+  const state = makeGame({
+    hand: [card],
+    deck: [testCard({ id: 'PAY_A' })]
+  });
+
+  const withoutTarget = GameService.canPlayCard(state, state.players.BOT, card);
+  assert(!withoutTarget.canPlay, 'Sprout should not be playable without a legal grave target');
+  const serverWithoutTarget = ServerGameService.canPlayCard(state, state.players.BOT, card);
+  assert(!serverWithoutTarget.canPlay, 'Server Sprout check should reject without a legal grave target');
+
+  const target = testCard({
+    id: 'SPROUT_TARGET',
+    fullName: '新芽对象',
+    type: 'UNIT',
+    godMark: true,
+    power: 2000,
+    basePower: 2000,
+    cardlocation: 'GRAVE'
+  });
+  state.players.BOT.grave.push(target);
+  const withTarget = GameService.canPlayCard(state, state.players.BOT, card);
+  assert(withTarget.canPlay, `Sprout should be playable with a legal grave target, got ${withTarget.reason}`);
+  const serverWithTarget = ServerGameService.canPlayCard(state, state.players.BOT, card);
+  assert(serverWithTarget.canPlay, `Server Sprout check should allow a legal grave target, got ${serverWithTarget.reason}`);
+};
+
+const testAlchemyBeastsArePlayerOngoingEffects = () => {
+  const kode = cloneCard(cord, 'UNIT', {
+    data: { enteredFromDeckByAlchemyTurn: 6, highAlchemyMaterialColors: ['RED'] }
+  } as any);
+  const baha = cloneCard(bahamut, 'UNIT', {
+    data: { enteredFromDeckByAlchemyTurn: 6, highAlchemyMaterialColors: ['WHITE'] }
+  } as any);
+  const crow = cloneCard(crowQueen, 'UNIT', {
+    data: { enteredFromDeckByAlchemyTurn: 6, highAlchemyMaterialColors: ['GREEN'] }
+  } as any);
+  const defender = testCard({
+    id: 'ALCHEMY_DEFENDER',
+    fullName: '炼金测试防御者',
+    type: 'UNIT',
+    godMark: false,
+    cardlocation: 'UNIT'
+  });
+  const lost = testCard({
+    id: 'ALCHEMY_LOST',
+    fullName: '炼金测试离场卡',
+    type: 'UNIT',
+    cardlocation: 'UNIT'
+  });
+  const state = makeGame({
+    unitZone: [kode, baha, crow, null, null, null],
+    erosionFront: [
+      testCard({ id: 'EROSION_A', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'EROSION_B', cardlocation: 'EROSION_FRONT' }),
+      testCard({ id: 'EROSION_C', cardlocation: 'EROSION_FRONT' })
+    ]
+  }, {
+    unitZone: [defender, lost, null, null, null, null]
+  }, {
+    phase: 'DEFENSE_DECLARATION',
+    battleState: {
+      attackers: [kode.gamecardId],
+      isAlliance: false
+    } as any
+  });
+
+  EventEngine.recalculateContinuousEffects(state);
+
+  const ownEffects = getPlayerOngoingEffects(state, 'BOT');
+  const opponentEffects = getPlayerOngoingEffects(state, 'P1');
+
+  assert(
+    ownEffects.some(effect => effect.sourceCardName === '炼金幻兽「巴哈姆特」' && effect.description.includes('不会被战斗破坏')),
+    `expected Bahamut in own global panel, got ${ownEffects.map(effect => `${effect.sourceCardName}:${effect.description}`).join(' | ')}`
+  );
+  assert(
+    opponentEffects.some(effect => effect.sourceCardName === '炼金幻兽「寇德」' && effect.description.includes('不能用非神蚀单位防御')),
+    `expected Cord in opponent global panel, got ${opponentEffects.map(effect => `${effect.sourceCardName}:${effect.description}`).join(' | ')}`
+  );
+  assert(
+    opponentEffects.some(effect => effect.sourceCardName === '炼金幻兽「鸦女王」' && effect.description.includes('改为放逐')),
+    `expected Crow Queen in opponent global panel, got ${opponentEffects.map(effect => `${effect.sourceCardName}:${effect.description}`).join(' | ')}`
+  );
+  assert((defender as any).data?.cannotDefendTurn === state.turnCount, 'Cord should mark non-god opponent units as unable to defend this battle');
+  assert((lost as any).data?.exileWhenLeavesFieldSourceCardId === crow.gamecardId, 'Crow Queen should mark opponent field cards for exile replacement');
+};
+
 const run = async () => {
   testThunderPriestDiscount();
   testErosionChoiceLogsCardNames();
   await testFinalizeBattleAfterPendingQueryClearsMarkers();
+  testTamiShowsUnitsSentCount();
+  testSproutRequiresValidGraveTarget();
+  testAlchemyBeastsArePlayerOngoingEffects();
 };
 
 run().then(() => {

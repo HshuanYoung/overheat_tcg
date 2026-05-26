@@ -250,6 +250,22 @@ export class EventEngine {
             delete (card as any).data.cannotBeEffectTargetByOpponent;
             delete (card as any).data.cannotBeEffectTargetByOpponentSourceName;
           }
+          if ((card as any).data?.cannotBeEffectTargetByOpponentAcLe !== undefined) {
+            delete (card as any).data.cannotBeEffectTargetByOpponentAcLe;
+          }
+          if ((card as any).data?.cannotDefendContinuousSourceCardId !== undefined) {
+            delete (card as any).data.cannotDefendTurn;
+            delete (card as any).data.cannotDefendSourceName;
+            delete (card as any).data.cannotDefendContinuousSourceCardId;
+          }
+          if ((card as any).data?.exileWhenLeavesFieldContinuousSourceCardId !== undefined) {
+            delete (card as any).data.exileWhenLeavesFieldSourceName;
+            delete (card as any).data.exileWhenLeavesFieldSourceCardId;
+            delete (card as any).data.exileWhenLeavesFieldMillControllerUid;
+            delete (card as any).data.exileWhenLeavesFieldMillTargetUid;
+            delete (card as any).data.exileWhenLeavesFieldMillAmount;
+            delete (card as any).data.exileWhenLeavesFieldContinuousSourceCardId;
+          }
           if ((card as any).data?.cannotAllianceByEffect !== undefined) {
             delete (card as any).data.cannotAllianceByEffect;
           }
@@ -960,7 +976,8 @@ export class EventEngine {
       effectSourceCardId,
       previousSourceCardId,
       skipLeftFieldEvent,
-      onlyLeftFieldEvent
+      onlyLeftFieldEvent,
+      extraData
     }: {
       card: Card;
       cardOwnerUid: string;
@@ -972,6 +989,7 @@ export class EventEngine {
       previousSourceCardId?: string;
       skipLeftFieldEvent?: boolean;
       onlyLeftFieldEvent?: boolean;
+      extraData?: Record<string, unknown>;
     }
   ) {
     const data = {
@@ -981,7 +999,8 @@ export class EventEngine {
       targetZone: toZone,
       effectSourcePlayerUid,
       effectSourceCardId,
-      previousSourceCardId
+      previousSourceCardId,
+      ...(extraData || {})
     };
 
     if (fromZone === 'UNIT' && toZone === 'GRAVE' && card.type === 'UNIT') {

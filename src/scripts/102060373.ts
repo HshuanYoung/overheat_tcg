@@ -23,6 +23,7 @@ const cardEffects: CardEffect[] = [{
     );
     if (!owner) return;
     const count = totalUnitsSentFromFieldToGraveThisTurn(gameState);
+    addInfluence(instance, instance, `本回合从战场送入墓地的单位数量：${count}`);
 
     if (count >= 1) {
       ownUnits(owner).forEach(unit => addContinuousPower(unit, instance, 1000));

@@ -1,6 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { getOpponentUid, millTop, moveCard } from './BaseUtil';
+import { addInfluence, ensureData, getOpponentUid, millTop, ownItems, ownUnits } from './BaseUtil';
 
 const hasRequiredHighAlchemy = (instance: Card, color: string) => {
   const data = (instance as any).data || {};
@@ -18,26 +17,47 @@ const cardEffects: CardEffect[] = [{
     instance.cardlocation === 'UNIT' && hasRequiredHighAlchemy(instance, 'GREEN')
 }, {
   id: '105000408_opponent_field_to_grave_exile_and_mill',
+  type: 'CONTINUOUS',
+  triggerLocation: ['UNIT'],
+  erosionTotalLimit: [3, 6],
+  description: '3~6：对手战场上的卡将要送入墓地时，改为放逐。之后将他的卡组顶2张送入墓地。',
+  applyContinuous: (gameState, instance) => {
+    const owner = Object.values(gameState.players).find(player =>
+      player.unitZone.some(unit => unit?.gamecardId === instance.gamecardId)
+    );
+    if (!owner || instance.cardlocation !== 'UNIT') return;
+    const opponentUid = getOpponentUid(gameState, owner.uid);
+    const opponent = gameState.players[opponentUid];
+    [...ownUnits(opponent), ...ownItems(opponent)].forEach(card => {
+      const data = ensureData(card);
+      data.exileWhenLeavesFieldSourceName = instance.fullName;
+      data.exileWhenLeavesFieldSourceCardId = instance.gamecardId;
+      data.exileWhenLeavesFieldMillControllerUid = owner.uid;
+      data.exileWhenLeavesFieldMillTargetUid = opponentUid;
+      data.exileWhenLeavesFieldMillAmount = 2;
+      data.exileWhenLeavesFieldContinuousSourceCardId = instance.gamecardId;
+      addInfluence(card, instance, '送入墓地时改为放逐，然后将卡组顶2张送入墓地');
+    });
+  }
+}, {
+  id: '105000408_opponent_field_exiled_mill',
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_LEFT_FIELD',
   isGlobal: true,
   isMandatory: true,
   erosionTotalLimit: [3, 6],
-  description: '3~6：对手战场上的卡送入墓地时，改为放逐。之后将他的卡组顶2张送入墓地。',
+  description: '3~6：对手战场上的卡因鸦女王效果改为放逐后，将他的卡组顶2张送入墓地。',
   condition: (_gameState, playerState, instance, event) =>
     instance.cardlocation === 'UNIT' &&
     event?.type === 'CARD_LEFT_FIELD' &&
     event.playerUid === getOpponentUid(_gameState, playerState.uid) &&
     (event.data?.sourceZone === 'UNIT' || event.data?.sourceZone === 'ITEM') &&
-    event.data?.targetZone === 'GRAVE',
+    event.data?.targetZone === 'EXILE' &&
+    event.data?.exileWhenLeavesFieldSourceCardId === instance.gamecardId,
   execute: async (instance, gameState, playerState, event) => {
     const opponentUid = getOpponentUid(gameState, playerState.uid);
-    const moved = event?.sourceCardId ? AtomicEffectExecutor.findCardById(gameState, event.sourceCardId) : undefined;
-    if (moved?.cardlocation === 'GRAVE') {
-      moveCard(gameState, opponentUid, moved, 'EXILE', instance);
-      millTop(gameState, opponentUid, Math.min(2, gameState.players[opponentUid].deck.length), instance);
-    }
+    millTop(gameState, opponentUid, Math.min(2, gameState.players[opponentUid].deck.length), instance);
   }
 }];
 

@@ -2079,21 +2079,17 @@ async function testYellowPhantomBeastContinuous(): Promise<ScenarioResult> {
     unitZone: [defender, null, null, null, null, null],
   }, {
     phase: 'BATTLE_DECLARATION',
-    turnCount: 6
+    turnCount: 6,
+    battleState: {
+      attackers: [kode.gamecardId],
+      isAlliance: false
+    } as any
   });
   EventEngine.recalculateContinuousEffects(stateA);
   const bahamutProtected = (kode as any).battleImmuneByEffect === true &&
     (kode as any).data?.cannotBeEffectTargetByOpponentAcLe === 4 &&
     (bahamut as any).battleImmuneByEffect === true &&
     (crow as any).battleImmuneByEffect === true;
-  EventEngine.dispatchEvent(stateA, {
-    type: 'CARD_ATTACK_DECLARED',
-    sourceCard: kode,
-    sourceCardId: kode.gamecardId,
-    playerUid: 'BOT',
-    data: { attackerIds: [kode.gamecardId], isAlliance: false }
-  });
-  await confirmAllTriggers(stateA, 'BOT');
   const cannotDefend = (defender as any).data?.cannotDefendTurn === stateA.turnCount;
 
   const lost = testCard({ id: 'Y07_LOST', fullName: 'Y07 Lost', type: 'UNIT', color: 'RED', godMark: false, cardlocation: 'UNIT' });
@@ -2106,6 +2102,7 @@ async function testYellowPhantomBeastContinuous(): Promise<ScenarioResult> {
     deck: [millA, millB],
     unitZone: [lost, null, null, null, null, null],
   });
+  EventEngine.recalculateContinuousEffects(stateB);
   moveCard(stateB, 'P1', lost, 'GRAVE', crow);
   await confirmAllTriggers(stateB, 'BOT');
   const exiledInstead = stateB.players.P1.exile.some((card: Card) => card.gamecardId === lost.gamecardId);

@@ -1,11 +1,15 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor, createSelectCardQuery, moveCard, story } from './BaseUtil';
 
+const hasValidSproutTarget = (playerState: { grave: Card[] }) =>
+  playerState.grave.some(card => card.type === 'UNIT' && card.godMark && (card.power || card.basePower || 0) <= 2000);
+
 const cardEffects: CardEffect[] = [story('203000074_return_god', '选择墓地中1张力量2000以下神蚀单位卡加入手牌。', async (instance, gameState, playerState) => {
   const targets = playerState.grave.filter(card => card.type === 'UNIT' && card.godMark && (card.power || card.basePower || 0) <= 2000);
   if (targets.length === 0) return;
   createSelectCardQuery(gameState, playerState.uid, targets, '选择加入手牌的单位', '选择你的墓地中的1张力量2000以下神蚀单位卡，将其加入手牌。', 1, 1, { sourceCardId: instance.gamecardId, effectId: '203000074_return_god' }, () => 'GRAVE');
 }, {
+  condition: (_gameState, playerState) => hasValidSproutTarget(playerState),
   targetSpec: {
     title: '选择加入手牌的单位',
     description: '选择你的墓地中的1张力量2000以下神蚀单位卡，将其加入手牌。',

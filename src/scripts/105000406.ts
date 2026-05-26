@@ -1,5 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { getOpponentUid, markCannotDefendUntilEndOfTurn, nameContains, ownUnits, totalErosionCount } from './BaseUtil';
+import { addInfluence, ensureData, getOpponentUid, nameContains, ownUnits } from './BaseUtil';
 
 const isAlchemyBeast = (card?: Card | null) =>
   !!card && card.type === 'UNIT' && nameContains(card, '炼金幻兽');
@@ -20,25 +20,30 @@ const cardEffects: CardEffect[] = [{
     instance.cardlocation === 'UNIT' && hasRequiredHighAlchemy(instance, 'RED')
 }, {
   id: '105000406_beast_attacks_cannot_be_defended_by_non_god',
-  type: 'TRIGGER',
+  type: 'CONTINUOUS',
   triggerLocation: ['UNIT'],
-  triggerEvent: 'CARD_ATTACK_DECLARED',
-  isMandatory: true,
   erosionTotalLimit: [3, 6],
   description: '3~6：对手不能用非神蚀单位防御你卡名含有《炼金幻兽》的单位的单独攻击。',
-  condition: (_gameState, playerState, instance, event) =>
-    instance.cardlocation === 'UNIT' &&
-    !event?.data?.isAlliance &&
-    (event?.data?.attackerIds || []).length === 1 &&
-    ownUnits(playerState).some(unit =>
-      unit.gamecardId === event?.data?.attackerIds?.[0] &&
-      isAlchemyBeast(unit)
-    ),
-  execute: async (instance, gameState, playerState) => {
+  applyContinuous: (gameState, instance) => {
+    const owner = Object.values(gameState.players).find(player =>
+      player.unitZone.some(unit => unit?.gamecardId === instance.gamecardId)
+    );
+    if (!owner || instance.cardlocation !== 'UNIT') return;
+    const attackers = gameState.battleState?.attackers || [];
+    if (gameState.battleState?.isAlliance || attackers.length !== 1) return;
+    const attacker = ownUnits(owner).find(unit => unit.gamecardId === attackers[0]);
+    if (!isAlchemyBeast(attacker)) return;
+    const playerState = owner;
     const opponent = gameState.players[getOpponentUid(gameState, playerState.uid)];
     ownUnits(opponent)
       .filter(unit => !unit.godMark)
-      .forEach(unit => markCannotDefendUntilEndOfTurn(unit, instance, gameState));
+      .forEach(unit => {
+        const data = ensureData(unit);
+        data.cannotDefendTurn = gameState.turnCount;
+        data.cannotDefendSourceName = instance.fullName;
+        data.cannotDefendContinuousSourceCardId = instance.gamecardId;
+        addInfluence(unit, instance, '不能防御炼金幻兽单位的单独攻击');
+      });
   }
 }];
 

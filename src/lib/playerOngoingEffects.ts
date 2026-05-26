@@ -105,6 +105,22 @@ const affectedUidsForScope = (gameState: GameState, ownerUid: string, scope: Pla
   return [...gameState.playerIds];
 };
 
+const dynamicContinuousDescription = (
+  gameState: GameState,
+  owner: PlayerState,
+  card: Card,
+  effect: CardEffect,
+  fallback?: string
+) => {
+  if (effect.id === '102060321_hand_access_discount') {
+    const soulDevourCount = Number((owner as any)[`soulDevourActivatedTurn_${gameState.turnCount}`] || 0);
+    if (soulDevourCount <= 0) return undefined;
+    return `你的手牌中的<雷霆>单位卡和红色非神蚀卡ACCESS值-${soulDevourCount}（最低为0）。`;
+  }
+
+  return fallback || effect.playerEffectDescription || effect.description;
+};
+
 const addUnique = (effects: PlayerOngoingEffect[], effect: PlayerOngoingEffect) => {
   if (effects.some(item => item.id === effect.id && item.affectedPlayerUid === effect.affectedPlayerUid)) return;
   effects.push(effect);
@@ -121,13 +137,15 @@ const addContinuousEffects = (gameState: GameState, affectedPlayerUid: string, e
         if (!rule || rule.scope === 'NONE') return;
         if (!effectIsActive(gameState, owner, card, effect)) return;
         if (!affectedUidsForScope(gameState, ownerUid, rule.scope).includes(affectedPlayerUid)) return;
+        const description = dynamicContinuousDescription(gameState, owner, card, effect, rule.description);
+        if (!description) return;
 
         addUnique(effects, {
           id: `${card.gamecardId}:${effect.id || effect.description}:${affectedPlayerUid}`,
           affectedPlayerUid,
           sourceCardName: card.fullName,
           sourceCardId: card.gamecardId,
-          description: rule.description || effect.playerEffectDescription || effect.description,
+          description,
           category: 'CONTINUOUS'
         });
       });

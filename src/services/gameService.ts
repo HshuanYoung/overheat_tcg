@@ -120,6 +120,13 @@ const getEffectivePlayCostDetails = (gameState: GameState | null, player: Player
     ).length
     : 0;
   const soulDevourDiscount = soulDevourCount * thunderPriestCount;
+  const thunderPriestSource = thunderPriestCount > 0
+    ? player.unitZone.find(unit =>
+      unit?.id === '102060321' &&
+      !isFullEffectSilencedThisTurn(gameState, unit) &&
+      unit.effects?.some(effect => effect.id === '102060321_hand_access_discount')
+    )
+    : undefined;
   const isThunderUnit =
     card.type === 'UNIT' &&
     (
@@ -128,7 +135,12 @@ const getEffectivePlayCostDetails = (gameState: GameState | null, player: Player
       !!card.specialName?.includes('雷霆')
     );
   if (soulDevourDiscount > 0 && (isThunderUnit || (card.color === 'RED' && !card.godMark))) {
-    return costDetails(baseCost, Math.max(0, baseCost - soulDevourDiscount), card.fullName);
+    return costDetails(
+      baseCost,
+      Math.max(0, baseCost - soulDevourDiscount),
+      thunderPriestSource?.fullName || '炎雷祭司',
+      `噬魂发动${soulDevourCount}次`
+    );
   }
   if (card.id === '101140062') {
     const unitCount = player.unitZone.filter(c => c !== null).length;
@@ -304,7 +316,7 @@ export const GameService = {
     socket.emit('gameAction', { gameId, action: 'RESOLVE_DAMAGE' });
   },
 
-  async handleErosionChoice(gameId: string, playerId: string, choice: 'A' | 'B' | 'C', selectedCardId?: string) {
+  async handleErosionChoice(gameId: string, _playerId: string, choice: 'A' | 'C', selectedCardId?: string) {
     socket.emit('gameAction', { gameId, action: 'EROSION_CHOICE', payload: { choice, selectedCardId } });
   },
 

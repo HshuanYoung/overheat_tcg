@@ -270,7 +270,7 @@ export const BattleField: React.FC = () => {
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [showAttackModal, setShowAttackModal] = useState(false);
   const [selectedErosionCardId, setSelectedErosionCardId] = useState<string | null>(null);
-  const [erosionChoice, setErosionChoice] = useState<'A' | 'B' | 'C' | null>(null);
+  const [erosionChoice, setErosionChoice] = useState<'A' | 'C' | null>(null);
   const [selectedQueryIds, setSelectedQueryIds] = useState<string[]>([]);
   const [favoriteBackId, setFavoriteBackId] = useState<string>('default');
   const [showLogSidebar, setShowLogSidebar] = useState(true);
@@ -966,8 +966,13 @@ export const BattleField: React.FC = () => {
     let effectiveAcValue = baseCost;
     let sourceCardName = card.fullName;
     let reason = '';
+    const costDetails = GameService.getEffectivePlayCostDetails(game || null, player, card);
 
-    if (card.id === '101140062') {
+    if (costDetails.cost < costDetails.baseCost) {
+      effectiveAcValue = costDetails.cost;
+      sourceCardName = costDetails.sourceCardName || sourceCardName;
+      reason = costDetails.description ? costDetails.description.replace(/：?ACCESS值(?:变为0|-\d+)$/, '') : '';
+    } else if (card.id === '101140062') {
       const unitCount = player.unitZone.filter(Boolean).length;
       effectiveAcValue = Math.max(0, baseCost - unitCount);
     } else if (card.id === '202050034' && player.isGoddessMode) {
@@ -1018,7 +1023,7 @@ export const BattleField: React.FC = () => {
     }
 
     const change = effectiveAcValue <= 0 ? 'ACCESS值变为0' : `ACCESS值-${baseCost - effectiveAcValue}`;
-    const description = reason ? `${reason}：${change}` : change;
+    const description = costDetails.description || (reason ? `${reason}：${change}` : change);
     const influencingEffects = [...(card.influencingEffects || [])];
     if (!influencingEffects.some(effect => effect.sourceCardName === sourceCardName && effect.description === description)) {
       influencingEffects.push({ sourceCardName, description });
@@ -1697,7 +1702,7 @@ export const BattleField: React.FC = () => {
 
   const handleConfirmErosion = async () => {
     if (!gameId || !erosionChoice) return;
-    if ((erosionChoice === 'B' || erosionChoice === 'C') && !selectedErosionCardId) {
+    if (erosionChoice === 'C' && !selectedErosionCardId) {
       setLastError('请选择一张侵蚀区正面卡');
       return;
     }
@@ -2201,14 +2206,14 @@ export const BattleField: React.FC = () => {
         isOpen={!isSpectator && game.phase === 'EROSION' && me.isTurn && me.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT')}
         title="侵蚀阶段"
         description="选择如何处理正面朝上的侵蚀卡"
-        mode={erosionChoice === 'B' || erosionChoice === 'C' ? 'card_selection' : 'double_selection'}
+        mode={erosionChoice === 'C' ? 'card_selection' : 'double_selection'}
         confirmText="确认选择"
         onConfirm={handleConfirmErosion}
         onSelectionComplete={handleConfirmErosion}
         cards={me.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT').map(c => c!)}
         selectedIds={selectedErosionCardId ? [selectedErosionCardId] : []}
         maxSelections={1}
-        minSelections={(erosionChoice === 'B' || erosionChoice === 'C') ? 1 : 0}
+        minSelections={erosionChoice === 'C' ? 1 : 0}
         onCardClick={(card) => setSelectedErosionCardId(card.gamecardId)}
         onCardHover={setHoveredPopupCard}
         cardBackUrl={cardBackUrl}
@@ -2219,7 +2224,7 @@ export const BattleField: React.FC = () => {
         isHidden={isPopupHidden}
       >
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 w-full mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full mb-8">
           <button
             onClick={() => { setErosionChoice('A'); setSelectedErosionCardId(null); }}
             className={cn(
@@ -2233,25 +2238,13 @@ export const BattleField: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setErosionChoice('B')}
-            className={cn(
-              "p-3 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 md:gap-4 text-center",
-              erosionChoice === 'B' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
-            )}
-          >
-            <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">B</div>
-            <div className="font-bold text-white text-sm md:text-base">保留一张</div>
-            <div className="text-[10px] md:text-xs text-zinc-500">选择一张保留，其余送入墓地</div>
-          </button>
-
-          <button
             onClick={() => setErosionChoice('C')}
             className={cn(
               "p-3 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 md:gap-4 text-center",
               erosionChoice === 'C' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
             )}
           >
-            <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">C</div>
+            <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">B</div>
             <div className="font-bold text-white text-sm md:text-base">加入手牌</div>
             <div className="text-[10px] md:text-xs text-zinc-500">选择一张加入手牌，其余送墓，并从牌库放置一张到侵蚀区背面</div>
           </button>

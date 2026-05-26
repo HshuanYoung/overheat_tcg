@@ -4,6 +4,7 @@ import { Card, PlayerOngoingEffect, PlayerState, StackItem, GameState } from '..
 import { CardComponent } from './Card';
 import { StandardPopup } from './StandardPopup';
 import { KeywordBadges } from './KeywordBadges';
+import { GameService } from '../services/gameService';
 import { ArrowDown, Shield, Sword, Zap, Flag, BookOpen, Play, X, LogOut, Coins, Sparkles } from 'lucide-react';
 import { cn, getCardImageUrl } from '../lib/utils';
 import { getPlayerWealthCount } from '../lib/wealth';
@@ -322,8 +323,13 @@ const withEffectiveCostInfluence = (gameState: GameState | undefined, player: Pl
   let effectiveAcValue = baseCost;
   let sourceCardName = card.fullName;
   let reason = '';
+  const costDetails = GameService.getEffectivePlayCostDetails(gameState || null, player, card);
 
-  if (card.id === '101140062') {
+  if (costDetails.cost < costDetails.baseCost) {
+    effectiveAcValue = costDetails.cost;
+    sourceCardName = costDetails.sourceCardName || sourceCardName;
+    reason = costDetails.description ? costDetails.description.replace(/：?ACCESS值(?:变为0|-\d+)$/, '') : '';
+  } else if (card.id === '101140062') {
     const unitCount = player.unitZone.filter(Boolean).length;
     effectiveAcValue = Math.max(0, baseCost - unitCount);
   } else if (card.id === '202050034' && player.isGoddessMode) {
@@ -372,7 +378,7 @@ const withEffectiveCostInfluence = (gameState: GameState | undefined, player: Pl
   if (effectiveAcValue >= baseCost) return { effectiveAcValue, card };
 
   const change = effectiveAcValue <= 0 ? 'ACCESS值变为0' : `ACCESS值-${baseCost - effectiveAcValue}`;
-  const description = reason ? `${reason}：${change}` : change;
+  const description = costDetails.description || (reason ? `${reason}：${change}` : change);
   const influencingEffects = [...(card.influencingEffects || [])];
   if (!influencingEffects.some(effect => effect.sourceCardName === sourceCardName && effect.description === description)) {
     influencingEffects.push({ sourceCardName, description });

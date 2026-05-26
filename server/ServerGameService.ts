@@ -129,6 +129,14 @@ export const ServerGameService = {
     });
   },
 
+  rememberBattleEndAfterPendingQuery(gameState: GameState, attackerPlayerId?: string) {
+    if (!gameState.pendingQuery || !gameState.battleState || gameState.phase !== 'DAMAGE_CALCULATION') return;
+    (gameState as any).pendingBattleEndAfterQuery = {
+      attackerIds: [...(gameState.battleState.attackers || [])],
+      attackerPlayerId: attackerPlayerId || gameState.playerIds[gameState.currentTurnPlayer]
+    };
+  },
+
   isFullEffectSilencedThisTurn(gameState: GameState, card: Card) {
     const data = (card as any).data;
     if (data?.permanentEffectSilenced) return true;
@@ -3229,11 +3237,7 @@ export const ServerGameService = {
   },
 
   markBattleEndAfterPendingQuery(gameState: GameState, attackerPlayerId?: string) {
-    if (!gameState.pendingQuery || !gameState.battleState || gameState.phase !== 'DAMAGE_CALCULATION') return;
-    (gameState as any).pendingBattleEndAfterQuery = {
-      attackerIds: gameState.battleState.attackers || [],
-      attackerPlayerId: attackerPlayerId || gameState.playerIds[gameState.currentTurnPlayer]
-    };
+    ServerGameService.rememberBattleEndAfterPendingQuery(gameState, attackerPlayerId);
   },
 
   async processSelectedTriggerRecord(gameState: GameState, trigger: any, onUpdate?: (state: GameState) => Promise<void>) {
@@ -3386,7 +3390,7 @@ export const ServerGameService = {
     }
 
     delete (gameState as any).pendingBattleEndAfterQuery;
-    ServerGameService.clearAllianceAttackMarkers(gameState, pendingBattle.attackerIds);
+    ServerGameService.clearBattleCombatMarkers(gameState, pendingBattle.attackerIds);
     gameState.battleState = undefined;
     await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
     if (!gameState.pendingQuery && gameState.phase === 'MAIN') {
@@ -4869,7 +4873,7 @@ export const ServerGameService = {
     // Safety check: Ensure attackers still on field
     if (attackingUnits.length === 0) {
       gameState.logs.push(`[系统] 由于所有攻击单位均已离开战场，战斗被中断。`);
-      ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState.attackers);
+      ServerGameService.clearBattleCombatMarkers(gameState, gameState.battleState.attackers);
       gameState.battleState = undefined;
       gameState.phase = 'MAIN';
       await ServerGameService.checkTriggeredEffects(gameState);
@@ -4879,7 +4883,7 @@ export const ServerGameService = {
     // Safety check: Ensure alliance attack still has both units
     if (gameState.battleState.isAlliance && attackingUnits.length < 2) {
       gameState.logs.push(`[系统] 由于联军攻击单位数量不足，战斗被中断。`);
-      ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState.attackers);
+      ServerGameService.clearBattleCombatMarkers(gameState, gameState.battleState.attackers);
       gameState.battleState = undefined;
       gameState.phase = 'MAIN';
       await ServerGameService.checkTriggeredEffects(gameState);
@@ -4929,7 +4933,7 @@ export const ServerGameService = {
 
       if (!defendingUnit) {
         gameState.logs.push(`[系统] 由于指定防御单位离开战场，战斗宣言无效。`);
-        ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState.attackers);
+        ServerGameService.clearBattleCombatMarkers(gameState, gameState.battleState.attackers);
         gameState.battleState = undefined;
         gameState.phase = 'MAIN';
         await ServerGameService.checkTriggeredEffects(gameState);
@@ -5165,6 +5169,10 @@ export const ServerGameService = {
     // Process triggers while still in DAMAGE_CALCULATION and with valid battleState
     await ServerGameService.checkTriggeredEffects(gameState);
     if (!gameState.battleState) return gameState;
+    if (gameState.pendingQuery) {
+      ServerGameService.rememberBattleEndAfterPendingQuery(gameState, attackerId);
+      return gameState;
+    }
 
     // Now set phase back to MAIN or SHENYI if triggered
     if ((gameState.phase as GamePhase) !== 'SHENYI_CHOICE') {
@@ -5179,11 +5187,17 @@ export const ServerGameService = {
           isAlliance: !!gameState.battleState.isAlliance
         }
       });
-      if (gameState.pendingQuery) return gameState;
+      if (gameState.pendingQuery) {
+        ServerGameService.rememberBattleEndAfterPendingQuery(gameState, attackerId);
+        return gameState;
+      }
       gameState.phase = 'MAIN';
       gameState.phaseTimerStart = Date.now();
       await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'BATTLE_END' } });
-      if (gameState.pendingQuery) return gameState;
+      if (gameState.pendingQuery) {
+        ServerGameService.rememberBattleEndAfterPendingQuery(gameState, attackerId);
+        return gameState;
+      }
       if (!gameState.battleState) return gameState;
       gameState.logs.push(`${attacker.displayName} 进入主要阶段 (战斗结算后)`);
     }
@@ -5203,7 +5217,7 @@ export const ServerGameService = {
       gameState.phase = 'MAIN';
     }
 
-    ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState?.attackers);
+    ServerGameService.clearBattleCombatMarkers(gameState, gameState.battleState?.attackers);
     gameState.battleState = undefined;
     gameState.phaseTimerStart = Date.now();
     await ServerGameService.checkTriggeredEffects(gameState);
@@ -6638,7 +6652,7 @@ export const ServerGameService = {
           }
         } else if (action === 'RETURN_MAIN') {
           gameState.phase = 'MAIN';
-          ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState?.attackers);
+          ServerGameService.clearBattleCombatMarkers(gameState, gameState.battleState?.attackers);
           gameState.battleState = undefined;
           await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN', reason: 'RETURN_MAIN' } }, onUpdate);
           gameState.logs.push(`[阶段切换] 战斗中止，返回主要阶段`);
@@ -6648,7 +6662,7 @@ export const ServerGameService = {
       case 'BATTLE_END':
         gameState.phase = 'MAIN';
         await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'MAIN' } }, onUpdate);
-        ServerGameService.clearAllianceAttackMarkers(gameState, gameState.battleState?.attackers);
+        ServerGameService.clearBattleCombatMarkers(gameState, gameState.battleState?.attackers);
         gameState.battleState = undefined;
         gameState.logs.push(`[阶段切换] 战斗结束，返回主要阶段`);
         break;
@@ -6929,17 +6943,18 @@ export const ServerGameService = {
   },
 
 
-  async handleErosionChoice(gameState: GameState, playerId: string, choice: 'A' | 'B' | 'C', selectedCardId?: string) {
+  async handleErosionChoice(gameState: GameState, playerId: string, choice: 'A' | 'C', selectedCardId?: string) {
 
     const player = gameState.players[playerId];
     if (gameState.phase !== 'EROSION' || !player.isTurn) throw new Error('Not in erosion phase or not your turn');
+    if (choice !== 'A' && choice !== 'C') throw new Error('Invalid erosion choice');
 
     const handleableCards = player.erosionFront.filter(c => c !== null) as Card[];
 
     // Identify cards going to grave
     let goingToGrave: Card[] = [];
     if (choice === 'A') goingToGrave = [...handleableCards];
-    else if (choice === 'B' || choice === 'C') goingToGrave = handleableCards.filter(c => c.gamecardId !== selectedCardId);
+    else if (choice === 'C') goingToGrave = handleableCards.filter(c => c.gamecardId !== selectedCardId);
 
     // Check for EROSION_KEEP effects (104030455)
     const keepEffectCard = player.unitZone.find(c =>
@@ -6979,7 +6994,7 @@ export const ServerGameService = {
     await ServerGameService.checkTriggeredEffects(gameState);
   },
 
-  executeErosionMovements(gameState: GameState, playerId: string, choice: 'A' | 'B' | 'C', selectedCardId?: string, keptCardId?: string) {
+  executeErosionMovements(gameState: GameState, playerId: string, choice: 'A' | 'C', selectedCardId?: string, keptCardId?: string) {
     const player = gameState.players[playerId];
     const handleableCards = player.erosionFront.filter(c => c !== null) as Card[];
 
@@ -6993,22 +7008,13 @@ export const ServerGameService = {
         ServerGameService.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'GRAVE', card.gamecardId);
       }
       gameState.logs.push(`${player.displayName} 将侵蚀区所有正面卡移至墓地。`);
-    } else if (choice === 'B') {
-      // b. Choose one card to keep; others to Graveyard
-      if (!selectedCardId) throw new Error('Please select a card to keep');
-      for (const card of handleableCards) {
-        if (card.gamecardId !== selectedCardId && card.gamecardId !== keptCardId) {
-          ServerGameService.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'GRAVE', card.gamecardId);
-        } else if (card.gamecardId === keptCardId && card.gamecardId !== selectedCardId) {
-            gameState.logs.push(`[白夜效果] ${card.fullName} 被额外保留在侵蚀区。`);
-        }
-      }
-        gameState.logs.push(`${player.displayName} 选择保留一张正面卡，其余移至墓地。`);
     } else if (choice === 'C') {
       // c. Choose one to hand; others to Graveyard; then top card to Erosion Zone face-down
       if (!selectedCardId) throw new Error('Please select a card to add to hand');
+      let addedCardName = '';
       for (const card of handleableCards) {
         if (card.gamecardId === selectedCardId) {
+          addedCardName = card.fullName;
           ServerGameService.moveCard(gameState, playerId, 'EROSION_FRONT', playerId, 'HAND', card.gamecardId);
         } else if (card.gamecardId === keptCardId) {
             gameState.logs.push(`[白夜效果] ${card.fullName} 被保留在侵蚀区。`);
@@ -7018,8 +7024,10 @@ export const ServerGameService = {
       }
 
       // Place top card of deck face-down in Erosion Zone
+      let backCardName = '';
       if (player.deck.length > 0) {
         const topCard = player.deck.pop()!;
+        backCardName = topCard.fullName;
         topCard.cardlocation = 'EROSION_BACK';
         topCard.displayState = 'FRONT_FACEDOWN';
         topCard.isExhausted = false;
@@ -7030,7 +7038,8 @@ export const ServerGameService = {
           player.erosionBack.push(topCard);
         }
       }
-        gameState.logs.push(`${player.displayName} 将一张正面卡加入手牌，其余移至墓地，并补充了一张背面卡。`);
+      const backText = backCardName ? `并将 [${backCardName}] 从卡组顶放入侵蚀区背面。` : '但卡组没有卡可放入侵蚀区背面。';
+      gameState.logs.push(`${player.displayName} 将正面侵蚀卡 [${addedCardName || selectedCardId}] 加入手牌，其余移至墓地，${backText}`);
     }
   },
 
@@ -8949,7 +8958,7 @@ export const ServerGameService = {
     // Handle Erosion Phase
     if (gameState.phase === 'EROSION') {
       const erosionCards = bot.erosionFront.filter((card): card is Card => !!card);
-      let erosionChoice: 'A' | 'B' | 'C' = 'A';
+      let erosionChoice: 'A' | 'C' = 'A';
       let selectedErosionCard: Card | undefined;
       let selectedErosionScore: number | undefined;
       let erosionReason = 'clear erosion cards to grave';
@@ -9070,8 +9079,9 @@ export const ServerGameService = {
           erosionChoice = 'C';
           erosionReason = 'low deck but high-value recovery: take the erosion card because the current board or hand needs it';
         } else if (deckDanger && selectedErosionCard) {
-          erosionChoice = 'B';
-          erosionReason = 'low deck: preserve the best erosion card without spending another deck card';
+          erosionChoice = 'A';
+          selectedErosionCard = undefined;
+          erosionReason = 'low deck: send face-up erosion cards to grave without spending another deck card';
         } else if (
           canUseChoiceC &&
           selectedErosionCard &&
@@ -9079,9 +9089,6 @@ export const ServerGameService = {
         ) {
           erosionChoice = 'C';
           erosionReason = 'tempo recovery: return a strong erosion card to hand before the board falls behind';
-        } else if (erosionCards.length >= 3 && selectedScore >= 35 && selectedErosionCard) {
-          erosionChoice = 'B';
-          erosionReason = 'preserve the best erosion card for future value';
         }
       }
 

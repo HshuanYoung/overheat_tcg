@@ -7,7 +7,7 @@ const cardEffects: CardEffect[] = [
     id: '103090328_boost',
     type: 'TRIGGER',
     triggerEvent: 'CARD_EXILED',
-    isMandatory: false,
+    isMandatory: true,
     triggerLocation: ['UNIT'],
     description: '这个单位的共鸣能力将卡名含有《银乐器》的卡放逐时，选择战场上1个非神蚀单位，本回合中伤害+1、力量+1500。',
     condition: (_gameState, _playerState, instance, event) => {

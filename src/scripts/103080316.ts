@@ -4,6 +4,7 @@ import { addTempKeyword, readyByEffect } from './BaseUtil';
 const cardEffects: CardEffect[] = [{
   id: '103080316_cub_enter_awaken',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'UNIT_AWAKENED' as any,
   limitCount: 1,

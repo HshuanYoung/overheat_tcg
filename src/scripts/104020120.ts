@@ -9,7 +9,7 @@ const trigger_104020120: CardEffect = {
   triggerLocation: ['UNIT'],
   triggerEvent: 'GODDESS_TRANSFORMATION',
   erosionTotalLimit: [10, 10],
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     // 1. Triggered by self entering Goddess Mode

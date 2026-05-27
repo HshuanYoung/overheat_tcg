@@ -37,7 +37,7 @@ const cardEffects: CardEffect[] = [{
   id: '303090053_resonance_silence',
   type: 'TRIGGER',
   triggerEvent: 'CARD_EXILED',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['EXILE'],
   description: '共鸣能力将你的墓地中的这张卡放逐时，选择战场上的1个单位，本回合中将其1个【启】或【诱】能力无效。',
   condition: (gameState, _playerState, instance, event) =>

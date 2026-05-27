@@ -77,7 +77,7 @@ const effect_101000292_irodori_ready: CardEffect = {
   id: '101000292_irodori_ready',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   limitNameType: true,
   triggerLocation: ['UNIT'],

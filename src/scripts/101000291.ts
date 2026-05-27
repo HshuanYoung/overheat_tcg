@@ -67,7 +67,7 @@ const effect_101000291_leave_destroy: CardEffect = {
   type: 'TRIGGER',
   triggerEvent: 'CARD_LEFT_FIELD',
   sourceSnapshotOnLeftField: true,
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   limitNameType: true,
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],

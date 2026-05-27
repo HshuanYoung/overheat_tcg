@@ -19,7 +19,7 @@ const effect_101100342_end_search: CardEffect = {
   triggerEvent: 'TURN_END' as any,
   triggerLocation: ['UNIT'],
   cost: exhaustCost,
-  isMandatory: true,
+  isMandatory: false,
   description: '你的回合结束时，横置：可以将卡组或墓地中的1张《祈祷》或《献身》加入手牌。',
   condition: (_gameState, playerState, instance, event) =>
     event?.playerUid === playerState.uid &&

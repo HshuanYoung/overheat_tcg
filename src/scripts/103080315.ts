@@ -13,6 +13,7 @@ const cardEffects: CardEffect[] = [
   {
     id: '103080315_unit_to_deck_put_grave_unit',
     type: 'TRIGGER',
+    isMandatory: true,
     triggerLocation: ['UNIT'],
     triggerEvent: 'CARD_LEFT_FIELD',
     isGlobal: true,

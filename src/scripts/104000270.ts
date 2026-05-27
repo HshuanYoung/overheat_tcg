@@ -31,7 +31,7 @@ const effect_104000270_non_battle_grave: CardEffect = {
   id: '104000270_non_battle_grave',
   type: 'TRIGGER',
   triggerEvent: 'CARD_LEFT_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT', 'GRAVE'],
   limitCount: 1,
   limitNameType: true,

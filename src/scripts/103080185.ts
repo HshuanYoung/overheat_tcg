@@ -11,7 +11,7 @@ const cardEffects: CardEffect[] = [{
   id: '103080185_spirit_targeted',
   type: 'TRIGGER',
   triggerEvent: 'CARD_SELECTED_TARGET',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   description: '被卡名含有《降灵》的卡选择为效果对象时，本回合你的所有单位力量+500。',
   condition: (_gameState, _playerState, instance, event) =>

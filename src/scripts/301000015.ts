@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '301000015_exile_erosion',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
     triggerLocation: ['ITEM'],
     description: '进入战场时，将你的侵蚀区中的所有正面卡放逐。',
     condition: (_gameState, _playerState, instance, event) => event?.sourceCardId === instance.gamecardId && event.data?.zone === 'ITEM',

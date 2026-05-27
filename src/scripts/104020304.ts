@@ -19,6 +19,7 @@ const itemTargets = (playerState: any) =>
 const cardEffects: CardEffect[] = [{
   id: '104020304_enter_put_kyubi_item',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
   limitCount: 1,

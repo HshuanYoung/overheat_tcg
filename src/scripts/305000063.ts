@@ -28,7 +28,7 @@ const cardEffects: CardEffect[] = [{
   triggerLocation: ['ITEM'],
   triggerEvent: 'CARD_ENTERED_ZONE',
   isMandatory: true,
-  description: '这张卡进入战场时，将卡组顶1张卡背面放逐。',
+  description: '这张卡进入战场时，将卡组顶2张卡背面放逐。',
   condition: (_gameState, playerState, instance, event) =>
     instance.cardlocation === 'ITEM' &&
     event?.sourceCardId === instance.gamecardId &&
@@ -49,7 +49,7 @@ const cardEffects: CardEffect[] = [{
     playerState.isTurn &&
     gameState.phase === 'MAIN' &&
     !instance.isExhausted &&
-    playerState.deck.length >= 2 &&
+    playerState.deck.length >= 1 &&
     opponentGraveTargets(gameState, playerState.uid).length > 0,
   execute: async (instance, gameState, playerState) => {
     createSelectCardQuery(
@@ -70,7 +70,7 @@ const cardEffects: CardEffect[] = [{
       const opponent = gameState.players[opponentUid];
       const target = opponent.grave.find((card: Card) => card.gamecardId === selections[0]);
       if (!target) return;
-      faceDownExileTop(gameState, playerState, instance, 2);
+      faceDownExileTop(gameState, playerState, instance, 1);
       const candidates = sameNameCandidates(opponent, target);
       if (candidates.length === 0) return;
       createSelectCardQuery(

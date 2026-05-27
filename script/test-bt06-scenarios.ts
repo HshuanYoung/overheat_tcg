@@ -268,6 +268,9 @@ async function testCorielEndSearch(): Promise<ScenarioResult> {
   if (state.pendingQuery?.context?.effectId !== '101100342_end_search') {
     return fail(name, `expected search query, got ${state.pendingQuery?.context?.effectId || 'none'}`);
   }
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
+    await answerPendingQuery(state, 'BOT', ['YES']);
+  }
   await answerPendingQuery(state, 'BOT', [prayerCard.gamecardId]);
 
   const inHand = state.players.BOT.hand.some((card: Card) => card.id === prayerCard.id);
@@ -340,6 +343,9 @@ async function testDawnFollowerDrawsWhenExiledForShingiCost(): Promise<ScenarioR
 
   moveCardAsCost(state, 'BOT', follower, 'EXILE', shingiSource);
   await ServerGameService.checkTriggeredEffects(state);
+  if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
+    await answerPendingQuery(state, 'BOT', ['YES']);
+  }
 
   return state.players.BOT.hand.length === 1 && state.players.BOT.exile.some((card: Card) => card.gamecardId === follower.gamecardId)
     ? pass(name, `hand=${state.players.BOT.hand.length}, exile=${state.players.BOT.exile.length}`)
@@ -1197,8 +1203,20 @@ async function testGreenResonanceDrawBoostAndSearch(): Promise<ScenarioResult> {
     return fail(name, `expected resonance query, got ${organistState.pendingQuery?.context?.effectId || 'none'}`);
   }
   await answerPendingQuery(organistState, 'BOT', [silverCost.gamecardId]);
+  if (organistState.pendingQuery?.context?.effectId === '303090053_resonance_silence') {
+    await answerPendingQuery(organistState, 'BOT', [organist.gamecardId]);
+  }
+  if (organistState.pendingQuery?.context?.effectId === '303090053_resonance_silence') {
+    const resonanceOption = (organistState.pendingQuery.options || []).find((option: any) =>
+      option.id === '103090327_resonance' || option.value === '103090327_resonance'
+    );
+    await answerPendingQuery(organistState, 'BOT', [resonanceOption?.id || organistState.pendingQuery.options?.[0]?.id]);
+  }
   await ServerGameService.checkTriggeredEffects(organistState);
   await chooseQueuedTrigger(organistState, '103090327_draw_discard');
+  if (organistState.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
+    await answerPendingQuery(organistState, 'BOT', ['YES']);
+  }
   if (organistState.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
     await answerPendingQuery(organistState, 'BOT', ['YES']);
   }
@@ -2062,7 +2080,7 @@ async function testGreatAlchemistLoseAfterLeavingField(): Promise<ScenarioResult
 }
 
 async function testElmontEnterTriggerIsOptional(): Promise<ScenarioResult> {
-  const name = 'BT02 Alchemy Knight Elmont enter trigger is optional';
+  const name = 'BT02 Alchemy Knight Elmont enter trigger is mandatory';
   const buildState = () => {
     const elmont = cloneScriptCard(alchemyKnightElmont as Card, 'UNIT');
     const graveA = testCard({
@@ -2104,21 +2122,12 @@ async function testElmontEnterTriggerIsOptional(): Promise<ScenarioResult> {
 
   const noState = buildState();
   await ServerGameService.checkTriggeredEffects(noState.state);
-  const asksOptional = noState.state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
-    noState.state.pendingQuery.playerUid === 'BOT' &&
-    noState.state.pendingQuery.context?.sourceCardId === noState.elmont.gamecardId;
-  const noBeforeGrave = noState.state.players.BOT.grave.length;
-  const noBeforeDeck = noState.state.players.BOT.deck.length;
-  const noBeforeHand = noState.state.players.BOT.hand.length;
-  await answerPendingQuery(noState.state, 'BOT', ['NO']);
-  const noSkipped = noState.state.players.BOT.grave.length === noBeforeGrave &&
-    noState.state.players.BOT.deck.length === noBeforeDeck &&
-    noState.state.players.BOT.hand.length === noBeforeHand &&
-    !noState.state.pendingQuery;
+  const asksSelectionDirectly = noState.state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
+    noState.state.pendingQuery.context?.effectId === '105120168_enter' &&
+    noState.state.pendingQuery.options?.length === 2;
 
   const yesState = buildState();
   await ServerGameService.checkTriggeredEffects(yesState.state);
-  await answerPendingQuery(yesState.state, 'BOT', ['YES']);
   const asksSelection = yesState.state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
     yesState.state.pendingQuery.context?.effectId === '105120168_enter' &&
     yesState.state.pendingQuery.options?.length === 2;
@@ -2129,9 +2138,9 @@ async function testElmontEnterTriggerIsOptional(): Promise<ScenarioResult> {
   const drewCard = yesState.state.players.BOT.hand.length === 1;
   const yesResolved = graveBottomed && drewCard && !yesState.state.pendingQuery;
 
-  return asksOptional && noSkipped && asksSelection && yesResolved
-    ? pass(name, `optional=${asksOptional}, no=${noSkipped}, yes=${yesResolved}`)
-    : fail(name, `optional=${asksOptional}, no=${noSkipped}, select=${asksSelection}, yes=${yesResolved}, pending=${yesState.state.pendingQuery?.callbackKey || 'none'}`);
+  return asksSelectionDirectly && asksSelection && yesResolved
+    ? pass(name, `mandatory=${asksSelectionDirectly}, yes=${yesResolved}`)
+    : fail(name, `mandatory=${asksSelectionDirectly}, select=${asksSelection}, yes=${yesResolved}, pending=${yesState.state.pendingQuery?.callbackKey || 'none'}`);
 }
 
 async function testYellowDailyBlueprintTruthAndIly(): Promise<ScenarioResult> {
@@ -2542,9 +2551,6 @@ async function testAnnihilationAngelsCombatDamageTriggerFinishesBattle(): Promis
 
   await ServerGameService.resolveDamage(directState);
   const directAsked = directState.pendingQuery?.context?.effectId === '101130104_damage_bottom';
-  if (directAsked) {
-    await ServerGameService.handleQueryChoice(directState, 'BOT', directState.pendingQuery.id, ['YES']);
-  }
   if (directState.pendingQuery?.context?.effectId === '101130104_damage_bottom') {
     await ServerGameService.handleQueryChoice(directState, 'BOT', directState.pendingQuery.id, [graveA.gamecardId, graveB.gamecardId]);
   }
@@ -2603,9 +2609,6 @@ async function testAnnihilationAngelsCombatDamageTriggerFinishesBattle(): Promis
   await ServerGameService.resolveDamage(annihilationState);
   const annihilationAsked = annihilationState.pendingQuery?.context?.effectId === '101130104_damage_bottom';
   const annihilationDamage = annihilationState.players.P1.erosionFront.length === 2;
-  if (annihilationAsked) {
-    await ServerGameService.handleQueryChoice(annihilationState, 'BOT', annihilationState.pendingQuery.id, ['YES']);
-  }
   if (annihilationState.pendingQuery?.context?.effectId === '101130104_damage_bottom') {
     await ServerGameService.handleQueryChoice(annihilationState, 'BOT', annihilationState.pendingQuery.id, [graveC.gamecardId, graveD.gamecardId]);
   }
@@ -2670,9 +2673,6 @@ async function testAnnihilationAngelsCombatDamageTriggerFinishesBattle(): Promis
   }
   const sacrificeAskedTrigger = sacrificeState.pendingQuery?.context?.effectId === '101130104_damage_bottom';
   const sacrificeDamage = sacrificeState.players.P1.erosionFront.length === 2;
-  if (sacrificeAskedTrigger) {
-    await ServerGameService.handleQueryChoice(sacrificeState, 'BOT', sacrificeState.pendingQuery.id, ['YES']);
-  }
   if (sacrificeState.pendingQuery?.context?.effectId === '101130104_damage_bottom') {
     await ServerGameService.handleQueryChoice(sacrificeState, 'BOT', sacrificeState.pendingQuery.id, [graveE.gamecardId, graveF.gamecardId]);
   }
@@ -2721,10 +2721,9 @@ async function testSimpleAiResolvesAnnihilationAngelsDamageTrigger(): Promise<Sc
   delete state.players.BOT;
 
   await ServerGameService.resolveDamage(state);
-  const asked = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+  const asked = state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
     state.pendingQuery.playerUid === 'BOT_PLAYER' &&
     state.pendingQuery.context?.effectId === '101130104_damage_bottom';
-  await ServerGameService.botMoveForPlayer(state, 'BOT_PLAYER');
   const openedSelection = state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
     state.pendingQuery.playerUid === 'BOT_PLAYER' &&
     state.pendingQuery.context?.effectId === '101130104_damage_bottom';

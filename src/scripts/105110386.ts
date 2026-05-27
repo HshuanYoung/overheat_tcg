@@ -39,6 +39,7 @@ const defenseModeOptions = (gameState: any, playerUid: string) => {
 const cardEffects: CardEffect[] = [{
   id: '105110386_blueprint_entry_destroy',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
   description: '由于卡名含有《蓝图》的卡的效果进入战场时，选择1项：破坏对手战场所有非神蚀卡；或破坏战场1张神蚀卡。',

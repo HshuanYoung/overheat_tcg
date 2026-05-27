@@ -21,6 +21,7 @@ const cardEffects: CardEffect[] = [{
 }, {
   id: '105000384_effect_grave_search_immortal_stone',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT', 'GRAVE'],
   triggerEvent: 'CARD_LEFT_ZONE',
   cost: paymentCost(2),

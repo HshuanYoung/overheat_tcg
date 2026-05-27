@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '102050142_goddess_control',
   type: 'TRIGGER',
   triggerEvent: 'GODDESS_TRANSFORMATION',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   description: '进入女神化时，选择对手1个AC2以下非神蚀单位重置，本回合得到其控制权。',
   condition: (gameState, playerState) => {

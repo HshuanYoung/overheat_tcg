@@ -12,7 +12,7 @@ const effect_104010449_trigger: CardEffect = {
   id: 'fuka_end_turn_bounce',
   type: 'TRIGGER',
   triggerEvent: 'TURN_END',
-  isMandatory: false,
+  isMandatory: true,
   description: '【诱】在你的回合结束时，如果你的战场上只有蓝色单位，你可以选择发动：选择对手战场上一个AC<=2且非神迹的卡牌返回持有者手牌。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card) => {
     if (!playerState.isTurn) return false;

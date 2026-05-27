@@ -16,7 +16,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'BATTLE_ENDED',
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   limitNameType: true,
   description: '同名1回合1次：这个单位参与联军攻击的战斗阶段结束时，选择《暮城巡逻队》以外的己方<圣王国>非神蚀单位重置。',

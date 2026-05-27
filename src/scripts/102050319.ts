@@ -12,6 +12,7 @@ const opponentNonGodFieldCards = (gameState: any, playerUid: string) => {
 const cardEffects: CardEffect[] = [{
   id: '102050319_exiled_by_opponent_destroy',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['EXILE'],
   triggerEvent: 'CARD_EXILED',
   limitCount: 1,

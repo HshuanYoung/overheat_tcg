@@ -92,7 +92,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'CARD_EXILED',
   triggerLocation: ['EXILE'],
-  isMandatory: false,
+  isMandatory: true,
   description: '共鸣能力将墓地中的这张卡放逐时，舍弃1张手牌：将墓地中1张ACCESS+3以下的<瑟诺布>卡加入手牌。',
   condition: (_gameState, playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&

@@ -59,7 +59,7 @@ const cardEffects: CardEffect[] = [universalEquipEffect, {
   type: 'TRIGGER',
   triggerLocation: ['ITEM'],
   triggerEvent: ['CARD_LEFT_ZONE', 'CARD_LEFT_FIELD'] as any,
-  isMandatory: false,
+  isMandatory: true,
   description: '装备单位由于卡的效果返回持有者手牌时，将这张卡返回持有者手牌。',
   condition: (_gameState, playerState, instance, event) =>
     instance.cardlocation === 'ITEM' &&

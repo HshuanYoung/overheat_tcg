@@ -23,6 +23,7 @@ const opponentPutUnitFromGraveByEffect = (playerUid: string, event: any) =>
 const cardEffects: CardEffect[] = [{
   id: '105110382_opponent_grave_entry_recruit',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
   isGlobal: true,

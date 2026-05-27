@@ -7,7 +7,7 @@ const trigger_104020477: CardEffect = {
   description: '【诱发】：当这个单位进入单位区时，若对手的单位比你多2个或以上：将侵蚀位前区两张蓝色的正面卡牌送去墓地，之后选择对手单位区中最多两名非神蚀单位返回持有者手牌。',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     // 1. Check if this card entered the UNIT zone
     const isSelfEntering = event?.type === 'CARD_ENTERED_ZONE' &&

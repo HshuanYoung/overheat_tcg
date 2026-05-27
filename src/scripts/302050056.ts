@@ -11,7 +11,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['ITEM'],
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   description: '这张卡进入战场时，选择对手场上1个非神蚀单位。只要这张卡在战场上，被选择单位不能横置。',
   condition: (gameState, playerState, instance, event) =>
     event?.sourceCardId === instance.gamecardId &&

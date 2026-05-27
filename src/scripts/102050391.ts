@@ -15,7 +15,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'TURN_END' as any,
   triggerLocation: ['UNIT'],
-  isMandatory: false,
+  isMandatory: true,
   description: '这个单位攻击过的回合结束时：抽1张卡。晋升。',
   condition: (_gameState, playerState, instance, event) =>
     event?.type === ('TURN_END' as any) &&

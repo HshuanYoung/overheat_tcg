@@ -17,7 +17,7 @@ const effect_101140343_shingi_cost_draw: CardEffect = {
   triggerLocation: ['EXILE'],
   limitCount: 1,
   limitNameType: true,
-  isMandatory: true,
+  isMandatory: false,
   description: '同名1回合1次：这个单位由于卡名含有《神仪》的卡的费用而被放逐时，可以抽1张卡。',
   condition: (gameState, playerState, instance, event) => {
     if (event?.sourceCardId !== instance.gamecardId) return false;

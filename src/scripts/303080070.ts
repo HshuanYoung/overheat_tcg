@@ -30,7 +30,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'TURN_END',
   triggerLocation: ['ITEM'],
-  isMandatory: false,
+  isMandatory: true,
   description: '2~5：你的战场上有2个以上单位返回过卡组的回合结束时，支付1，将卡组中1张<神木森>非神蚀单位放置到战场。',
   condition: (_gameState, playerState, instance, event) =>
     event?.type === 'TURN_END' &&

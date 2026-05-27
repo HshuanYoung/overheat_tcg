@@ -97,7 +97,7 @@ const effect_104000298_irodori_recover: CardEffect = {
   id: '104000298_irodori_recover',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   limitNameType: true,
   triggerLocation: ['UNIT'],

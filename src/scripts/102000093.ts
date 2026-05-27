@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '102000093_red_buffs',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
     triggerLocation: ['UNIT'],
     description: '入场时，选择最多2个红色单位，本回合伤害+1、力量+500。',
     condition: (_gameState, playerState, instance, event) =>

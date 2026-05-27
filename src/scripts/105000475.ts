@@ -17,7 +17,7 @@ const effect_105000475_enter: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: true,
+  isMandatory: false,
   description: '这个单位进入战场时，你可以破坏你的1张道具。之后对手舍弃1张手牌。若舍弃的是单位卡，本回合中这个单位获得【速攻】和【神依】；否则双方玩家各受到1点伤害。',
   condition: (_gameState, _playerState, instance, event?: GameEvent) =>
     instance.cardlocation === 'UNIT' &&

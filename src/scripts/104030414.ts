@@ -11,7 +11,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'CARD_EROSION_TO_FIELD',
   triggerLocation: ['UNIT'],
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   limitNameType: true,
   description: '同名1回合1次，这个单位由于卡的效果从侵蚀区进入战场时，支付+1：抽1张卡。',

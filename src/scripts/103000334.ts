@@ -21,7 +21,7 @@ const cardEffects: CardEffect[] = [{
   id: '103000334_resonance_revive_chimera',
   type: 'TRIGGER',
   triggerEvent: 'CARD_EXILED',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['EXILE'],
   description: '共鸣能力将墓地中的这张卡放逐时，选择你的墓地中的1张「奇美拉」单位卡，将被选择的卡放置到战场上。',
   condition: (_gameState, playerState, instance, event) =>

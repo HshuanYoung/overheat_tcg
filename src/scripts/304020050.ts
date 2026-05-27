@@ -23,6 +23,7 @@ const blueEnteredUnits = (event: any) =>
 const cardEffects: CardEffect[] = [{
   id: '304020050_revive_on_opponent_effect_leave',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['ITEM'],
   triggerEvent: 'CARD_LEFT_FIELD',
   sourceSnapshotOnLeftField: true,
@@ -72,6 +73,7 @@ const cardEffects: CardEffect[] = [{
 }, {
   id: '304020050_grant_wealth_to_blue_unit',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['ITEM'],
   triggerEvent: 'CARD_ENTERED_ZONE',
   isGlobal: true,

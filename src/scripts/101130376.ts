@@ -10,7 +10,7 @@ const cardEffects: CardEffect[] = [{
   id: '101130376_opponent_bounce_recover',
   type: 'TRIGGER',
   triggerEvent: 'CARD_LEFT_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   limitCount: 1,

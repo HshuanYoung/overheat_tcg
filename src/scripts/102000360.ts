@@ -67,7 +67,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerLocation: ['GRAVE', 'EXILE'],
   triggerEvent: ['CARD_LEFT_FIELD', 'CARD_DESTROYED_BATTLE', 'CARD_DESTROYED_EFFECT'],
-  isMandatory: false,
+  isMandatory: true,
   erosionBackLimit: [2, 10],
   description: '创痕2：这张卡由于战斗或对手效果从战场离开时，选择战场上的1张卡破坏。',
   condition: (_gameState, playerState, instance, event) => {

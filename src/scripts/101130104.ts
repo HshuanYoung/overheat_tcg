@@ -15,7 +15,7 @@ const cardEffects: CardEffect[] = [{
     id: '101130104_damage_bottom',
     type: 'TRIGGER',
     triggerEvent: 'COMBAT_DAMAGE_CAUSED',
-  isMandatory: false,
+  isMandatory: true,
     triggerLocation: ['UNIT'],
     erosionTotalLimit: [0, 3],
     description: '0~3：给予对手战斗伤害时，将墓地2张卡放到卡组底。',

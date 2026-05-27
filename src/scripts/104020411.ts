@@ -15,7 +15,7 @@ const cardEffects: CardEffect[] = [
     type: 'TRIGGER',
     triggerEvent: 'TURN_END' as any,
     triggerLocation: ['UNIT'],
-    isMandatory: false,
+    isMandatory: true,
     limitCount: 1,
     description: '1回合1次，财富3以上，你的回合结束时：将墓地或正面侵蚀区1张《金钱美梦》加入手牌。',
     condition: (gameState, playerState, instance, event) =>

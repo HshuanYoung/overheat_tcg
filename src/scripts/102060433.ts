@@ -34,7 +34,7 @@ const cardEffects: CardEffect[] = [{
   id: '102060433_red_story_boost',
   type: 'TRIGGER',
   triggerEvent: 'CARD_PLAYED',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   description: '你使用红色故事卡时，选择你的1个<雷霆>单位，本回合伤害+1、力量+1000。',

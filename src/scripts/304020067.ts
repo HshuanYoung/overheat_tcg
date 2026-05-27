@@ -26,7 +26,7 @@ const cardEffects: CardEffect[] = [{
   triggerEvent: 'CARD_ENTERED_ZONE',
   triggerLocation: ['ITEM'],
   isGlobal: true,
-  isMandatory: false,
+  isMandatory: true,
   description: '对手以抽卡以外的方式从卡组将卡加入手牌时：将那名对手的卡组顶2张卡送入墓地。',
   condition: (_gameState, playerState, instance, event) =>
     instance.cardlocation === 'ITEM' &&

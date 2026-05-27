@@ -55,7 +55,7 @@ const cardEffects: CardEffect[] = [{
   id: '103090330_resonance_mill',
   type: 'TRIGGER',
   triggerEvent: 'CARD_EXILED',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   erosionBackLimit: [1, 10],
   description: '创痕1：共鸣能力将你的墓地中的卡名含有《银乐器》的卡放逐时，选择1名玩家，将其卡组顶2张送入墓地。',

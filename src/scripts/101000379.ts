@@ -31,7 +31,7 @@ const cardEffects: CardEffect[] = [{
   id: '101000379_leave_recover_shingi',
   type: 'TRIGGER',
   triggerEvent: 'CARD_LEFT_FIELD' as any,
-  isMandatory: false,
+  isMandatory: true,
   sourceSnapshotOnLeftField: true,
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
   description: '被战斗破坏或由于卡的效果离开战场时，将墓地中的1张卡名含有《神仪》的卡加入手牌。',

@@ -6,6 +6,7 @@ import {
   allCardsOnField,
   canActivateDefaultTiming,
   createSelectCardQuery,
+  destroyByEffect,
   isFeijingUnit,
   moveCard
 } from './BaseUtil';
@@ -45,12 +46,25 @@ const effect_105110351_blueprint_destroy: CardEffect = {
       card => card.cardlocation as any
     );
   },
+  targetSpec: {
+    title: '选择破坏对象',
+    description: '选择战场上的1张非神蚀卡破坏。',
+    minSelections: 1,
+    maxSelections: 1,
+    zones: ['UNIT', 'ITEM'],
+    controller: 'ANY',
+    step: 'DESTROY',
+    getCandidates: (gameState) =>
+      allCardsOnField(gameState)
+        .filter(card => !card.godMark)
+        .map(card => ({ card, source: card.cardlocation as any }))
+  },
   onQueryResolve: async (instance, gameState, _playerState, selections, context) => {
     if (context?.step !== 'DESTROY') return;
     const target = AtomicEffectExecutor.findCardById(gameState, selections[0]);
     const ownerUid = target ? AtomicEffectExecutor.findCardOwnerKey(gameState, target.gamecardId) : undefined;
     if (!target || !ownerUid || target.godMark || (target.cardlocation !== 'UNIT' && target.cardlocation !== 'ITEM')) return;
-    moveCard(gameState, ownerUid, target, 'GRAVE', instance);
+    destroyByEffect(gameState, target, instance);
   }
 };
 
@@ -112,7 +126,7 @@ const effect_105110351_destroy_boost: CardEffect = {
     ) {
       return;
     }
-    moveCard(gameState, playerState.uid, target, 'GRAVE', instance);
+    if (!destroyByEffect(gameState, target, instance)) return;
     const liveSelf = AtomicEffectExecutor.findCardById(gameState, instance.gamecardId);
     if (!liveSelf || liveSelf.cardlocation !== 'UNIT') return;
     addTempPower(liveSelf, instance, 1000);

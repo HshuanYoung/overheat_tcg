@@ -1,4 +1,4 @@
-import { Card, CardEffect, GameEvent, GameState, PlayerState, TriggerLocation } from '../types/game';
+import { Card, CardEffect, EffectTargetCandidate, GameEvent, GameState, PlayerState, TriggerLocation } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 export { AtomicEffectExecutor };
 import { EventEngine } from '../services/EventEngine';
@@ -652,34 +652,7 @@ export const createPlayerSelectQuery = (
 ) => {
   const includeSelf = options?.includeSelf !== false;
   const includeOpponent = options?.includeOpponent !== false;
-  const playerOptions: { card: Card; source: TriggerLocation }[] = [];
-
-  if (includeSelf) {
-    playerOptions.push({
-      card: {
-        gamecardId: 'PLAYER_SELF',
-        id: 'PLAYER_SELF',
-        fullName: gameState.players[playerUid]?.displayName || '我方玩家',
-        type: 'UNIT',
-        color: 'NONE'
-      } as Card,
-      source: 'UNIT'
-    });
-  }
-
-  if (includeOpponent) {
-    const opponentUid = getOpponentUid(gameState, playerUid);
-    playerOptions.push({
-      card: {
-        gamecardId: 'PLAYER_OPPONENT',
-        id: 'PLAYER_OPPONENT',
-        fullName: gameState.players[opponentUid]?.displayName || '对手玩家',
-        type: 'UNIT',
-        color: 'NONE'
-      } as Card,
-      source: 'UNIT'
-    });
-  }
+  const playerOptions = playerTargetCandidates(gameState, playerUid, { includeSelf, includeOpponent });
 
   gameState.pendingQuery = {
     id: Math.random().toString(36).substring(7),
@@ -712,7 +685,7 @@ export const moveCard = (
 ) => {
   const targetPlayerUid = options?.toPlayerUid || ownerUid;
   if (sourceCard && isUnaffectedByCardEffect(gameState, card, sourceCard, options?.toPlayerUid ? ownerUidOf(gameState, sourceCard) : undefined)) {
-    return;
+    return false;
   }
   AtomicEffectExecutor.moveCard(
     gameState,
@@ -732,6 +705,7 @@ export const moveCard = (
       effectSourceCardId: sourceCard?.gamecardId
     }
   );
+  return card.cardlocation === toZone && ownerUidOf(gameState, card) === targetPlayerUid;
 };
 
 export const moveCardAsCost = (
@@ -805,6 +779,79 @@ export const getBattlefieldCards = (gameState: GameState) =>
 export const findUnitOnBattlefield = (gameState: GameState, gamecardId?: string) => {
   if (!gamecardId) return undefined;
   return getBattlefieldUnits(gameState).find(card => card.gamecardId === gamecardId);
+};
+
+export const playerTargetCandidates = (
+  gameState: GameState,
+  playerUid: string,
+  options?: { includeSelf?: boolean; includeOpponent?: boolean }
+): EffectTargetCandidate[] => {
+  const includeSelf = options?.includeSelf !== false;
+  const includeOpponent = options?.includeOpponent !== false;
+  const candidates: EffectTargetCandidate[] = [];
+
+  if (includeSelf) {
+    candidates.push({
+      card: {
+        gamecardId: 'PLAYER_SELF',
+        id: 'PLAYER_SELF',
+        uniqueId: 'PLAYER_SELF',
+        fullName: gameState.players[playerUid]?.displayName || '我方玩家',
+        specialName: '',
+        type: 'UNIT',
+        color: 'NONE',
+        faction: '无',
+        acValue: 0,
+        power: 0,
+        basePower: 0,
+        damage: 0,
+        baseDamage: 0,
+        godMark: false,
+        displayState: 'FRONT_UPRIGHT',
+        isExhausted: false,
+        isrush: false,
+        canAttack: false,
+        feijingMark: false,
+        canResetCount: 0,
+        effects: [],
+        cardlocation: 'PLAYER' as TriggerLocation
+      } as Card,
+      source: 'PLAYER' as TriggerLocation
+    });
+  }
+
+  if (includeOpponent) {
+    const opponentUid = getOpponentUid(gameState, playerUid);
+    candidates.push({
+      card: {
+        gamecardId: 'PLAYER_OPPONENT',
+        id: 'PLAYER_OPPONENT',
+        uniqueId: 'PLAYER_OPPONENT',
+        fullName: gameState.players[opponentUid]?.displayName || '对手玩家',
+        specialName: '',
+        type: 'UNIT',
+        color: 'NONE',
+        faction: '无',
+        acValue: 0,
+        power: 0,
+        basePower: 0,
+        damage: 0,
+        baseDamage: 0,
+        godMark: false,
+        displayState: 'FRONT_UPRIGHT',
+        isExhausted: false,
+        isrush: false,
+        canAttack: false,
+        feijingMark: false,
+        canResetCount: 0,
+        effects: [],
+        cardlocation: 'PLAYER' as TriggerLocation
+      } as Card,
+      source: 'PLAYER' as TriggerLocation
+    });
+  }
+
+  return candidates;
 };
 
 export type PutOntoBattlefieldContext = HighAlchemyEntryContext;
@@ -1854,24 +1901,24 @@ export const dealUnpreventableSelfDamage = (gameState: GameState, playerUid: str
 
 export const destroyByEffect = (gameState: GameState, target: Card, source: Card) => {
   const uid = ownerUidOf(gameState, target);
-  if (!uid) return;
+  if (!uid) return false;
   const sourceUid = ownerUidOf(gameState, source);
   const data = (target as any).data || {};
   const sourceName = source.fullName || '卡牌效果';
 
   if (data.indestructibleByEffect) {
     gameState.logs.push(`[${target.fullName}] 因效果不会被破坏。`);
-    return;
+    return false;
   }
 
   const opponentUid = getOpponentUid(gameState, uid);
   if (data.indestructibleIfOpponentGoddess && opponentUid && gameState.players[opponentUid]?.isGoddessMode) {
     gameState.logs.push(`[${target.fullName}] 因对手处于女神化状态而不会被破坏。`);
-    return;
+    return false;
   }
 
   if (isUnaffectedByCardEffect(gameState, target, source)) {
-    return;
+    return false;
   }
 
   if (
@@ -1885,13 +1932,13 @@ export const destroyByEffect = (gameState: GameState, target: Card, source: Card
     delete data.preventNextDestroy;
     delete data.preventNextDestroySourceName;
     delete data.preventNextDestroyUntilTurn;
-    return;
+    return false;
   }
 
   if (data.preventFirstDestroyEachTurnSourceName && data.preventFirstDestroyEachTurnUsedTurn !== gameState.turnCount) {
     data.preventFirstDestroyEachTurnUsedTurn = gameState.turnCount;
     gameState.logs.push(`[${data.preventFirstDestroyEachTurnSourceName}] 防止了 [${target.fullName}] 本回合第一次将被破坏。`);
-    return;
+    return false;
   }
 
   if (
@@ -1903,16 +1950,29 @@ export const destroyByEffect = (gameState: GameState, target: Card, source: Card
     const preventSource = sourceCardId ? AtomicEffectExecutor.findCardById(gameState, sourceCardId) : undefined;
     const preventSourceName = preventSource?.fullName || (gameState.players[uid] as any).preventOwnUnitsOpponentEffectDestroySourceName || '破坏防止';
     gameState.logs.push(`[${preventSourceName}] 防止了 [${target.fullName}] 将要被对手的卡的效果破坏。`);
-    return;
+    EventEngine.dispatchEvent(gameState, {
+      type: 'CARD_EFFECT_DESTROY_PREVENTED',
+      sourceCard: preventSource,
+      sourceCardId,
+      targetCardId: target.gamecardId,
+      playerUid: uid,
+      data: {
+        preventedCardId: target.gamecardId,
+        destroySourcePlayerId: sourceUid,
+        destroySourceCardId: source.gamecardId
+      }
+    });
+    return false;
   }
 
   if (data.returnToHandOnDestroyTurn === gameState.turnCount) {
     moveCard(gameState, uid, target, 'HAND', source);
     gameState.logs.push(`[替换效果] ${target.fullName} 本回合被破坏时改为返回手牌。`);
-    return;
+    return false;
   }
 
-  moveCard(gameState, uid, target, 'GRAVE', source);
+  const destroyed = moveCard(gameState, uid, target, 'GRAVE', source);
+  if (!destroyed) return false;
   EventEngine.dispatchEvent(gameState, {
     type: 'CARD_DESTROYED_EFFECT',
     targetCardId: target.gamecardId,
@@ -1922,6 +1982,7 @@ export const destroyByEffect = (gameState: GameState, target: Card, source: Card
     }
   });
   gameState.logs.push(`[${source.fullName}] 破坏了 [${target.fullName}]。`);
+  return true;
 };
 
 export const exileByEffect = (gameState: GameState, target: Card, source: Card) => {

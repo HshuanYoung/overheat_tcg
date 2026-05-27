@@ -12,7 +12,8 @@ import {
   isResonanceExileEvent,
   isSilverInstrumentCard,
   millTop,
-  moveCard
+  moveCard,
+  playerTargetCandidates
 } from './BaseUtil';
 
 const searchableUnit = (card: Card) =>
@@ -71,6 +72,14 @@ const cardEffects: CardEffect[] = [{
       '选择1名玩家，将其卡组顶2张送入墓地。',
       { sourceCardId: instance.gamecardId, effectId: '103090330_resonance_mill', step: 'PLAYER' }
     );
+  },
+  targetSpec: {
+    title: '选择玩家',
+    description: '选择1名玩家，将其卡组顶2张送入墓地。',
+    minSelections: 1,
+    maxSelections: 1,
+    step: 'PLAYER',
+    getCandidates: (gameState, playerState) => playerTargetCandidates(gameState, playerState.uid)
   },
   onQueryResolve: async (instance, gameState, playerState, selections) => {
     const targetUid = selections[0] === 'PLAYER_SELF' ? playerState.uid : getOpponentUid(gameState, playerState.uid);

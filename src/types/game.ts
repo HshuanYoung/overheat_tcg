@@ -9,7 +9,7 @@ export const GAME_TIMEOUTS = {
 export type CardType = 'UNIT' | 'STORY' | 'ITEM';
 export type CardColor = 'RED' | 'WHITE' | 'YELLOW' | 'BLUE' | 'GREEN' | 'NONE';
 export type EffectType = 'CONTINUOUS' | 'TRIGGERED' | 'ACTIVATED' | 'ALWAYS' | 'TRIGGER' | 'ACTIVATE';
-export type TriggerLocation = 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK' | 'PLAY' | 'DECK';
+export type TriggerLocation = 'HAND' | 'UNIT' | 'ITEM' | 'GRAVE' | 'EXILE' | 'EROSION_FRONT' | 'EROSION_BACK' | 'PLAY' | 'DECK' | 'PLAYER';
 
 export type GameEventType =
   | 'PHASE_CHANGED'
@@ -119,6 +119,7 @@ export interface CardFilter {
   fuzzyName?: string;
   querySelection?: boolean; // If true, only target cards selected in the current query context
   gamecardId?: string; // Specific instance ID
+  idIn?: string[];
   isExhausted?: boolean; // New: Filter by exhaustion status (horizontal/rotational)
 }
 
@@ -148,7 +149,7 @@ export interface EffectTargetShape {
   controller?: 'SELF' | 'OPPONENT' | 'ANY';
   filter?: CardFilter;
   step?: string;
-  getCandidates?: (gameState: GameState, playerState: PlayerState, card: Card, declaredTargets?: DeclaredEffectTarget[]) => EffectTargetCandidate[];
+  getCandidates?: (gameState: GameState, playerState: PlayerState, card: Card, declaredTargets?: DeclaredEffectTarget[], event?: GameEvent) => EffectTargetCandidate[];
 }
 
 export interface EffectTargetModeOption extends EffectTargetShape {
@@ -522,6 +523,7 @@ export interface TriggeredEffectRecord {
   effectIndex: number;
   playerUid: string;
   event?: GameEvent;
+  declaredTargets?: DeclaredEffectTarget[];
   virtualTriggerType?: 'RETURN_TO_EXILE_AT_END' | 'RETURN_TO_DECK_BOTTOM_AT_END' | 'LOSE_AT_END' | 'PENDING_RESOLUTION';
   virtualPayload?: {
     targetCardId?: string;

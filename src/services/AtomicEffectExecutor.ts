@@ -1027,6 +1027,7 @@ export class AtomicEffectExecutor {
     }
 
     if (filter.id && card.id !== filter.id) return false;
+    if (filter.idIn && !filter.idIn.includes(card.id)) return false;
     if (filter.hasOwnProperty('gamecardId') && card.gamecardId !== filter.gamecardId) return false;
     if (filter.type) {
       if (filter.type === 'ITEM') {

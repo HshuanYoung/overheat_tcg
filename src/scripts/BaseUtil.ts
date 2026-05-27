@@ -1,4 +1,4 @@
-import { Card, CardEffect, GameEvent, GameState, PlayerState, TriggerLocation } from '../types/game';
+import { Card, CardEffect, EffectTargetCandidate, GameEvent, GameState, PlayerState, TriggerLocation } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 export { AtomicEffectExecutor };
 import { EventEngine } from '../services/EventEngine';
@@ -652,34 +652,7 @@ export const createPlayerSelectQuery = (
 ) => {
   const includeSelf = options?.includeSelf !== false;
   const includeOpponent = options?.includeOpponent !== false;
-  const playerOptions: { card: Card; source: TriggerLocation }[] = [];
-
-  if (includeSelf) {
-    playerOptions.push({
-      card: {
-        gamecardId: 'PLAYER_SELF',
-        id: 'PLAYER_SELF',
-        fullName: gameState.players[playerUid]?.displayName || '我方玩家',
-        type: 'UNIT',
-        color: 'NONE'
-      } as Card,
-      source: 'UNIT'
-    });
-  }
-
-  if (includeOpponent) {
-    const opponentUid = getOpponentUid(gameState, playerUid);
-    playerOptions.push({
-      card: {
-        gamecardId: 'PLAYER_OPPONENT',
-        id: 'PLAYER_OPPONENT',
-        fullName: gameState.players[opponentUid]?.displayName || '对手玩家',
-        type: 'UNIT',
-        color: 'NONE'
-      } as Card,
-      source: 'UNIT'
-    });
-  }
+  const playerOptions = playerTargetCandidates(gameState, playerUid, { includeSelf, includeOpponent });
 
   gameState.pendingQuery = {
     id: Math.random().toString(36).substring(7),
@@ -805,6 +778,79 @@ export const getBattlefieldCards = (gameState: GameState) =>
 export const findUnitOnBattlefield = (gameState: GameState, gamecardId?: string) => {
   if (!gamecardId) return undefined;
   return getBattlefieldUnits(gameState).find(card => card.gamecardId === gamecardId);
+};
+
+export const playerTargetCandidates = (
+  gameState: GameState,
+  playerUid: string,
+  options?: { includeSelf?: boolean; includeOpponent?: boolean }
+): EffectTargetCandidate[] => {
+  const includeSelf = options?.includeSelf !== false;
+  const includeOpponent = options?.includeOpponent !== false;
+  const candidates: EffectTargetCandidate[] = [];
+
+  if (includeSelf) {
+    candidates.push({
+      card: {
+        gamecardId: 'PLAYER_SELF',
+        id: 'PLAYER_SELF',
+        uniqueId: 'PLAYER_SELF',
+        fullName: gameState.players[playerUid]?.displayName || '我方玩家',
+        specialName: '',
+        type: 'UNIT',
+        color: 'NONE',
+        faction: '无',
+        acValue: 0,
+        power: 0,
+        basePower: 0,
+        damage: 0,
+        baseDamage: 0,
+        godMark: false,
+        displayState: 'FRONT_UPRIGHT',
+        isExhausted: false,
+        isrush: false,
+        canAttack: false,
+        feijingMark: false,
+        canResetCount: 0,
+        effects: [],
+        cardlocation: 'PLAYER' as TriggerLocation
+      } as Card,
+      source: 'PLAYER' as TriggerLocation
+    });
+  }
+
+  if (includeOpponent) {
+    const opponentUid = getOpponentUid(gameState, playerUid);
+    candidates.push({
+      card: {
+        gamecardId: 'PLAYER_OPPONENT',
+        id: 'PLAYER_OPPONENT',
+        uniqueId: 'PLAYER_OPPONENT',
+        fullName: gameState.players[opponentUid]?.displayName || '对手玩家',
+        specialName: '',
+        type: 'UNIT',
+        color: 'NONE',
+        faction: '无',
+        acValue: 0,
+        power: 0,
+        basePower: 0,
+        damage: 0,
+        baseDamage: 0,
+        godMark: false,
+        displayState: 'FRONT_UPRIGHT',
+        isExhausted: false,
+        isrush: false,
+        canAttack: false,
+        feijingMark: false,
+        canResetCount: 0,
+        effects: [],
+        cardlocation: 'PLAYER' as TriggerLocation
+      } as Card,
+      source: 'PLAYER' as TriggerLocation
+    });
+  }
+
+  return candidates;
 };
 
 export type PutOntoBattlefieldContext = HighAlchemyEntryContext;

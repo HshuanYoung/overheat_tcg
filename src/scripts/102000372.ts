@@ -25,6 +25,7 @@ const destroyedOpponentUnitByOwnEffect = (gameState: any, playerUid: string, eve
 const cardEffects: CardEffect[] = [{
   id: '102000372_opponent_unit_effect_destroy_damage',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_DESTROYED_EFFECT',
   isGlobal: true,

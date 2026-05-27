@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103080181_enter_choice',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   description: '入场时，选择：墓地《地鬼降灵》加入手牌，或选择你的非神蚀单位力量+500。',
   condition: (_gameState, _playerState, instance, event) =>

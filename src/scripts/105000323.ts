@@ -71,7 +71,7 @@ const effect_105000323_enter_copy_activate: CardEffect = {
   id: '105000323_enter_copy_activate',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,

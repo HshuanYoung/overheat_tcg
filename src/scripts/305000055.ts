@@ -52,7 +52,7 @@ const effect_305000055_end_blueprint: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['ITEM'],
   triggerEvent: 'TURN_END' as any,
-  isMandatory: false,
+  isMandatory: true,
   description: '你的回合结束时，若放逐区背面卡2张以上，送墓这张卡：将卡组1张卡名含有《钢兵》或「瓦尔基里」的单位放置到战场。之后将所有背面放逐卡置于卡组底。',
   condition: (_gameState, playerState, instance) =>
     playerState.isTurn &&

@@ -50,7 +50,7 @@ const effect_105000353_alchemy_power: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE' as any,
-  isMandatory: false,
+  isMandatory: true,
   description: '由卡名含有《炼金》的卡的效果从卡组进入战场时，放逐本回合因炼金效果送墓的1张菲晶单位：这张卡力量变为3000。',
   condition: (gameState, playerState, instance, event) =>
     instance.cardlocation === 'UNIT' &&

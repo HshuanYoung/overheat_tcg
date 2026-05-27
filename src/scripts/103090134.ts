@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103090134_goddess_revive',
   type: 'TRIGGER',
   triggerEvent: 'GODDESS_TRANSFORMATION',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   erosionTotalLimit: [10, 10],
   description: '10+：进入女神化时，选择墓地1张<瑟诺布>非神蚀单位放置到战场。',

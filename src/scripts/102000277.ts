@@ -12,7 +12,7 @@ const effect_102000277_enter_mill: CardEffect = {
   id: '102000277_enter_mill',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,

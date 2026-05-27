@@ -6,7 +6,7 @@ const cardEffects: CardEffect[] = [{
   id: '103000424_control',
   type: 'TRIGGER',
   triggerEvent: 'CARD_DESTROYED_BATTLE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['GRAVE'],
   description: '侵蚀1：这个单位参与攻击的战斗中被战斗破坏时，选择对手1个非神蚀单位，得到控制权直到对手回合结束。',
   cost: erosionCost(1),

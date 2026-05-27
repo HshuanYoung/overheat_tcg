@@ -25,6 +25,7 @@ const nonGodOpponentFieldCards = (gameState: any, playerUid: string) =>
 const cardEffects: CardEffect[] = [{
   id: '101130380_alliance_battle_immune',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ATTACK_DECLARED',
   description: '这个单位参与联军攻击时，直到对手回合结束时为止不会被战斗破坏。',

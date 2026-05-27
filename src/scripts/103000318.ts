@@ -12,6 +12,7 @@ const greenNonGodGraveUnits = (playerState: any) =>
 const cardEffects: CardEffect[] = [{
   id: '103000318_enter_or_leave_revive_green',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
   triggerEvent: ['CARD_ENTERED_ZONE', 'CARD_LEFT_FIELD'] as any,
   sourceSnapshotOnLeftField: true,

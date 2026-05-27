@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
     id: '102050090_attack_lock',
     type: 'TRIGGER',
     triggerEvent: 'CARD_ATTACK_DECLARED',
-  isMandatory: false,
+  isMandatory: true,
     triggerLocation: ['UNIT'],
     description: '攻击时，选择对手最多2个力量3000以上单位，本回合不能宣言防御。',
     condition: (_gameState, _playerState, instance, event) => event?.sourceCardId === instance.gamecardId,

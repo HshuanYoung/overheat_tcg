@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '102050144_enter_damage',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   erosionTotalLimit: [5, 7],
   description: '5~7：进入战场时，给对手造成1点效果伤害。',

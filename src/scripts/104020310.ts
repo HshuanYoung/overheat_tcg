@@ -6,6 +6,7 @@ const cardEffects: CardEffect[] = [
   {
     id: '104020310_discarded_put_self',
     type: 'TRIGGER',
+    isMandatory: true,
     triggerLocation: ['GRAVE'],
     triggerEvent: 'CARD_DISCARDED',
     description: '这张卡从手牌送去墓地时，支付0蓝，将墓地中的这张单位卡放置到战场。',

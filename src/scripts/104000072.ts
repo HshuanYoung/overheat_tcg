@@ -5,7 +5,7 @@ const effect_10400055_trigger: CardEffect = {
   id: 'tsukiyoru_bounce_trigger',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   description: '【诱】当此单位进入对战区时：选择对战区或道具区中一张横置的非神蚀卡牌返回其持有者手牌。',
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     return event?.type === 'CARD_ENTERED_ZONE' &&

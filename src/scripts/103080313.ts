@@ -15,6 +15,7 @@ const tigerTargets = (playerState: any) =>
 const cardEffects: CardEffect[] = [{
   id: '103080313_effect_leave_put_sword_tiger',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
   triggerEvent: 'CARD_LEFT_FIELD',
   sourceSnapshotOnLeftField: true,

@@ -21,7 +21,7 @@ const effect_105110351_blueprint_destroy: CardEffect = {
   type: 'TRIGGER',
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_ENTERED_ZONE' as any,
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   limitNameType: true,
   description: '同名1回合1次，这个单位由于卡名含有《蓝图》的卡的效果进入战场时，选择战场1张非神蚀卡破坏。',

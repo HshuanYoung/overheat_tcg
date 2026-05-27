@@ -19,6 +19,7 @@ const wasOwnUnitExiledByOpponentEffect = (event: any, playerState: any) =>
 const cardEffects: CardEffect[] = [{
   id: '104030305_recover_after_own_unit_exiled',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'CARD_EXILED',
   limitCount: 1,

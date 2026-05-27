@@ -18,6 +18,7 @@ const cardEffects: CardEffect[] = [{
 }, {
   id: '104010308_discarded_choice',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['GRAVE'],
   triggerEvent: 'CARD_DISCARDED',
   erosionTotalLimit: [3, 6],

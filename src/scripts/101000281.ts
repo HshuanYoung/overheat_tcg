@@ -14,7 +14,7 @@ const effect_101000281_enter_ready: CardEffect = {
   id: '101000281_enter_ready',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,

@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '101150157_combat_exile_draw',
   type: 'TRIGGER',
   triggerEvent: ['CARD_ATTACK_DECLARED', 'CARD_DEFENSE_DECLARED'],
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   description: '宣言攻击或防御时，若背面侵蚀1张以下，选择2张正面侵蚀放逐，抽1张卡。',

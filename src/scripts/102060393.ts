@@ -41,7 +41,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'CARD_LEFT_ZONE',
   triggerLocation: ['UNIT'],
-  isMandatory: false,
+  isMandatory: true,
   isGlobal: true,
   limitCount: 1,
   limitNameType: true,

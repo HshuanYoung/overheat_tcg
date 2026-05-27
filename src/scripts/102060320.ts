@@ -11,6 +11,7 @@ const goblinDeckCandidates = (playerState: any) =>
 const cardEffects: CardEffect[] = [{
   id: '102060320_cost_grave_put_copy',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT', 'GRAVE'],
   triggerEvent: 'CARD_LEFT_ZONE',
   description: '这个单位由于卡的能力费用从战场送入墓地时，将卡组中1张《炎雷小妖》以横置状态放置到战场上。',

@@ -20,7 +20,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'PHASE_CHANGED',
   triggerLocation: ['UNIT'],
-  isMandatory: false,
+  isMandatory: true,
   description: '你的回合开始时，舍弃1张同势力手牌：晋升。',
   condition: (gameState, playerState, instance, event) =>
     event?.type === 'PHASE_CHANGED' &&

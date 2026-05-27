@@ -4,6 +4,7 @@ import { moveRandomGraveToDeckBottom } from './BaseUtil';
 const cardEffects: CardEffect[] = [{
   id: '103080312_awaken_recover',
   type: 'TRIGGER',
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   triggerEvent: 'UNIT_AWAKENED' as any,
   limitCount: 1,

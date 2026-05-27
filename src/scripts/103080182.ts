@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103080182_spirit_targeted',
   type: 'TRIGGER',
   triggerEvent: 'CARD_SELECTED_TARGET',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   description: '被卡名含有《降灵》的卡选择为效果对象时，选择战场1个单位伤害+1、力量+1000并获得【歼灭】。',
   condition: (_gameState, _playerState, instance, event) =>

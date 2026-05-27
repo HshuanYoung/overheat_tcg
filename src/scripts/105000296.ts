@@ -84,7 +84,7 @@ const effect_105000296_irodori_blink: CardEffect = {
   id: '105000296_irodori_blink',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   limitCount: 1,
   limitNameType: true,
   triggerLocation: ['UNIT'],

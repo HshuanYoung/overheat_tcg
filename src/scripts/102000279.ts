@@ -5,7 +5,7 @@ const effect_102000279_cost_mill: CardEffect = {
   id: '102000279_cost_mill',
   type: 'TRIGGER',
   triggerEvent: 'CARD_LEFT_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   isGlobal: true,
   limitCount: 1,

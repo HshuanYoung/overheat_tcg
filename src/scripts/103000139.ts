@@ -5,7 +5,7 @@ const cardEffects: CardEffect[] = [{
   id: '103000139_enter_team_boost',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   description: '从手牌进入战场时，本回合你的所有单位伤害+1、力量+1000。',
   condition: (_gameState, _playerState, instance, event) => {

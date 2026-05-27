@@ -9,7 +9,7 @@ const effect_101000283_enter_recover: CardEffect = {
   id: '101000283_enter_recover',
   type: 'TRIGGER',
   triggerEvent: 'CARD_ENTERED_ZONE',
-  isMandatory: false,
+  isMandatory: true,
   triggerLocation: ['UNIT'],
   limitCount: 1,
   limitNameType: true,

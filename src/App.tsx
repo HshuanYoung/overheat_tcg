@@ -34,7 +34,7 @@ export default function App() {
   const [isDesktopOnlinePlayersOpen, setIsDesktopOnlinePlayersOpen] = useState(true);
   const [isMobileOnlinePlayersOpen, setIsMobileOnlinePlayersOpen] = useState(false);
   const [onlinePlayerCount, setOnlinePlayerCount] = useState(0);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -48,6 +48,14 @@ export default function App() {
   const [sendingCode, setSendingCode] = useState(false);
   const [registerSubmitting, setRegisterSubmitting] = useState(false);
   const [sendCodeCooldown, setSendCodeCooldown] = useState(0);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetVerificationCode, setResetVerificationCode] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [sendingResetCode, setSendingResetCode] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetCodeCooldown, setResetCodeCooldown] = useState(0);
   const [sessionMessage, setSessionMessage] = useState('');
 
   const closeOnlinePlayers = useCallback(() => {
@@ -154,6 +162,22 @@ export default function App() {
 
     return () => window.clearInterval(timer);
   }, [sendCodeCooldown]);
+
+  useEffect(() => {
+    if (resetCodeCooldown <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setResetCodeCooldown(current => {
+        if (current <= 1) {
+          window.clearInterval(timer);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [resetCodeCooldown]);
 
   const handleAuthSuccess = (token: string, authUser: any) => {
     setAuthToken(token);
@@ -266,6 +290,75 @@ export default function App() {
     }
   };
 
+  const handleSendResetCode = async () => {
+    setResetError('');
+    setResetMessage('');
+    setSessionMessage('');
+    setSendingResetCode(true);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/password-reset/send-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: resetEmail })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setResetMessage(data.message || '验证码已发送，请前往邮箱查收');
+        setResetCodeCooldown(60);
+      } else {
+        setResetError(data.error || '验证码发送失败');
+      }
+    } catch (err) {
+      setResetError('网络错误');
+    } finally {
+      setSendingResetCode(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    setResetMessage('');
+    setSessionMessage('');
+    setResetSubmitting(true);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/password-reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: resetEmail,
+          password: resetPassword,
+          verificationCode: resetVerificationCode
+        })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setAuthMode('login');
+        setLoginUsername(resetEmail);
+        setLoginPassword('');
+        setLoginError('');
+        setSessionMessage(data.message || '密码已重置，请使用新密码登录');
+        setResetPassword('');
+        setResetVerificationCode('');
+        setResetMessage('');
+      } else {
+        setResetError(data.error || '重置密码失败');
+      }
+    } catch (err) {
+      setResetError('网络错误');
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-screen bg-black flex items-center justify-center">
@@ -290,14 +383,14 @@ export default function App() {
             <h1 className="mb-3 text-center text-4xl font-black italic tracking-tighter text-red-600 md:text-6xl">神蚀创痕</h1>
             <p className="mb-6 text-center text-[10px] tracking-[0.2em] text-zinc-400 md:mb-8 md:text-sm">OVERHEAT TCG ONLINE</p>
 
-            <div className="mb-5 grid grid-cols-2 rounded-2xl border border-white/10 bg-black/60 p-1">
+            <div className="mb-5 grid grid-cols-3 rounded-2xl border border-white/10 bg-black/60 p-1">
               <button
                 type="button"
                 onClick={() => {
                   setAuthMode('login');
                   setLoginError('');
                 }}
-                className={`rounded-xl py-3 text-sm font-bold transition-all ${authMode === 'login' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
+                className={`rounded-xl py-3 text-xs font-bold transition-all sm:text-sm ${authMode === 'login' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
               >
                 登录
               </button>
@@ -308,9 +401,20 @@ export default function App() {
                   setRegisterError('');
                   setRegisterMessage('');
                 }}
-                className={`rounded-xl py-3 text-sm font-bold transition-all ${authMode === 'register' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
+                className={`rounded-xl py-3 text-xs font-bold transition-all sm:text-sm ${authMode === 'register' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
               >
                 注册
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('forgot');
+                  setResetError('');
+                  setResetMessage('');
+                }}
+                className={`rounded-xl py-3 text-xs font-bold transition-all sm:text-sm ${authMode === 'forgot' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
+              >
+                忘记密码
               </button>
             </div>
 
@@ -340,7 +444,7 @@ export default function App() {
                   {loginSubmitting ? '登录中...' : '登录'}
                 </button>
               </form>
-            ) : (
+            ) : authMode === 'register' ? (
               <form onSubmit={handleRegister} className="flex flex-col gap-3 sm:gap-4">
                 <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-xs leading-relaxed text-zinc-300">
                   <p className="font-bold tracking-wide text-white">新用户初始资源</p>
@@ -397,6 +501,50 @@ export default function App() {
                 <p className="px-1 text-xs leading-relaxed text-zinc-500">
                   注册成功后会自动发放 100000 金币、100000 卡晶，并为每张卡初始化 4 张。
                 </p>
+              </form>
+            ) : (
+              <form onSubmit={handleResetPassword} className="flex flex-col gap-3 sm:gap-4">
+                <input
+                  type="email"
+                  placeholder="注册邮箱"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
+                />
+                <input
+                  type="password"
+                  placeholder="新密码"
+                  value={resetPassword}
+                  onChange={e => setResetPassword(e.target.value)}
+                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
+                />
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    placeholder="6位验证码"
+                    value={resetVerificationCode}
+                    onChange={e => setResetVerificationCode(e.target.value)}
+                    className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendResetCode}
+                    disabled={sendingResetCode || resetCodeCooldown > 0}
+                    className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-red-500 disabled:opacity-60 disabled:hover:bg-red-600 sm:w-auto sm:min-w-[122px]"
+                  >
+                    {sendingResetCode ? '发送中...' : resetCodeCooldown > 0 ? `${resetCodeCooldown}秒` : '发送验证码'}
+                  </button>
+                </div>
+                {resetMessage && <div className="text-sm font-bold text-emerald-400">{resetMessage}</div>}
+                {sessionMessage && <div className="text-sm font-bold text-amber-400">{sessionMessage}</div>}
+                {resetError && <div className="text-sm font-bold text-red-500">{resetError}</div>}
+                <button
+                  type="submit"
+                  disabled={resetSubmitting}
+                  className="mt-1 w-full rounded-2xl bg-white py-4 text-base font-bold text-black transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:bg-zinc-200 disabled:opacity-60"
+                >
+                  {resetSubmitting ? '重置中...' : '重置密码'}
+                </button>
               </form>
             )}
           </motion.div>

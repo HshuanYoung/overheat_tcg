@@ -19,6 +19,7 @@ import {
     getVerificationCodeResendMs,
     normalizeEmail,
     seedStarterResources,
+    sendPasswordResetVerificationEmail,
     sendRegistrationVerificationEmail,
     validateEmail,
     validatePassword,
@@ -1384,6 +1385,152 @@ app.post('/api/register', async (req, res): Promise<void> => {
             await conn.rollback();
         }
         console.error('Register error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        if (conn) conn.release();
+    }
+});
+
+app.post('/api/password-reset/send-code', async (req, res): Promise<void> => {
+    const email = typeof req.body.email === 'string' ? normalizeEmail(req.body.email) : '';
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+        res.status(400).json({ error: emailError });
+        return;
+    }
+
+    try {
+        const userRows = await pool.query(
+            'SELECT id FROM users WHERE email = ? LIMIT 1',
+            [email]
+        );
+        if (userRows.length === 0) {
+            res.status(404).json({ error: '该邮箱尚未注册' });
+            return;
+        }
+
+        const existingCodeRows = await pool.query(
+            'SELECT created_at FROM password_reset_codes WHERE email = ?',
+            [email]
+        );
+        if (existingCodeRows.length > 0) {
+            const lastSentAt = Number(existingCodeRows[0].created_at || 0);
+            const retryAfterMs = getVerificationCodeResendMs() - (Date.now() - lastSentAt);
+            if (retryAfterMs > 0) {
+                res.status(429).json({
+                    error: `验证码发送过于频繁，请在 ${Math.ceil(retryAfterMs / 1000)} 秒后重试`
+                });
+                return;
+            }
+        }
+
+        const code = createVerificationCode();
+        const now = Date.now();
+        const expiresAt = now + getVerificationCodeExpireMs();
+        const userId = String(userRows[0].id);
+
+        await pool.query(
+            `INSERT INTO password_reset_codes (email, user_id, code, expires_at, created_at)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), code = VALUES(code), expires_at = VALUES(expires_at), created_at = VALUES(created_at)`,
+            [email, userId, code, expiresAt, now]
+        );
+
+        try {
+            await sendPasswordResetVerificationEmail(email, code);
+        } catch (mailErr: any) {
+            await pool.query('DELETE FROM password_reset_codes WHERE email = ?', [email]);
+            console.error('Send password reset email error:', mailErr);
+            res.status(500).json({ error: mailErr?.message || '验证码发送失败' });
+            return;
+        }
+
+        res.json({
+            success: true,
+            message: '验证码已发送，请前往邮箱查收',
+            expiresInMs: getVerificationCodeExpireMs()
+        });
+    } catch (err) {
+        console.error('Send password reset code error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/password-reset', async (req, res): Promise<void> => {
+    const email = typeof req.body.email === 'string' ? normalizeEmail(req.body.email) : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const verificationCode = typeof req.body.verificationCode === 'string' ? req.body.verificationCode.trim() : '';
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+        res.status(400).json({ error: emailError });
+        return;
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+        res.status(400).json({ error: passwordError });
+        return;
+    }
+
+    if (!/^\d{6}$/.test(verificationCode)) {
+        res.status(400).json({ error: '请输入 6 位验证码' });
+        return;
+    }
+
+    let conn;
+    try {
+        const verificationRows = await pool.query(
+            'SELECT user_id, code, expires_at FROM password_reset_codes WHERE email = ?',
+            [email]
+        );
+        if (verificationRows.length === 0) {
+            res.status(400).json({ error: '请先获取邮箱验证码' });
+            return;
+        }
+
+        const verificationRow = verificationRows[0];
+        if (Number(verificationRow.expires_at) < Date.now()) {
+            await pool.query('DELETE FROM password_reset_codes WHERE email = ?', [email]);
+            res.status(400).json({ error: '验证码已过期，请重新获取' });
+            return;
+        }
+        if (verificationRow.code !== verificationCode) {
+            res.status(400).json({ error: '验证码错误' });
+            return;
+        }
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        const userRows = await conn.query(
+            'SELECT id FROM users WHERE id = ? AND email = ? LIMIT 1',
+            [verificationRow.user_id, email]
+        );
+        if (userRows.length === 0) {
+            await conn.rollback();
+            await pool.query('DELETE FROM password_reset_codes WHERE email = ?', [email]);
+            res.status(404).json({ error: '该邮箱尚未注册' });
+            return;
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        const userId = String(userRows[0].id);
+        await conn.query(
+            'UPDATE users SET password_hash = ?, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?',
+            [passwordHash, userId]
+        );
+        await conn.query('DELETE FROM password_reset_codes WHERE email = ?', [email]);
+        await conn.commit();
+
+        await forceLogoutOtherSockets(userId);
+        res.json({ success: true, message: '密码已重置，请使用新密码登录' });
+    } catch (err) {
+        if (conn) {
+            await conn.rollback();
+        }
+        console.error('Password reset error:', err);
         res.status(500).json({ error: 'Internal server error' });
     } finally {
         if (conn) conn.release();

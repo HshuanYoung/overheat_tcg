@@ -95,6 +95,26 @@ export async function sendRegistrationVerificationEmail(targetEmail: string, cod
     });
 }
 
+export async function sendPasswordResetVerificationEmail(targetEmail: string, code: string) {
+    const mailer = getTransporter();
+    await mailer.sendMail({
+        from: `"神蚀创痕" <${REGISTRATION_SENDER_EMAIL}>`,
+        to: targetEmail,
+        subject: '神蚀创痕重置密码验证码',
+        text: `你的重置密码验证码是 ${code}，10 分钟内有效。如果不是你本人操作，请忽略这封邮件。`,
+        html: `
+            <div style="font-family: Arial, sans-serif; color: #111;">
+                <h2 style="margin-bottom: 12px;">神蚀创痕重置密码验证码</h2>
+                <p style="margin: 0 0 12px;">你的验证码是：</p>
+                <div style="font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #c1121f; margin: 0 0 16px;">
+                    ${code}
+                </div>
+                <p style="margin: 0;">验证码 10 分钟内有效。如果不是你本人操作，请忽略这封邮件。</p>
+            </div>
+        `
+    });
+}
+
 export async function seedStarterResources(conn: any, userId: string) {
     const cardVariations = getLiveCardInventoryVariations();
 

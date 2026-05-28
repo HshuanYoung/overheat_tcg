@@ -48,6 +48,17 @@ async function migrate() {
         `);
 
         await conn.query(`
+            CREATE TABLE IF NOT EXISTS password_reset_codes (
+                email VARCHAR(255) PRIMARY KEY,
+                user_id VARCHAR(50) NOT NULL,
+                code VARCHAR(6) NOT NULL,
+                expires_at BIGINT NOT NULL,
+                created_at BIGINT NOT NULL,
+                INDEX idx_password_reset_codes_user_id (user_id)
+            );
+        `);
+
+        await conn.query(`
             CREATE TABLE IF NOT EXISTS deck_square_posts (
                 id VARCHAR(50) PRIMARY KEY,
                 source_deck_id VARCHAR(255),

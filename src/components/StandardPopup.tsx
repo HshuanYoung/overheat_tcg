@@ -155,6 +155,7 @@ interface StandardPopupProps {
   onHide?: () => void;
   isHidden?: boolean;
   squarePanel?: boolean;
+  instant?: boolean;
 }
 
 const getOptionId = (option: PopupOption) => option.selectionId || option.card?.gamecardId || option.card?.id || option.id || '';
@@ -396,7 +397,8 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
   children,
   onHide,
   isHidden = false,
-  squarePanel = false
+  squarePanel = false,
+  instant = false
 }) => {
   if (!isOpen) return null;
 
@@ -423,18 +425,22 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        transition={(instant || isHidden) ? { duration: 0 } : undefined}
         className={cn(
-          "fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 md:p-8 transition-all duration-500 ease-in-out",
+          "fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 md:p-8",
+          (instant || isHidden) ? "transition-none" : "transition-all duration-500 ease-in-out",
           isHidden ? "opacity-0 pointer-events-none invisible" : "opacity-100 pointer-events-auto visible"
         )}
         onClick={onClose}
       >
         <motion.div
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          initial={instant ? { scale: 1, opacity: 1, y: 0 } : { scale: 0.9, opacity: 0, y: 20 }}
           animate={isHidden ? { scale: 0.8, opacity: 0, y: 40 } : { scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+          exit={instant ? { scale: 1, opacity: 0, y: 0 } : { scale: 0.9, opacity: 0, y: 20 }}
+          transition={(instant || isHidden) ? { duration: 0 } : undefined}
           className={cn(
-            "relative w-full bg-zinc-900/90 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col transition-all duration-500 ease-in-out",
+            "relative w-full bg-zinc-900/90 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col",
+            (instant || isHidden) ? "transition-none" : "transition-all duration-500 ease-in-out",
             squarePanel
               ? "max-w-[22rem] md:max-w-[24rem] max-h-[90vh]"
               : (mode === 'double_selection' && !children) ? "max-w-md" : "max-w-6xl max-h-[90vh]",

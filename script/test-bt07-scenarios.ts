@@ -2006,6 +2006,8 @@ async function testNormalBattleDestroyDoesNotCountAsInterruptedBattle(): Promise
   return defenderDestroyed && returnedMain && exhaustedAttacker && noInterruptedLog
     ? pass(name, `destroyed=${defenderDestroyed}, phase=${state.phase}, exhausted=${exhaustedAttacker}`)
     : fail(name, `destroyed=${defenderDestroyed}, phase=${state.phase}, battle=${!!state.battleState}, exhausted=${exhaustedAttacker}, interruptedLog=${!noInterruptedLog}`);
+}
+
 function testThunderHighPowerRushThresholds(): ScenarioResult {
   const name = 'BT03-R04/BT07-R04 thunder rush thresholds';
   const flyer = cloneScriptCard(bt03R04 as Card, 'UNIT');

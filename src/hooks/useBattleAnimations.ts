@@ -24,6 +24,62 @@ export function useBattleAnimationPreference() {
   return [enabled, setEnabled] as const;
 }
 
+function getCardLocations(game: GameState): Record<string, { zone: string; ownerUid: string; card: Card; slotIndex?: number }> {
+  const locations: Record<string, { zone: string; ownerUid: string; card: Card; slotIndex?: number }> = {};
+  if (!game?.players) return locations;
+
+  Object.entries(game.players).forEach(([ownerUid, player]) => {
+    if (!player) return;
+    const zones: Array<[string, Card[]]> = [
+      ['HAND', player.hand || []],
+      ['DECK', player.deck || []],
+      ['GRAVE', player.grave || []],
+      ['EXILE', player.exile || []],
+      ['PLAY', player.playZone || []],
+      ['UNIT', (player.unitZone || []).filter((c): c is Card => c !== null)],
+      ['ITEM', (player.itemZone || []).filter((c): c is Card => c !== null)],
+      ['EROSION_FRONT', (player.erosionFront || []).filter((c): c is Card => c !== null)],
+      ['EROSION_BACK', (player.erosionBack || []).filter((c): c is Card => c !== null)]
+    ];
+
+    const backCardsCount = (player.erosionBack || []).filter((c): c is Card => c !== null).length;
+
+    zones.forEach(([zone, array]) => {
+      array.forEach((card, idx) => {
+        if (card && card.gamecardId) {
+          let slotIndex = idx;
+          if (zone === 'EROSION_FRONT') {
+            slotIndex = backCardsCount + idx;
+          }
+          locations[card.gamecardId] = { zone, ownerUid, card, slotIndex };
+        }
+      });
+    });
+  });
+
+  return locations;
+}
+
+function getAnchorForZone(uid: string, zone: string, slotIndex?: number): string {
+  if (slotIndex !== undefined && zone === 'UNIT') {
+    return `player:${uid}:unit:${slotIndex}`;
+  }
+  if (slotIndex !== undefined && (zone === 'EROSION_FRONT' || zone === 'EROSION_BACK')) {
+    return slotIndex === 0 ? `player:${uid}:erosion` : `player:${uid}:erosion:${slotIndex}`;
+  }
+  
+  if (zone === 'HAND') return `player:${uid}:hand`;
+  if (zone === 'GRAVE') return `player:${uid}:grave`;
+  if (zone === 'EXILE') return `player:${uid}:exile`;
+  if (zone === 'PLAY') return `player:${uid}:play`;
+  if (zone === 'DECK') return `player:${uid}:deck`;
+  if (zone === 'ITEM') return `player:${uid}:item`;
+  if (zone === 'UNIT') return `player:${uid}:unit-row`;
+  if (zone === 'EROSION_FRONT' || zone === 'EROSION_BACK') return `player:${uid}:erosion`;
+  
+  return `player:${uid}:${zone.toLowerCase()}`;
+}
+
 export function useBattleAnimations(game: GameState | null, perspectiveUid?: string | null) {
   const [events, setEvents] = useState<BattleAnimationEvent[]>([]);
   const seenLogIdsRef = useRef<Set<string>>(new Set());
@@ -33,7 +89,9 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
   const previousProcessingKeyRef = useRef<string | undefined>();
   const previousCounterLengthRef = useRef(0);
   const previousResolvingStackRef = useRef(false);
+  const previousCardLocationsRef = useRef<Record<string, { zone: string; ownerUid: string; card: Card; slotIndex?: number }>>({});
   const initializedRef = useRef(false);
+  const maxChainLengthRef = useRef(0);
 
   const playersByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -60,7 +118,9 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       previousWinnerRef.current = undefined;
       previousCounterLengthRef.current = 0;
       previousResolvingStackRef.current = false;
+      previousCardLocationsRef.current = {};
       initializedRef.current = false;
+      maxChainLengthRef.current = 0;
       return;
     }
 
@@ -75,22 +135,98 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       previousPlayZoneTopRef.current = Object.fromEntries(
         Object.values(game.players || {}).map(player => [player.uid, topPlayZoneCard(player)?.gamecardId])
       );
+      previousCardLocationsRef.current = getCardLocations(game);
       previousWinnerRef.current = game.winnerId;
       previousProcessingKeyRef.current = processingItemKey(game);
       previousCounterLengthRef.current = game.counterStack?.length || 0;
       previousResolvingStackRef.current = !!game.isResolvingStack;
       initializedRef.current = true;
+      maxChainLengthRef.current = game.counterStack?.length || 0;
       return;
     }
 
     const nextEvents: BattleAnimationEvent[] = [];
+    let isPaymentFeeState = false;
     (game.logs || []).forEach((log, index) => {
       const entry = normalizeBattleLogEntry(log, game, index);
       if (seenLogIdsRef.current.has(entry.id)) return;
       seenLogIdsRef.current.add(entry.id);
+
+      const text = entry.text || '';
+      if (/费用|作为费用|支付/.test(text)) {
+        isPaymentFeeState = true;
+      }
+
       const event = animationFromLog(entry, game, perspectiveUid, playersByName);
       if (event) nextEvents.push(event);
     });
+
+    // Detect and trigger card movement animations
+    const nextCardLocations = getCardLocations(game);
+
+    Object.entries(nextCardLocations).forEach(([gamecardId, currentLoc]) => {
+      const prevLoc = previousCardLocationsRef.current[gamecardId];
+      if (prevLoc && prevLoc.zone !== currentLoc.zone) {
+        const sourceZone = prevLoc.zone;
+        const targetZone = currentLoc.zone;
+
+        // Skip if this card's animation is already queued in nextEvents (e.g. by log or top played card)
+        const isAlreadyQueued = nextEvents.some(event =>
+          event.type === 'card-played' &&
+          (event.sourceCardId === gamecardId || event.id.includes(gamecardId))
+        );
+        if (isAlreadyQueued) return;
+
+        const isToBattlefield = targetZone === 'UNIT' || targetZone === 'ITEM' || targetZone === 'PLAY';
+
+        // Exclusions:
+        // a. Payment fees (only apply if the card is NOT entering the battlefield)
+        if (isPaymentFeeState && !isToBattlefield) return;
+
+        // c. Cards sent from the erosion zone to the cemetery during the erosion phase
+        const isErosionPhaseGraveMove = game.phase === 'EROSION' && (sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') && targetZone === 'GRAVE';
+        if (isErosionPhaseGraveMove) return;
+
+        // d. Addition to hand from Play, Erosion, Grave, Exile (which are non-DECK additions)
+        if (targetZone === 'HAND') return;
+
+        const isFromPlay = sourceZone === 'PLAY';
+        const isFromErosion = sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK';
+        const isFromGrave = sourceZone === 'GRAVE';
+        const isFromExile = sourceZone === 'EXILE';
+        const isFromHand = sourceZone === 'HAND';
+        const isFromDeck = sourceZone === 'DECK';
+
+        if (
+          isFromPlay || isFromErosion || isFromGrave || isFromExile ||
+          ((isFromHand || isFromDeck) && isToBattlefield)
+        ) {
+          let moveTitle = '卡牌移动';
+          if (isFromPlay) moveTitle = '打出区移动';
+          else if (isFromErosion) moveTitle = '侵蚀区移动';
+          else if (isFromGrave) moveTitle = '墓地移动';
+          else if (isFromExile) moveTitle = '放逐区移动';
+          else if (isFromHand) moveTitle = '手牌移动';
+          else if (isFromDeck) moveTitle = '牌组移动';
+
+          nextEvents.push({
+            id: `card_move_${gamecardId}_${sourceZone}_${targetZone}_${Date.now()}_${Math.random()}`,
+            type: 'card-played',
+            side: sideForUid(currentLoc.ownerUid, perspectiveUid, game),
+            title: moveTitle,
+            cardName: currentLoc.card.fullName,
+            cardImageUrl: getCardPreviewImage(currentLoc.card),
+            sourceCardId: gamecardId,
+            cardType: currentLoc.card.type,
+            rarity: currentLoc.card.rarity,
+            playerUid: currentLoc.ownerUid,
+            sourceAnchor: getAnchorForZone(prevLoc.ownerUid, prevLoc.zone, prevLoc.slotIndex),
+            targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex)
+          });
+        }
+      }
+    });
+    previousCardLocationsRef.current = nextCardLocations;
 
     Object.values(game.players || {}).forEach(player => {
       const topPlayedCard = topPlayZoneCard(player);
@@ -133,28 +269,39 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       previousGoddessRef.current[player.uid] = isGoddess;
     });
 
+    // Track maximum chain length for current confrontation
+    const counterLength = game.counterStack?.length || 0;
+    if (counterLength > 0) {
+      maxChainLengthRef.current = Math.max(maxChainLengthRef.current, counterLength);
+    } else if (!game.currentProcessingItem) {
+      maxChainLengthRef.current = 0;
+    }
+
     const currentProcessingKey = processingItemKey(game);
     if (currentProcessingKey && currentProcessingKey !== previousProcessingKeyRef.current) {
       const item = game.currentProcessingItem;
-      nextEvents.push({
-        id: `resolving_${currentProcessingKey}_${Date.now()}`,
-        type: 'resolving',
-        side: sideForUid(item?.ownerUid, perspectiveUid, game),
-        title: '效果结算',
-        subtitle: item?.type === 'PHASE_END'
-          ? '阶段请求'
-          : item?.type === 'ATTACK'
-            ? '攻击宣言'
-            : '连锁处理中',
-        cardName: item?.card?.fullName,
-        cardImageUrl: item?.card ? getCardPreviewImage(item.card) : undefined,
-        sourceCardId: item?.card?.gamecardId
-      });
+      // Only show resolving animation if the confrontation chain reached >= 2 links
+      if (maxChainLengthRef.current >= 2) {
+        nextEvents.push({
+          id: `resolving_${currentProcessingKey}_${Date.now()}`,
+          type: 'resolving',
+          side: sideForUid(item?.ownerUid, perspectiveUid, game),
+          title: '效果结算',
+          subtitle: item?.type === 'PHASE_END'
+            ? (item.nextPhase === 'BATTLE_DECLARATION' ? '主要阶段结束' : item.nextPhase === 'MAIN' ? '返回主要阶段' : '战斗自由阶段结束')
+            : item?.type === 'ATTACK'
+              ? '攻击宣言'
+              : '连锁处理中',
+          cardName: item?.card?.fullName || (item?.type === 'PHASE_END' ? (item.nextPhase === 'BATTLE_DECLARATION' ? '主要阶段结束' : item.nextPhase === 'MAIN' ? '返回主要阶段' : '战斗自由阶段结束') : undefined),
+          cardImageUrl: item?.card ? getCardPreviewImage(item.card) : '/assets/fav_card/fav_card.jpg',
+          sourceCardId: item?.card?.gamecardId
+        });
+      }
     }
     previousProcessingKeyRef.current = currentProcessingKey;
 
-    const counterLength = game.counterStack?.length || 0;
-    const startedLongChain = previousCounterLengthRef.current <= 1 && counterLength > 1;
+    // Play confrontation animation whenever the chain increases and is >= 2
+    const startedLongChain = counterLength > previousCounterLengthRef.current && counterLength >= 2;
     const startedResolvingLongChain = !previousResolvingStackRef.current && !!game.isResolvingStack && counterLength > 1;
     if (startedLongChain || startedResolvingLongChain) {
       nextEvents.push({
@@ -223,7 +370,8 @@ function animationFromLog(
   if (text.includes('宣告了攻击') || text.includes('[攻击宣言]')) {
     return buildEvent(log, 'attack', side, '攻击宣言', {
       subtitle: compactText(text),
-      cardName: sourceCardName
+      cardName: sourceCardName,
+      cardImageUrl: imageUrl
     });
   }
 

@@ -43,8 +43,8 @@ const DISPLAY_MS: Record<BattleAnimationType, number> = {
   'card-played': 1100,
   damage: 950,
   attack: 1000,
-  confrontation: 1200,
-  resolving: 850,
+  confrontation: 1000,
+  resolving: 1000,
   goddess: 1800,
   defeat: 1700
 };
@@ -59,6 +59,52 @@ const EVENT_TONE: Record<BattleAnimationType, string> = {
   defeat: 'from-zinc-500 via-white to-red-500'
 };
 
+const ParallelEventPlayer: React.FC<{
+  event: BattleAnimationEvent;
+  index: number;
+  total: number;
+  layerRef: React.RefObject<HTMLDivElement | null>;
+  onComplete: (id: string) => void;
+  enabled: boolean;
+}> = ({ event, index, total, layerRef, onComplete, enabled }) => {
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const staggerDelay = index * 120;
+    const duration = DISPLAY_MS[event.type] + staggerDelay;
+    const exitDuration = 150; // duration of exit fade out
+
+    const hideTimeout = window.setTimeout(() => {
+      setVisible(false);
+    }, Math.max(50, duration - exitDuration));
+
+    const completeTimeout = window.setTimeout(() => {
+      onComplete(event.id);
+    }, duration);
+
+    return () => {
+      window.clearTimeout(hideTimeout);
+      window.clearTimeout(completeTimeout);
+    };
+  }, [event.id, enabled, onComplete, event.type, index]);
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <AnimationScene
+          key={event.id}
+          event={event}
+          layerRef={layerRef}
+          index={index}
+          total={total}
+        />
+      )}
+    </AnimatePresence>
+  );
+};
+
 export const BattleAnimationLayer: React.FC<BattleAnimationLayerProps> = ({
   events,
   enabled,
@@ -66,51 +112,59 @@ export const BattleAnimationLayer: React.FC<BattleAnimationLayerProps> = ({
   hoverPreview
 }) => {
   const layerRef = useRef<HTMLDivElement>(null);
-  const activeEvent = events[0] || null;
-  const [visibleEvent, setVisibleEvent] = useState<BattleAnimationEvent | null>(null);
 
-  useEffect(() => {
-    if (!enabled) return;
-    if (!activeEvent) {
-      setVisibleEvent(null);
-      return;
+  // Group parallel events: contiguous 'card-played' events at the front can play simultaneously
+  const parallelEvents = React.useMemo(() => {
+    const list: BattleAnimationEvent[] = [];
+    for (const event of events) {
+      if (event.type === 'card-played') {
+        list.push(event);
+      } else {
+        if (list.length === 0) {
+          list.push(event); // The first event is a cinematic event, play it solo
+        }
+        break;
+      }
     }
-
-    setVisibleEvent(activeEvent);
-    const timeout = window.setTimeout(() => {
-      setVisibleEvent(null);
-      onEventComplete(activeEvent.id);
-    }, DISPLAY_MS[activeEvent.type]);
-
-    return () => window.clearTimeout(timeout);
-  }, [activeEvent?.id, enabled, onEventComplete]);
+    return list;
+  }, [events]);
 
   useEffect(() => {
     if (enabled) return;
     events.forEach(event => onEventComplete(event.id));
-    setVisibleEvent(null);
   }, [enabled, events, onEventComplete]);
 
   return (
     <div ref={layerRef} className="pointer-events-none absolute inset-0 z-[180] overflow-hidden">
-      <AnimatePresence mode="wait">
-        {enabled && visibleEvent && (
-          <AnimationScene key={visibleEvent.id} event={visibleEvent} layerRef={layerRef} />
-        )}
-      </AnimatePresence>
+      {enabled && parallelEvents.map((event, idx) => (
+        <ParallelEventPlayer
+          key={event.id}
+          event={event}
+          index={idx}
+          total={parallelEvents.length}
+          layerRef={layerRef}
+          onComplete={onEventComplete}
+          enabled={enabled}
+        />
+      ))}
       <CardHoverPreviewPortal enabled={enabled} card={hoverPreview} />
     </div>
   );
 };
 
-const AnimationScene: React.FC<{ event: BattleAnimationEvent; layerRef: RefObject<HTMLDivElement> }> = ({ event, layerRef }) => {
+const AnimationScene: React.FC<{
+  event: BattleAnimationEvent;
+  layerRef: RefObject<HTMLDivElement>;
+  index?: number;
+  total?: number;
+}> = ({ event, layerRef, index = 0, total = 1 }) => {
   if (event.type === 'damage') return <DamageAnimation event={event} layerRef={layerRef} />;
   if (event.type === 'goddess') return <GoddessAnimation event={event} />;
   if (event.type === 'defeat') return <DefeatAnimation event={event} />;
   if (event.type === 'confrontation') return <ConfrontationAnimation event={event} />;
   if (event.type === 'resolving') return <ResolvingAnimation event={event} />;
   if (event.type === 'attack') return <AttackAnimation event={event} />;
-  return <CardPlayedAnimation event={event} layerRef={layerRef} />;
+  return <CardPlayedAnimation event={event} layerRef={layerRef} index={index} total={total} />;
 };
 
 const sideOrigin = (side: BattleAnimationEvent['side']) => {
@@ -157,6 +211,26 @@ const resolveAnchorRect = (layer: HTMLElement | null, anchor?: string, cardId?: 
       if (rect) return rect;
     }
   }
+
+  // Fallback to base zone anchor if slot-indexed anchor was not found in DOM
+  if (anchor) {
+    let baseAnchor = anchor;
+    if (anchor.includes(':erosion:')) {
+      baseAnchor = anchor.split(':erosion:')[0] + ':erosion';
+    } else if (anchor.includes(':unit:')) {
+      baseAnchor = anchor.split(':unit:')[0] + ':unit-row';
+    }
+
+    if (baseAnchor !== anchor) {
+      const selector = attrSelector('data-animation-anchor', baseAnchor);
+      const elements = Array.from(document.querySelectorAll(selector));
+      for (const element of elements) {
+        const rect = rectFromElement(element, layer);
+        if (rect) return rect;
+      }
+    }
+  }
+
   return null;
 };
 
@@ -167,12 +241,23 @@ const zoneFallbackPoint = (side: BattleAnimationEvent['side'], layer: HTMLElemen
   return { x: width * 0.5, y, width: 90, height: 120 };
 };
 
-const CardPlayedAnimation: React.FC<{ event: BattleAnimationEvent; layerRef: RefObject<HTMLDivElement> }> = ({ event, layerRef }) => {
+const CardPlayedAnimation: React.FC<{
+  event: BattleAnimationEvent;
+  layerRef: RefObject<HTMLDivElement>;
+  index?: number;
+  total?: number;
+}> = ({ event, layerRef, index = 0, total = 1 }) => {
   const layer = layerRef.current;
   const start = resolveAnchorRect(layer, event.sourceAnchor) || resolveAnchorRect(layer, undefined, event.sourceCardId) || zoneFallbackPoint(event.side, layer);
   const end = resolveAnchorRect(layer, event.targetAnchor) || zoneFallbackPoint(event.side, layer, true);
   const hasAnchors = !!layer && (!!event.sourceAnchor || !!event.targetAnchor);
   const cardWidth = Math.max(58, Math.min(128, (start.width || 96) * 0.9));
+
+  const staggerDelay = index * 0.12; // 120ms stagger delay
+  // Add horizontal and vertical path offsets to prevent overlapping
+  const pathOffsetX = total > 1 ? (index - (total - 1) / 2) * 16 : 0;
+  const pathOffsetY = total > 1 ? (index - (total - 1) / 2) * -10 : 0;
+
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const arc = Math.min(170, Math.max(76, Math.abs(dx) * 0.18 + Math.abs(dy) * 0.22));
@@ -192,12 +277,17 @@ const CardPlayedAnimation: React.FC<{ event: BattleAnimationEvent; layerRef: Ref
         initial={{ opacity: 0, x: 0, y: 0, rotate: event.side === 'opponent' ? 14 : -10, scale: 0.75 }}
         animate={{
           opacity: [0, 1, 1, 0],
-          x: [0, dx * 0.45, dx],
-          y: [0, dy - arc, dy],
+          x: [0, dx * 0.45 + pathOffsetX, dx],
+          y: [0, dy - arc + pathOffsetY, dy],
           rotate: [event.side === 'opponent' ? 14 : -10, dx > 0 ? 10 : -10, 0],
           scale: [0.75, isSer ? 1.18 : isSr ? 1.08 : 1, 0.94]
         }}
-        transition={{ duration: isSer ? 0.86 : isSr ? 0.78 : 0.68, times: [0, 0.55, 1], ease: 'easeOut' }}
+        transition={{
+          duration: isSer ? 0.86 : isSr ? 0.78 : 0.68,
+          delay: staggerDelay,
+          times: [0, 0.55, 1],
+          ease: 'easeOut'
+        }}
         className="absolute"
         style={{ left: start.x - cardWidth / 2, top: start.y - (cardWidth * 4 / 3) / 2, width: cardWidth }}
       >
@@ -208,7 +298,7 @@ const CardPlayedAnimation: React.FC<{ event: BattleAnimationEvent; layerRef: Ref
               isSer ? "bg-[conic-gradient(from_0deg,#f87171,#facc15,#4ade80,#38bdf8,#a78bfa,#f87171)]" : "bg-amber-300/55"
             )}
             animate={isSer ? { rotate: 360, opacity: [0, 0.85, 0.65, 0] } : { opacity: [0, 0.75, 0.4, 0] }}
-            transition={{ duration: isSer ? 0.86 : 0.78, ease: 'linear' }}
+            transition={{ duration: isSer ? 0.86 : 0.78, delay: staggerDelay, ease: 'linear' }}
           />
         )}
         <div className={cn(
@@ -229,7 +319,7 @@ const CardPlayedAnimation: React.FC<{ event: BattleAnimationEvent; layerRef: Ref
       <motion.div
         initial={{ opacity: 0, scale: 0.25 }}
         animate={{ opacity: [0, isSer ? 0.95 : 0.65, 0], scale: [0.25, isSer ? 2.4 : 1.8, isSer ? 3.1 : 2.3] }}
-        transition={{ duration: 0.72, delay: 0.46, ease: 'easeOut' }}
+        transition={{ duration: 0.72, delay: staggerDelay + 0.46, ease: 'easeOut' }}
         className={cn(
           "absolute h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-4",
           isSer ? "border-sky-200 shadow-[0_0_50px_rgba(56,189,248,0.9)]" : isSr ? "border-amber-200 shadow-[0_0_44px_rgba(251,191,36,0.8)]" : "border-[#f27d26]/80 shadow-[0_0_34px_rgba(242,125,38,0.55)]"
@@ -240,7 +330,7 @@ const CardPlayedAnimation: React.FC<{ event: BattleAnimationEvent; layerRef: Ref
         <motion.div
           initial={{ opacity: 0, scale: 0.2 }}
           animate={{ opacity: [0, 0.8, 0], scale: [0.2, 1.7, 2.5] }}
-          transition={{ duration: 0.65, delay: 0.58, ease: 'easeOut' }}
+          transition={{ duration: 0.65, delay: staggerDelay + 0.58, ease: 'easeOut' }}
           className="absolute h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-fuchsia-200 shadow-[0_0_52px_rgba(217,70,239,0.85)]"
           style={{ left: end.x, top: end.y }}
         />
@@ -391,10 +481,23 @@ const AttackAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) =
       transition={{ duration: 1, times: [0, 0.36, 1], ease: 'easeOut' }}
       className="relative flex items-center gap-4 rounded-3xl border border-red-300/30 bg-red-950/70 px-8 py-5 shadow-[0_0_60px_rgba(239,68,68,0.55)] backdrop-blur-md"
     >
-      <Swords className="h-10 w-10 text-red-200 md:h-14 md:w-14" />
+      {event.cardImageUrl ? (
+        <img
+          src={event.cardImageUrl}
+          alt={event.cardName || event.title}
+          className="relative aspect-[3/4] w-14 rounded-lg border border-white/15 object-cover shadow-2xl md:w-20"
+          draggable={false}
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <Swords className="h-10 w-10 text-red-200 md:h-14 md:w-14" />
+      )}
       <div>
         <div className="text-[10px] font-black tracking-[0.32em] text-red-200">ATTACK</div>
-        <div className="max-w-[62vw] truncate text-2xl font-black italic text-white md:text-4xl">{event.title}</div>
+        <div className="max-w-[62vw] truncate text-2xl font-black italic text-white md:text-4xl">{event.cardName || event.title}</div>
+        {event.subtitle && (
+          <div className="text-[10px] text-white/50 tracking-wider mt-1">{event.subtitle}</div>
+        )}
       </div>
     </motion.div>
     <ImpactRing tone={EVENT_TONE[event.type]} />

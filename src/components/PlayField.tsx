@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, PlayerOngoingEffect, PlayerState, StackItem, GameState } from '../types/game';
 import { CardComponent } from './Card';
@@ -9,6 +9,8 @@ import { ArrowDown, Shield, Sword, Zap, Flag, BookOpen, Play, X, LogOut, Coins, 
 import { cn, getCardImageUrl } from '../lib/utils';
 import { getPlayerWealthCount } from '../lib/wealth';
 import { getPlayerOngoingEffects } from '../lib/playerOngoingEffects';
+
+export const AnimatingCardsContext = createContext<Set<string> | undefined>(undefined);
 
 interface PlayFieldProps {
   player: PlayerState;
@@ -49,6 +51,7 @@ interface PlayFieldProps {
   onExpand?: () => void;
   isSpectator?: boolean;
   onHoverPreview?: (card: Card | null) => void;
+  animatingCardIds?: Set<string>;
 }
 
 const CardSlot: React.FC<{
@@ -75,6 +78,9 @@ const CardSlot: React.FC<{
   animationAnchor?: string;
   chainLabel?: string;
 }> = ({ card, label, onClick, onPreview, onHover, className, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent, isAllianceInitiator, displayMode, slotLabel, cardBackUrl, isHighlighted, animationAnchor, chainLabel }) => {
+  const animatingCardIds = useContext(AnimatingCardsContext);
+  const isAnimating = !!(card && animatingCardIds?.has(card.gamecardId));
+
   // Dynamic height scaling for stack areas (Deck, Grave, Exile)
   const isStackArea = isDeck || label === '墓地' || label === '放逐';
   const numericCount = typeof count === 'number' ? count : 0;
@@ -101,6 +107,7 @@ const CardSlot: React.FC<{
           isAllianceInitiator ? "z-10 shadow-[0_0_20px_rgba(220,38,38,0.8)] ring-2 ring-red-600" : "",
           isHighlighted ? "z-20 !border-yellow-400 ring-2 ring-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.95)]" : "",
           (isAttacking || isDefending) ? "z-10" : "",
+          isAnimating && "opacity-0 pointer-events-none",
           className
         )}
         onClick={(e) => {
@@ -633,7 +640,7 @@ const PlayerHalf: React.FC<{
                   return (
                     <div key={i} className="flex flex-col gap-1 items-center">
                       <span className="text-[10px] font-black text-white/30">{num}</span>
-                      <div className="relative aspect-[3/4] w-full">
+                      <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
                         {displayCard ? (
                           <CardSlot
                             card={displayCard} isFaceUp={displayCard.isFaceUp} onPreview={displayCard.isFaceUp ? onPreviewCard : undefined}
@@ -643,7 +650,6 @@ const PlayerHalf: React.FC<{
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             isHighlighted={displayCard.isFaceUp && highlightedCardIds?.has(displayCard.gamecardId)}
                             showCount={false} isOpponent={isOpponent} displayMode="erosion_item" slotLabel={num} cardBackUrl={cardBackUrl}
-                            animationAnchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`}
                             chainLabel={chainLabels?.get(displayCard.gamecardId)}
                           />
                         ) : (
@@ -721,7 +727,7 @@ const PlayerHalf: React.FC<{
                   const displayCard = allCards[i];
                   return (
                     <div key={i} className="flex flex-col gap-1 items-center">
-                      <div className="relative aspect-[3/4] w-full">
+                      <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
                         {displayCard ? (
                           <CardSlot
                             card={displayCard}
@@ -736,7 +742,6 @@ const PlayerHalf: React.FC<{
                             displayMode="erosion_item"
                             slotLabel={num}
                             cardBackUrl={cardBackUrl}
-                            animationAnchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`}
                             chainLabel={chainLabels?.get(displayCard.gamecardId)}
                           />
                         ) : (
@@ -900,7 +905,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
   setViewingZone, highlightedCardIds, onShowLogs, onOpenRulebook,
   onSurrender, onPhaseClick, confrontationStrategy, onUpdateStrategy,
   canConfront, isConfrontPromptActive, isCounteringPromptActive, isDefensePromptActive, onStartConfront, onDeclineConfront, onDeclineDefense,
-  showPhaseMenu, isAnyPopupOpen, isPopupHidden, onHidePopup, onExpand, isSpectator, onHoverPreview
+  showPhaseMenu, isAnyPopupOpen, isPopupHidden, onHidePopup, onExpand, isSpectator, onHoverPreview, animatingCardIds
 }) => {
   const [ongoingEffectsPopup, setOngoingEffectsPopup] = useState<{
     title: string;
@@ -966,7 +971,8 @@ export const PlayField: React.FC<PlayFieldProps> = ({
     ? viewingZoneCards.map(card => withEffectiveCostInfluence(game, viewingZoneOwner, card).card)
     : viewingZoneCards;
   return (
-    <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-y md:border-2 border-[#1a1a1a] md:rounded-xl shadow-2xl font-sans text-white select-none flex flex-col">
+    <AnimatingCardsContext.Provider value={animatingCardIds}>
+      <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-y md:border-2 border-[#1a1a1a] md:rounded-xl shadow-2xl font-sans text-white select-none flex flex-col">
       {/* Background Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
 
@@ -1298,6 +1304,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           border-radius: 10px;
         }
       `}</style>
-    </div>
+      </div>
+    </AnimatingCardsContext.Provider>
   );
 };

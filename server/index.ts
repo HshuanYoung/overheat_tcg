@@ -342,7 +342,7 @@ async function handleBotMove(gameState: any, gameId: string) {
             console.error('[Bot] handleBotMove outer error:', err);
             botMovingGames.delete(gameId);
         }
-    }, 1000);
+    }, 1600);
 }
 
 function triggerBotIfNeeded(gameState: any, gameId: string) {
@@ -4218,6 +4218,11 @@ io.on('connection', (socket) => {
                             triggerBotIfNeeded(gameState, gameId);
                         }
                         return; // advancePhase already calls syncAndSaveState
+                    }
+                } else if (action === 'ADD_ANIMATION_TIME') {
+                    const duration = Math.min(5000, Number(payload?.duration || 0));
+                    if (duration > 0) {
+                        gameState.phaseTimerStart = (gameState.phaseTimerStart || Date.now()) + duration;
                     }
                 } else if (action === 'SURRENDER') {
                     await ServerGameService.surrender(gameState, myUid);

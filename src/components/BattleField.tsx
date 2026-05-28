@@ -238,6 +238,39 @@ export const BattleField: React.FC = () => {
   const [localStrategy, setLocalStrategy] = useState<'ON' | 'AUTO' | 'OFF'>(confrontationStrategy);
   const [battleAnimationsEnabled, setBattleAnimationsEnabled] = useBattleAnimationPreference();
   const battleAnimations = useBattleAnimations(game, effectiveMyUid);
+  const battleAnimationsRef = useRef(battleAnimations);
+  useEffect(() => {
+    battleAnimationsRef.current = battleAnimations;
+  }, [battleAnimations]);
+
+  const lastEmittedAnimationTimeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!battleAnimationsEnabled || !battleAnimations.events.length || !socket || !gameId) return;
+
+    // Filter to only parallel card-played (movement) events
+    const parallelEvents = battleAnimations.events.filter(event => event.type === 'card-played');
+    if (!parallelEvents.length) return;
+
+    // Generate a unique key for this parallel group to avoid duplicate emissions
+    const groupKey = parallelEvents.map(e => e.id).join(',');
+    if (lastEmittedAnimationTimeRef.current === groupKey) return;
+    lastEmittedAnimationTimeRef.current = groupKey;
+
+    // Calculate total duration: 1100ms base + 120ms stagger for each additional card
+    const duration = 1100 + (parallelEvents.length - 1) * 120;
+    socket.emit('gameAction', { gameId, action: 'ADD_ANIMATION_TIME', payload: { duration } });
+  }, [battleAnimations.events, battleAnimationsEnabled, socket, gameId]);
+
+  const animatingCardIds = useMemo(() => {
+    const ids = new Set<string>();
+    battleAnimations.events.forEach(event => {
+      if (event.type === 'card-played' && event.sourceCardId) {
+        ids.add(event.sourceCardId);
+      }
+    });
+    return ids;
+  }, [battleAnimations.events]);
   const activeMulliganReveal = !isSpectator && game?.phase === 'MULLIGAN' ? me?.mulliganReveal : undefined;
   const handleToggleLogs = () => {
     if (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches) {
@@ -417,10 +450,12 @@ export const BattleField: React.FC = () => {
       const elapsed = now - (game.phaseTimerStart || now);
 
       const me = game.players[myUid];
+      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(e => e.type === 'card-played') || false);
       const isWaiting = game.isResolvingStack ||
         game.currentProcessingItem ||
         game.pendingQuery ||
-        (game.battleState && game.battleState.askConfront);
+        (game.battleState && game.battleState.askConfront) ||
+        isAnimationPlaying;
 
       const activeTimerUid = game.priorityPlayerId ||
         (game.phase === 'DEFENSE_DECLARATION'
@@ -1594,6 +1629,7 @@ export const BattleField: React.FC = () => {
 
   const handleConfirmPlay = async () => {
     if (!gameId || !pendingPlayCard) return;
+    setIsPopupHidden(true);
     try {
       await GameService.playCard(gameId, myUid, pendingPlayCard.gamecardId, {
         feijingCardId: paymentSelection.useFeijing[0],
@@ -1614,6 +1650,7 @@ export const BattleField: React.FC = () => {
       setLastError('请选择一张侵蚀区正面卡');
       return;
     }
+    setIsPopupHidden(true);
     try {
       await GameService.handleErosionChoice(gameId, myUid, erosionChoice, selectedErosionCardId || undefined);
       setErosionChoice(null);
@@ -1625,6 +1662,7 @@ export const BattleField: React.FC = () => {
 
   const handleQuerySubmit = async () => {
     if (!gameId || !game?.pendingQuery) return;
+    setIsPopupHidden(true);
 
     if (import.meta.env.ENABLE_PERF_LOGS === '1') {
       console.log(`[Query] Submitting choice for ${game.pendingQuery.type}:`, {
@@ -2375,6 +2413,7 @@ export const BattleField: React.FC = () => {
                   viewingZone={viewingZone}
                   setViewingZone={setViewingZone}
                   highlightedCardIds={highlightedCardIds}
+                  animatingCardIds={animatingCardIds}
                   onShowLogs={handleToggleLogs}
                   onOpenRulebook={() => setIsRulebookOpen(true)}
                   onSurrender={() => {
@@ -2471,6 +2510,9 @@ export const BattleField: React.FC = () => {
                 onEventComplete={battleAnimations.dismiss}
                 hoverPreview={hoverPreviewCard}
               />
+              {battleAnimationsEnabled && battleAnimations.events.some(e => e.type === 'card-played') && (
+                <div className="absolute inset-0 z-[210] pointer-events-auto bg-transparent cursor-wait" />
+              )}
               <button
                 type="button"
                 onClick={() => setBattleAnimationsEnabled(!battleAnimationsEnabled)}
@@ -2561,6 +2603,7 @@ export const BattleField: React.FC = () => {
             });
           }}
           onSelectionComplete={async () => {
+            setIsPopupHidden(true);
             for (const id of discardSelection) {
               await handleDiscardCard(id);
             }
@@ -3091,6 +3134,7 @@ export const BattleField: React.FC = () => {
         cardBackUrl={cardBackUrl}
         onHide={() => setIsPopupHidden(true)}
         isHidden={isPopupHidden}
+        instant={true}
       />
 
 
@@ -3116,7 +3160,7 @@ export const BattleField: React.FC = () => {
       {/* Standardized My Pending Query Popup */}
       <StandardPopup
         key={`${game.pendingQuery?.id || 'no-query'}-${pendingQueryPopupMode}`}
-        isOpen={!!(!isSpectator && game.pendingQuery && game.pendingQuery.playerUid === myUid)}
+        isOpen={!!(!isSpectator && game.pendingQuery && game.pendingQuery.playerUid === myUid && (!battleAnimationsEnabled || !battleAnimations.events.some(e => e.type === 'card-played')))}
         title={game.pendingQuery?.title || ''}
         description={game.pendingQuery?.description || ''}
         mode={pendingQueryPopupMode}
@@ -3178,8 +3222,14 @@ export const BattleField: React.FC = () => {
         squarePanel={normalizedPendingQueryType === 'ASK_TRIGGER'}
         confirmText={pendingQueryPopupMode === 'double_selection' ? binaryConfirmText : querySubmitLabel}
         cancelText={binaryCancelText}
-        onConfirm={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryConfirmOption) || 'YES'])}
-        onCancel={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryCancelOption) || 'NO'])}
+        onConfirm={() => {
+          setIsPopupHidden(true);
+          GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryConfirmOption) || 'YES']);
+        }}
+        onCancel={() => {
+          setIsPopupHidden(true);
+          GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryCancelOption) || 'NO']);
+        }}
         cardBackUrl={cardBackUrl}
         onHide={() => setIsPopupHidden(true)}
         isHidden={isPopupHidden}
@@ -3313,16 +3363,18 @@ export const BattleField: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: isPopupHidden ? 0 : 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0 }}
             className={cn(
-              "fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-6 backdrop-blur-md transition-all duration-300",
+              "fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-6 backdrop-blur-md",
               isPopupHidden ? "pointer-events-none invisible" : "pointer-events-auto visible"
             )}
             onClick={() => setShowPhaseMenu(false)}
           >
             <motion.div
-              initial={{ scale: 0.8, opacity: 0, y: 40 }}
+              initial={{ scale: 1, opacity: 1, y: 0 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.8, opacity: 0, y: 40 }}
+              exit={{ scale: 1, opacity: 0, y: 0 }}
+              transition={{ duration: 0 }}
               className="bg-zinc-900 border border-white/10 p-12 rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_50px_rgba(242,125,38,0.1)] flex flex-col items-center gap-10 max-w-sm w-full relative overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >

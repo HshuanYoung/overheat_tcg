@@ -1,6 +1,5 @@
 import { Card, GameState, PlayerState, CardEffect, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { moveCardAsCost } from './BaseUtil';
 
 const trigger_104020477: CardEffect = {
   id: '104020477_trigger',
@@ -58,12 +57,11 @@ const trigger_104020477: CardEffect = {
     if (context.step === 1) {
       // Resolve sacrificial cost
       for (const targetId of selections) {
-        const costCard = playerState.erosionFront.find(card =>
-          card?.gamecardId === targetId &&
-          card.displayState === 'FRONT_UPRIGHT' &&
-          AtomicEffectExecutor.matchesColor(card, 'BLUE')
-        );
-        if (costCard) moveCardAsCost(gameState, playerState.uid, costCard, 'GRAVE', instance);
+        await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+          type: 'MOVE_FROM_EROSION',
+          targetFilter: { gamecardId: targetId },
+          destinationZone: 'GRAVE'
+        }, instance);
       }
       gameState.logs.push(`[${instance.fullName}] 消耗了两张侵蚀卡牌作为代价。`);
 

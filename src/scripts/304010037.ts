@@ -1,6 +1,5 @@
 import { Card, GameState, PlayerState, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { exhaustCost } from './BaseUtil';
 
 const trigger_304010037: CardEffect = {
   id: '304010037_trigger',
@@ -20,14 +19,17 @@ const trigger_304010037: CardEffect = {
     }
 
     const movedCard = event.sourceCard || AtomicEffectExecutor.findCardById(gameState, event.sourceCardId);
-    return movedCard?.type === 'UNIT' &&
-      playerState.hand.some(c => c && c.faction === '百濑之水城' && !c.godMark && c.type === 'UNIT');
+    return movedCard?.type === 'UNIT';
   },
-  cost: exhaustCost,
   execute: async (instance, gameState, playerState) => {
     const validTargets = playerState.hand.filter(c => c && c.faction === '百濑之水城' && !c.godMark && c.type === 'UNIT');
 
     if (validTargets.length > 0) {
+      await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+        type: 'ROTATE_HORIZONTAL',
+        targetFilter: { gamecardId: instance.gamecardId }
+      }, instance);
+
       gameState.pendingQuery = {
         id: Math.random().toString(36).substring(7),
         type: 'SELECT_CARD',

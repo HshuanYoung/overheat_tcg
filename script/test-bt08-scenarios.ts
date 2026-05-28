@@ -247,12 +247,6 @@ async function activateAndResolveByOpponentPass(
   const autoDeclare = options.autoDeclare !== false;
   const effectId = card.effects?.[effectIndex]?.id;
   await ServerGameService.activateEffect(state, playerUid, card.gamecardId, effectIndex);
-  if (!autoDeclare && (
-    state.pendingQuery?.callbackKey === 'DECLARE_EFFECT_TARGET_MODE' ||
-    state.pendingQuery?.callbackKey === 'DECLARE_EFFECT_TARGETS'
-  )) {
-    return;
-  }
   if (autoDeclare) await answerDeclaredTargetQueries(state, effectId ? [effectId] : undefined);
   if (state.pendingQuery?.callbackKey === 'ACTIVATE_COST_RESOLVE') {
     const optionIds = (state.pendingQuery.options || []).map((option: any) => option.card?.gamecardId || option.id || option.value);
@@ -1676,7 +1670,7 @@ async function testBlueWealthStealRecoverAndStory(): Promise<ScenarioResult> {
   });
   EventEngine.recalculateContinuousEffects(stateLowWealth);
   const wealthGated = wealthCount(stateLowWealth.players.BOT, stateLowWealth) === 1;
-  await activateAndResolveByOpponentPass(stateA, 'BOT', branch, 1, { autoDeclare: false });
+  await activateAndResolveByOpponentPass(stateA, 'BOT', branch, 1);
   if (stateA.pendingQuery?.context?.effectId !== '104020410_take_opponent_unit') {
     return fail(name, `expected B01 target query, got ${stateA.pendingQuery?.context?.effectId || 'none'}`);
   }
@@ -1685,12 +1679,6 @@ async function testBlueWealthStealRecoverAndStory(): Promise<ScenarioResult> {
     return fail(name, `B01 options=${stealOptions.join(',')}`);
   }
   await answerPendingQuery(stateA, 'BOT', [target.gamecardId]);
-  if (stateA.pendingQuery?.callbackKey === 'ACTIVATE_COST_RESOLVE') {
-    await answerPendingQuery(stateA, 'BOT', [discardA.gamecardId, discardB.gamecardId, discardC.gamecardId]);
-  }
-  if (stateA.phase === 'COUNTERING') {
-    await ServerGameService.passConfrontation(stateA, stateA.priorityPlayerId);
-  }
   const stole = stateA.players.BOT.hand.some((card: Card) => card.fullName === target.fullName);
 
   const dream = cloneScriptCard(bt08B07 as Card, 'GRAVE');
@@ -2281,6 +2269,7 @@ async function testYellowPuppetDesignerBlueprintAndDominic(): Promise<ScenarioRe
     stateA.players.BOT.deck[stateA.players.BOT.deck.length - 1].gamecardId === topA.gamecardId;
   stateA.phase = 'MAIN';
   await activateAndResolveByOpponentPass(stateA, 'BOT', designer, 1);
+  await answerPendingQuery(stateA, 'BOT', [bottomHand.gamecardId]);
   const drew = stateA.players.BOT.hand.some((card: Card) => card.gamecardId === topB.gamecardId) &&
     stateA.players.BOT.hand.some((card: Card) => card.gamecardId === topA.gamecardId) &&
     stateA.players.BOT.deck[0].gamecardId === bottomHand.gamecardId;

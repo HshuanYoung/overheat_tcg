@@ -2,7 +2,7 @@ import { GameState, PlayerState, Card, Deck, TriggerLocation, CardEffect, StackI
 import { EventEngine } from '../src/services/EventEngine';
 import { AtomicEffectExecutor } from '../src/services/AtomicEffectExecutor';
 import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../src/lib/cardState';
-import { getEntryRestrictionMessage, satisfiesHighAlchemyEntryRestriction } from '../src/lib/highAlchemy';
+import { satisfiesHighAlchemyEntryRestriction } from '../src/lib/highAlchemy';
 import { getCardIdentity } from '../src/lib/utils';
 import { addBattleLog, addCardAddedToHandBattleLog, cardToBattleLogRef, describeBattleLogTarget } from '../src/lib/battleLog';
 import { SERVER_CARD_LIBRARY } from './card_loader';
@@ -577,31 +577,6 @@ export const ServerGameService = {
           options: [{ id: 'RESOLVE', value: 'RESOLVE', label: '结算' }],
           title: targetShape.title || '确认效果',
           description: targetShape.description || '确认结算该效果。',
-          minSelections: 1,
-          maxSelections: 1,
-          callbackKey: 'DECLARE_EFFECT_TARGETS',
-          context: {
-            ...context,
-            sourceCardId: sourceCard.gamecardId,
-            effectIndex,
-            effectId: effect.id,
-            activationPlayerUid: playerUid,
-            declaredTargets,
-            targetGroupIndex: context.targetGroupIndex || 0,
-            skipDeclareTargetSelection: true
-          }
-        };
-        return true;
-      }
-
-      if (context.pendingAction === 'ACTIVATE_EFFECT' || context.pendingAction === 'PLAY_CARD') {
-        gameState.pendingQuery = {
-          id: Math.random().toString(36).substring(7),
-          type: 'SELECT_CHOICE',
-          playerUid,
-          options: [{ id: 'RESOLVE', value: 'RESOLVE', label: 'Resolve' }],
-          title: targetShape.title || 'Confirm effect',
-          description: targetShape.description || 'Confirm resolving this effect.',
           minSelections: 1,
           maxSelections: 1,
           callbackKey: 'DECLARE_EFFECT_TARGETS',
@@ -1685,7 +1660,6 @@ export const ServerGameService = {
       suppressLog?: boolean;
       highAlchemyMaterialColors?: string[];
       highAlchemyMaterialCount?: number;
-      allowedByOwnEntryAbilityCardId?: string;
     }
   ): boolean {
     const sourcePlayer = gameState.players[sourcePlayerId];
@@ -1717,7 +1691,7 @@ export const ServerGameService = {
         card.type === 'UNIT' &&
         !satisfiesHighAlchemyEntryRestriction(card, options)
       ) {
-        gameState.logs.push(`[系统] [${card.fullName}] ${getEntryRestrictionMessage(card)}`);
+        gameState.logs.push(`[系统] [${card.fullName}] 只能通过满足素材颜色与数量的《高位炼金》效果进入战场。`);
         return false;
       }
       if (options?.isEffect && options.effectSourceCardId) {
@@ -2099,7 +2073,7 @@ export const ServerGameService = {
         return { canPlay: false, reason: '单位区已有同名专用卡' };
       }
       if (!satisfiesHighAlchemyEntryRestriction(card)) {
-        return { canPlay: false, reason: getEntryRestrictionMessage(card) };
+        return { canPlay: false, reason: '这张卡只能通过满足素材颜色与数量的《高位炼金》效果进入战场' };
       }
     } else if (card.type === 'ITEM') {
       if (card.specialName && player.itemZone.some(c => c?.specialName === card.specialName)) {
@@ -3698,28 +3672,6 @@ export const ServerGameService = {
             }, onUpdate);
             return gameState;
           }
-          if (query.context?.pendingAction === 'ACTIVATE_EFFECT') {
-            await ServerGameService.activateEffect(
-              gameState,
-              query.context.activationPlayerUid || playerUid,
-              query.context.cardId,
-              effectIndex,
-              declaredTargets,
-              { resumeFromQuery: true }
-            );
-            return gameState;
-          }
-          if (query.context?.pendingAction === 'PLAY_CARD') {
-            await ServerGameService.playCard(
-              gameState,
-              query.context.activationPlayerUid || playerUid,
-              query.context.cardId,
-              query.context.paymentSelection || {},
-              declaredTargets,
-              { resumeFromQuery: true, paymentSelectionResolved: !!query.context?.paymentSelectionResolved }
-            );
-            return gameState;
-          }
           return gameState;
         }
         const runtimeTargetSpec = query.context?.runtimeTargetSpec || query.context?.capturedContext
@@ -3840,53 +3792,6 @@ export const ServerGameService = {
       const mode = spec.modeOptions.find(option => option.id === modeId);
       if (!mode) throw new Error('指定对象失败：选择的模式无效');
       const activationPlayerUid = query.context?.activationPlayerUid || playerUid;
-      if (ServerGameService.isModeOnlyTargetShape(mode)) {
-        const declaredTargets = [
-          ...((query.context?.declaredTargets || []) as DeclaredEffectTarget[]),
-          {
-            gamecardId: `MODE:${modeId}`,
-            ownerUid: activationPlayerUid,
-            zone: 'PLAYER' as TriggerLocation,
-            sourceCardId: sourceCard.gamecardId,
-            sourceCardName: sourceCard.fullName,
-            effectIndex,
-            modeId,
-            step: mode.step
-          }
-        ];
-        if (query.context?.pendingAction === 'PLAY_CARD') {
-          await ServerGameService.playCard(
-            gameState,
-            activationPlayerUid,
-            query.context.cardId,
-            query.context.paymentSelection || {},
-            declaredTargets,
-            { resumeFromQuery: true, paymentSelectionResolved: !!query.context?.paymentSelectionResolved }
-          );
-          return gameState;
-        }
-        if (query.context?.pendingAction === 'ACTIVATE_EFFECT') {
-          await ServerGameService.activateEffect(
-            gameState,
-            activationPlayerUid,
-            query.context.cardId,
-            effectIndex,
-            declaredTargets,
-            { resumeFromQuery: true }
-          );
-          return gameState;
-        }
-        if (query.context?.pendingAction === 'TRIGGER_EFFECT') {
-          const trigger = query.context.triggerRecord;
-          if (!trigger) throw new Error('指定对象失败：找不到诱发记录');
-          await ServerGameService.processSelectedTriggerRecord(gameState, {
-            ...trigger,
-            declaredTargets
-          }, onUpdate);
-          await ServerGameService.finalizeBattleAfterPendingQuery(gameState, onUpdate);
-          return gameState;
-        }
-      }
       const opened = ServerGameService.createDeclareTargetQuery(gameState, activationPlayerUid, sourceCard, effect, effectIndex, {
         ...query.context,
         modeId,
@@ -4027,7 +3932,6 @@ export const ServerGameService = {
         maxSelections: 1,
         callbackKey: 'DIKAI_BATTLE_SAVE_PAYMENT',
         paymentCost: 3,
-        paymentColor: 'RED',
         context: { cardId, targetUnitId, isEffect, sourcePlayerId }
       };
       return gameState;

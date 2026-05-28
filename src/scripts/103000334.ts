@@ -43,18 +43,6 @@ const cardEffects: CardEffect[] = [{
       () => 'GRAVE'
     );
   },
-  targetSpec: {
-    title: '选择奇美拉',
-    description: '选择墓地中的1张「奇美拉」单位卡放置到战场上。',
-    minSelections: 1,
-    maxSelections: 1,
-    zones: ['GRAVE'],
-    controller: 'SELF',
-    getCandidates: (_gameState, playerState) =>
-      chimeraInGrave(playerState)
-        .filter((card: Card) => canPutUnitOntoBattlefield(playerState, card))
-        .map((card: Card) => ({ card, source: 'GRAVE' as any }))
-  },
   onQueryResolve: async (instance, gameState, playerState, selections) => {
     const target = chimeraInGrave(playerState).find((card: Card) => card.gamecardId === selections[0] && canPutUnitOntoBattlefield(playerState, card));
     if (target) putUnitOntoField(gameState, playerState.uid, target, instance);
@@ -81,19 +69,6 @@ const cardEffects: CardEffect[] = [{
       { sourceCardId: instance.gamecardId, effectId: '103000334_grave_entry_destroy' },
       card => card.cardlocation as any
     );
-  },
-  targetSpec: {
-    title: '选择破坏对象',
-    description: '选择战场上1张非神蚀卡，将其破坏。',
-    minSelections: 1,
-    maxSelections: 1,
-    zones: ['UNIT', 'ITEM'],
-    controller: 'ANY',
-    step: 'TARGET',
-    getCandidates: (gameState, _playerState, instance) =>
-      nonGodFieldCards(gameState)
-        .filter(card => card.gamecardId !== instance.gamecardId)
-        .map(card => ({ card, source: card.cardlocation as any }))
   },
   onQueryResolve: async (instance, gameState, playerState, selections) => {
     const target = nonGodFieldCards(gameState).find(card => card.gamecardId === selections[0]);

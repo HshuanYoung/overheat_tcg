@@ -1,6 +1,6 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { allCardsOnField, allUnitsOnField, backErosionCount, canPayAccessCost, createSelectCardQuery, destroyByEffect, ensureData, getOpponentUid, moveTopDeckTo, paymentCost } from './BaseUtil';
+import { allCardsOnField, allUnitsOnField, backErosionCount, createSelectCardQuery, destroyByEffect, ensureData, getOpponentUid, moveTopDeckTo } from './BaseUtil';
 
 const nonGodFieldCards = (gameState: any) => allCardsOnField(gameState).filter(card => !card.godMark);
 const hasDrawnByEffectThisTurn = (playerState: any, gameState: any) =>
@@ -21,9 +21,7 @@ const cardEffects: CardEffect[] = [{
     playerState.isTurn &&
     backErosionCount(playerState) >= 2 &&
     hasDrawnByEffectThisTurn(playerState, gameState) &&
-    nonGodFieldCards(gameState).length > 0 &&
-    canPayAccessCost(gameState, playerState, 2, instance.color, instance),
-  cost: paymentCost(2),
+    nonGodFieldCards(gameState).length > 0,
   execute: async (instance, gameState, playerState) => {
     createSelectCardQuery(
       gameState,
@@ -36,18 +34,6 @@ const cardEffects: CardEffect[] = [{
       { sourceCardId: instance.gamecardId, effectId: '104000309_draw_effect_destroy' },
       card => card.cardlocation as any
     );
-  },
-  targetSpec: {
-    title: '选择破坏目标',
-    description: '选择战场上的1张非神蚀卡破坏。',
-    minSelections: 1,
-    maxSelections: 1,
-    zones: ['UNIT', 'ITEM'],
-    controller: 'ANY',
-    step: 'TARGET',
-    getCandidates: gameState =>
-      nonGodFieldCards(gameState)
-        .map(card => ({ card, source: card.cardlocation as any }))
   },
   onQueryResolve: async (instance, gameState, _playerState, selections) => {
     const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
@@ -79,18 +65,6 @@ const cardEffects: CardEffect[] = [{
       { sourceCardId: instance.gamecardId, effectId: '104000309_oh_exhaust_mill' },
       () => 'UNIT'
     );
-  },
-  targetSpec: {
-    title: '选择横置单位',
-    description: '选择战场上的1个单位横置，并将对手卡组顶2张送入墓地。',
-    minSelections: 1,
-    maxSelections: 1,
-    zones: ['UNIT'],
-    controller: 'ANY',
-    step: 'TARGET',
-    getCandidates: gameState =>
-      allUnitsOnField(gameState)
-        .map(card => ({ card, source: 'UNIT' as const }))
   },
   onQueryResolve: async (instance, gameState, playerState, selections) => {
     const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;

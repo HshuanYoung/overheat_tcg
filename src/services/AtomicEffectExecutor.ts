@@ -4,7 +4,7 @@ import { EventEngine } from './EventEngine';
 import { clearBattlefieldState, shouldClearBattlefieldStateOnMove } from '../lib/cardState';
 import { getCardIdentity } from '../lib/utils';
 import { addCardAddedToHandBattleLog } from '../lib/battleLog';
-import { getEntryRestrictionMessage, satisfiesHighAlchemyEntryRestriction } from '../lib/highAlchemy';
+import { satisfiesHighAlchemyEntryRestriction } from '../lib/highAlchemy';
 
 const isAlchemySourceCard = (card?: Card | null) =>
   !!card &&
@@ -1027,7 +1027,6 @@ export class AtomicEffectExecutor {
     }
 
     if (filter.id && card.id !== filter.id) return false;
-    if (filter.idIn && !filter.idIn.includes(card.id)) return false;
     if (filter.hasOwnProperty('gamecardId') && card.gamecardId !== filter.gamecardId) return false;
     if (filter.type) {
       if (filter.type === 'ITEM') {
@@ -1136,7 +1135,6 @@ export class AtomicEffectExecutor {
       targetIndex?: number;
       highAlchemyMaterialColors?: string[];
       highAlchemyMaterialCount?: number;
-      allowedByOwnEntryAbilityCardId?: string;
     }
   ) {
     const sourcePlayer = gameState.players[playerUid];
@@ -1172,7 +1170,7 @@ export class AtomicEffectExecutor {
         card.type === 'UNIT' &&
         !satisfiesHighAlchemyEntryRestriction(card, options)
       ) {
-        gameState.logs.push(`[系统] [${card.fullName}] ${getEntryRestrictionMessage(card)}`);
+        gameState.logs.push(`[系统] [${card.fullName}] 只能通过满足素材颜色与数量的《高位炼金》效果进入战场。`);
         return;
       }
       if (

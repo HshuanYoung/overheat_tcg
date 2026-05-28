@@ -33,7 +33,7 @@ const cardEffects: CardEffect[] = [{
   type: 'TRIGGER',
   triggerEvent: 'CARD_EXILED',
   triggerLocation: ['UNIT'],
-  isMandatory: true,
+  isMandatory: false,
   isGlobal: true,
   description: '你的单位的共鸣能力将<瑟诺布>神蚀卡放逐时，选择对手1个单位失去所有能力，并令你的<瑟诺布>单位下一次攻击可攻击它。',
   condition: (gameState, playerState, _instance, event) => {
@@ -62,17 +62,6 @@ const cardEffects: CardEffect[] = [{
       { sourceCardId: instance.gamecardId, effectId: '103090421_resonance_god_silence_attack' },
       () => 'UNIT'
     );
-  },
-  targetSpec: {
-    title: '选择对手单位',
-    description: '选择对手战场上的1个单位。',
-    minSelections: 1,
-    maxSelections: 1,
-    zones: ['UNIT'],
-    controller: 'OPPONENT',
-    getCandidates: (gameState, playerState) =>
-      opponentUnits(gameState, playerState.uid)
-        .map(card => ({ card, source: 'UNIT' as any }))
   },
   onQueryResolve: async (instance, gameState, playerState, selections) => {
     const target = opponentUnits(gameState, playerState.uid).find(unit => unit.gamecardId === selections[0]);

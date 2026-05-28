@@ -1,12 +1,7 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { motion } from 'motion/react';
-
+import { motion, AnimatePresence } from 'motion/react';
+import { Eye, EyeOff, Mail, Lock, User, KeyRound, CheckCircle2, ShieldAlert, Sparkles, RefreshCw, ArrowLeft } from 'lucide-react';
 import { socket, getAuthUser, setAuthUser, setAuthToken, getAuthToken, clearAuthSession } from './socket';
 import { TopBar } from './components/TopBar';
 import { OnlinePlayersSidebar } from './components/OnlinePlayersSidebar';
@@ -57,6 +52,9 @@ export default function App() {
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetCodeCooldown, setResetCodeCooldown] = useState(0);
   const [sessionMessage, setSessionMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   const closeOnlinePlayers = useCallback(() => {
     setIsMobileOnlinePlayersOpen(false);
@@ -372,181 +370,455 @@ export default function App() {
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-black px-4 py-6 text-white sm:p-8">
-        <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md items-center justify-center sm:min-h-[calc(100vh-4rem)]">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="w-full rounded-[28px] border border-white/10 bg-zinc-900/95 p-4 text-left shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-8"
-          >
-            <h1 className="mb-3 text-center text-4xl font-black italic tracking-tighter text-red-600 md:text-6xl">神蚀创痕</h1>
-            <p className="mb-6 text-center text-[10px] tracking-[0.2em] text-zinc-400 md:mb-8 md:text-sm">OVERHEAT TCG ONLINE</p>
+    const isEmailValid = (emailStr: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr);
+    const getPasswordStrength = (pass: string) => {
+      if (!pass) return 0;
+      let score = 0;
+      if (pass.length >= 6) score += 1;
+      if (/[0-9]/.test(pass) && /[a-zA-Z]/.test(pass)) score += 1;
+      if (/[^A-Za-z0-9]/.test(pass) && pass.length >= 8) score += 1;
+      return score;
+    };
+    
+    const regStrength = getPasswordStrength(registerPassword);
+    const regStrengthColors = ['bg-zinc-800', 'bg-red-500', 'bg-amber-500', 'bg-emerald-500'];
+    const regStrengthText = ['', '弱', '中', '强'];
 
-            <div className="mb-5 grid grid-cols-3 rounded-2xl border border-white/10 bg-black/60 p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('login');
-                  setLoginError('');
-                }}
-                className={`rounded-xl py-3 text-xs font-bold transition-all sm:text-sm ${authMode === 'login' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
-              >
-                登录
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('register');
-                  setRegisterError('');
-                  setRegisterMessage('');
-                }}
-                className={`rounded-xl py-3 text-xs font-bold transition-all sm:text-sm ${authMode === 'register' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
-              >
-                注册
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('forgot');
-                  setResetError('');
-                  setResetMessage('');
-                }}
-                className={`rounded-xl py-3 text-xs font-bold transition-all sm:text-sm ${authMode === 'forgot' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
-              >
-                忘记密码
-              </button>
+    return (
+      <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden px-4 py-8 text-white font-sans">
+        {/* Immersive background image with cover/center, NO blur */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-[10s] ease-out scale-105"
+          style={{ 
+            backgroundImage: 'url("/assets/icons/login_bg.jpg")',
+          }}
+        />
+        
+        {/* Sleek radial black overlay, NO backdrop blur */}
+        <div className="absolute inset-0 bg-black/60" />
+        
+        {/* Soft glowing ambient circles */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <motion.div 
+            animate={{ 
+              x: [0, 40, -20, 0],
+              y: [0, -30, 20, 0],
+              scale: [1, 1.1, 0.95, 1]
+            }}
+            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-1/4 left-1/4 w-[280px] h-[280px] rounded-full bg-red-600/10 blur-[80px]"
+          />
+          <motion.div 
+            animate={{ 
+              x: [0, -30, 40, 0],
+              y: [0, 20, -30, 0],
+              scale: [1, 0.9, 1.05, 1]
+            }}
+            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute bottom-1/4 right-1/4 w-[320px] h-[320px] rounded-full bg-orange-600/10 blur-[90px]"
+          />
+        </div>
+
+        <div className="relative z-10 w-full max-w-md flex flex-col items-center justify-center py-6">
+          {/* Glassmorphic card container with fixed height and width */}
+          <motion.div
+            initial={{ scale: 0.94, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.4, type: 'spring', damping: 22 }}
+            className="w-full h-[520px] rounded-[28px] border border-white/10 bg-zinc-950/70 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.05)] backdrop-blur-2xl flex flex-col justify-between select-none"
+          >
+            {/* Header Section inside Card */}
+            <div className="relative flex items-center justify-center min-h-[40px] border-b border-white/5 pb-3">
+              {authMode !== 'login' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setLoginError('');
+                    setRegisterError('');
+                    setRegisterMessage('');
+                    setResetError('');
+                    setResetMessage('');
+                  }}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 p-2 rounded-xl border border-white/10 bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-center active:scale-95"
+                  aria-label="返回"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              )}
+              <h2 className="text-xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.3)]">
+                {authMode === 'login' ? '登录' : authMode === 'register' ? '创建账户' : '重置密码'}
+              </h2>
             </div>
 
-            {authMode === 'login' ? (
-              <form onSubmit={handleLogin} className="flex flex-col gap-3 sm:gap-4">
-                <input
-                  type="text"
-                  placeholder="用户名或邮箱"
-                  value={loginUsername}
-                  onChange={e => setLoginUsername(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                />
-                <input
-                  type="password"
-                  placeholder="密码"
-                  value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                />
-                {sessionMessage && <div className="text-sm font-bold text-amber-400">{sessionMessage}</div>}
-                {loginError && <div className="text-sm font-bold text-red-500">{loginError}</div>}
-                <button
-                  type="submit"
-                  disabled={loginSubmitting}
-                  className="mt-3 w-full rounded-2xl bg-white py-4 text-base font-bold text-black transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:bg-zinc-200 disabled:opacity-60"
+            {/* Form Section inside Card */}
+            <AnimatePresence mode="wait">
+              {authMode === 'login' ? (
+                <motion.form
+                  key="login"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.2 }}
+                  onSubmit={handleLogin}
+                  className="flex-1 flex flex-col justify-center gap-5 pt-4 pb-2"
                 >
-                  {loginSubmitting ? '登录中...' : '登录'}
-                </button>
-              </form>
-            ) : authMode === 'register' ? (
-              <form onSubmit={handleRegister} className="flex flex-col gap-3 sm:gap-4">
-                <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-xs leading-relaxed text-zinc-300">
-                  <p className="font-bold tracking-wide text-white">新用户初始资源</p>
-                  <p className="mt-1 text-zinc-400">100000 金币 + 100000 卡晶 + 每种卡牌 4 张</p>
-                </div>
-                <input
-                  type="text"
-                  placeholder="用户名"
-                  value={registerUsername}
-                  onChange={e => setRegisterUsername(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                />
-                <input
-                  type="email"
-                  placeholder="邮箱"
-                  value={registerEmail}
-                  onChange={e => setRegisterEmail(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                />
-                <input
-                  type="password"
-                  placeholder="密码"
-                  value={registerPassword}
-                  onChange={e => setRegisterPassword(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                />
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    type="text"
-                    placeholder="6位验证码"
-                    value={verificationCode}
-                    onChange={e => setVerificationCode(e.target.value)}
-                    className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                  />
+                  <div className="flex flex-col gap-4">
+                    <div className="relative group">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                        <User className="w-5 h-5" />
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="用户名或邮箱"
+                        value={loginUsername}
+                        onChange={e => setLoginUsername(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-4 py-3.5 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                      />
+                    </div>
+
+                    <div className="relative group">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                        <Lock className="w-5 h-5" />
+                      </span>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="密码"
+                        value={loginPassword}
+                        onChange={e => setLoginPassword(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-12 py-3.5 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {sessionMessage && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5 flex items-start gap-2"
+                    >
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{sessionMessage}</span>
+                    </motion.div>
+                  )}
+
+                  {loginError && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }} 
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 flex items-start gap-2"
+                    >
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{loginError}</span>
+                    </motion.div>
+                  )}
+
                   <button
-                    type="button"
-                    onClick={handleSendVerificationCode}
-                    disabled={sendingCode || sendCodeCooldown > 0}
-                    className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-red-500 disabled:opacity-60 disabled:hover:bg-red-600 sm:w-auto sm:min-w-[122px]"
+                    type="submit"
+                    disabled={loginSubmitting}
+                    className="w-full rounded-xl bg-white py-3.5 text-base font-black text-black transition-all shadow-[0_8px_24px_rgba(255,255,255,0.08)] hover:bg-zinc-200 hover:shadow-[0_8px_32px_rgba(255,255,255,0.18)] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {sendingCode ? '发送中...' : sendCodeCooldown > 0 ? `${sendCodeCooldown}秒` : '发送验证码'}
+                    {loginSubmitting ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <span>登录</span>
+                    )}
                   </button>
-                </div>
-                {registerMessage && <div className="text-sm font-bold text-emerald-400">{registerMessage}</div>}
-                {sessionMessage && <div className="text-sm font-bold text-amber-400">{sessionMessage}</div>}
-                {registerError && <div className="text-sm font-bold text-red-500">{registerError}</div>}
-                <button
-                  type="submit"
-                  disabled={registerSubmitting}
-                  className="mt-1 w-full rounded-2xl bg-white py-4 text-base font-bold text-black transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:bg-zinc-200 disabled:opacity-60"
+
+                  {/* Dynamic page switching links in the footer of Login mode */}
+                  <div className="flex justify-between items-center px-1 text-xs select-none">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('forgot');
+                        setResetError('');
+                        setResetMessage('');
+                      }}
+                      className="text-zinc-500 hover:text-red-400 transition-colors font-bold cursor-pointer"
+                    >
+                      忘记密码？
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('register');
+                        setRegisterError('');
+                        setRegisterMessage('');
+                      }}
+                      className="text-red-500 hover:text-red-400 transition-colors font-black tracking-wider cursor-pointer"
+                    >
+                      立即注册
+                    </button>
+                  </div>
+                </motion.form>
+              ) : authMode === 'register' ? (
+                <motion.form
+                  key="register"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  onSubmit={handleRegister}
+                  className="flex-1 flex flex-col justify-center gap-4 pt-3 pb-1"
                 >
-                  {registerSubmitting ? '注册中...' : '完成注册'}
-                </button>
-                <p className="px-1 text-xs leading-relaxed text-zinc-500">
-                  注册成功后会自动发放 100000 金币、100000 卡晶，并为每张卡初始化 4 张。
-                </p>
-              </form>
-            ) : (
-              <form onSubmit={handleResetPassword} className="flex flex-col gap-3 sm:gap-4">
-                <input
-                  type="email"
-                  placeholder="注册邮箱"
-                  value={resetEmail}
-                  onChange={e => setResetEmail(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                />
-                <input
-                  type="password"
-                  placeholder="新密码"
-                  value={resetPassword}
-                  onChange={e => setResetPassword(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                />
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    type="text"
-                    placeholder="6位验证码"
-                    value={resetVerificationCode}
-                    onChange={e => setResetVerificationCode(e.target.value)}
-                    className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black px-4 py-3 text-white placeholder:text-zinc-500"
-                  />
+                  <div className="relative group">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                      <User className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="用户名"
+                      value={registerUsername}
+                      onChange={e => setRegisterUsername(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-12 py-3 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                    />
+                    {registerUsername.length >= 3 && (
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative group">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                      <Mail className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="email"
+                      placeholder="邮箱"
+                      value={registerEmail}
+                      onChange={e => setRegisterEmail(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-12 py-3 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                    />
+                    {isEmailValid(registerEmail) && (
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <div className="relative group">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                        <Lock className="w-5 h-5" />
+                      </span>
+                      <input
+                        type={showRegisterPassword ? "text" : "password"}
+                        placeholder="密码"
+                        value={registerPassword}
+                        onChange={e => setRegisterPassword(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-12 py-3 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showRegisterPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                    
+                    {registerPassword && (
+                      <div className="px-1 mt-0.5">
+                        <div className="flex justify-between items-center text-[9px] text-zinc-400 mb-0.5">
+                          <span>密码强度: {regStrengthText[regStrength]}</span>
+                          <span>至少6位，包含字母和数字</span>
+                        </div>
+                        <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden flex gap-0.5">
+                          <div className={`h-full flex-1 transition-all duration-300 ${regStrength >= 1 ? regStrengthColors[regStrength] : 'bg-transparent'}`} />
+                          <div className={`h-full flex-1 transition-all duration-300 ${regStrength >= 2 ? regStrengthColors[regStrength] : 'bg-transparent'}`} />
+                          <div className={`h-full flex-1 transition-all duration-300 ${regStrength >= 3 ? regStrengthColors[regStrength] : 'bg-transparent'}`} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="relative group flex-1">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                        <KeyRound className="w-5 h-5" />
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="6位验证码"
+                        value={verificationCode}
+                        onChange={e => setVerificationCode(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-4 py-3 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSendVerificationCode}
+                      disabled={sendingCode || sendCodeCooldown > 0}
+                      className="w-full rounded-xl bg-red-600 px-4 py-3 text-xs font-black text-white transition-all shadow-[0_4px_12px_rgba(220,38,38,0.2)] hover:bg-red-500 hover:shadow-[0_4px_16px_rgba(220,38,38,0.35)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none sm:w-auto sm:min-w-[120px] flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {sendingCode ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : sendCodeCooldown > 0 ? (
+                        <span>{sendCodeCooldown}秒</span>
+                      ) : (
+                        <span>发送验证码</span>
+                      )}
+                    </button>
+                  </div>
+
+                  {registerMessage && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2 flex items-start gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{registerMessage}</span>
+                    </motion.div>
+                  )}
+
+                  {registerError && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }} 
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2 flex items-start gap-2"
+                    >
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{registerError}</span>
+                    </motion.div>
+                  )}
+
                   <button
-                    type="button"
-                    onClick={handleSendResetCode}
-                    disabled={sendingResetCode || resetCodeCooldown > 0}
-                    className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-red-500 disabled:opacity-60 disabled:hover:bg-red-600 sm:w-auto sm:min-w-[122px]"
+                    type="submit"
+                    disabled={registerSubmitting}
+                    className="w-full rounded-xl bg-white py-3.5 text-base font-black text-black transition-all shadow-[0_8px_24px_rgba(255,255,255,0.08)] hover:bg-zinc-200 hover:shadow-[0_8px_32px_rgba(255,255,255,0.18)] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {sendingResetCode ? '发送中...' : resetCodeCooldown > 0 ? `${resetCodeCooldown}秒` : '发送验证码'}
+                    {registerSubmitting ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <span>完成注册</span>
+                    )}
                   </button>
-                </div>
-                {resetMessage && <div className="text-sm font-bold text-emerald-400">{resetMessage}</div>}
-                {sessionMessage && <div className="text-sm font-bold text-amber-400">{sessionMessage}</div>}
-                {resetError && <div className="text-sm font-bold text-red-500">{resetError}</div>}
-                <button
-                  type="submit"
-                  disabled={resetSubmitting}
-                  className="mt-1 w-full rounded-2xl bg-white py-4 text-base font-bold text-black transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:bg-zinc-200 disabled:opacity-60"
+                </motion.form>
+              ) : (
+                <motion.form
+                  key="forgot"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  onSubmit={handleResetPassword}
+                  className="flex-1 flex flex-col justify-center gap-4 pt-3 pb-1"
                 >
-                  {resetSubmitting ? '重置中...' : '重置密码'}
-                </button>
-              </form>
-            )}
+                  <div className="relative group">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                      <Mail className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="email"
+                      placeholder="注册邮箱"
+                      value={resetEmail}
+                      onChange={e => setResetEmail(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-12 py-3.5 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                    />
+                    {isEmailValid(resetEmail) && (
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative group">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                      <Lock className="w-5 h-5" />
+                    </span>
+                    <input
+                      type={showResetPassword ? "text" : "password"}
+                      placeholder="新密码"
+                      value={resetPassword}
+                      onChange={e => setResetPassword(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-12 py-3.5 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword(!showResetPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showResetPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="relative group flex-1">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                        <KeyRound className="w-5 h-5" />
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="6位验证码"
+                        value={resetVerificationCode}
+                        onChange={e => setResetVerificationCode(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/60 pl-12 pr-4 py-3 text-white placeholder:text-zinc-500 outline-none transition-all focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 focus:bg-black/80"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSendResetCode}
+                      disabled={sendingResetCode || resetCodeCooldown > 0}
+                      className="w-full rounded-xl bg-red-600 px-4 py-3 text-xs font-black text-white transition-all shadow-[0_4px_12px_rgba(220,38,38,0.2)] hover:bg-red-500 hover:shadow-[0_4px_16px_rgba(220,38,38,0.35)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none sm:w-auto sm:min-w-[120px] flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {sendingResetCode ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : resetCodeCooldown > 0 ? (
+                        <span>{resetCodeCooldown}秒</span>
+                      ) : (
+                        <span>发送验证码</span>
+                      )}
+                    </button>
+                  </div>
+
+                  {resetMessage && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2 flex items-start gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{resetMessage}</span>
+                    </motion.div>
+                  )}
+
+                  {resetError && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }} 
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2 flex items-start gap-2"
+                    >
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{resetError}</span>
+                    </motion.div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={resetSubmitting}
+                    className="w-full rounded-xl bg-white py-3.5 text-base font-black text-black transition-all shadow-[0_8px_24px_rgba(255,255,255,0.08)] hover:bg-zinc-200 hover:shadow-[0_8px_32px_rgba(255,255,255,0.18)] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {resetSubmitting ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <span>重置密码</span>
+                    )}
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
           </motion.div>
         </div>
       </div>

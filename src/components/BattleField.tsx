@@ -240,7 +240,7 @@ export const BattleField: React.FC = () => {
   const opponent = useMemo(() => (game && opponentUid) ? game.players[opponentUid] : null, [game, opponentUid]);
   const confrontationStrategy = (me?.confrontationStrategy || 'AUTO') as 'ON' | 'AUTO' | 'OFF';
   const [localStrategy, setLocalStrategy] = useState<'ON' | 'AUTO' | 'OFF'>(confrontationStrategy);
-  const [battleAnimationsEnabled, setBattleAnimationsEnabled] = useBattleAnimationPreference();
+  const [battleAnimationsEnabled] = useBattleAnimationPreference();
   const [visualGame, setVisualGame] = useState<GameState | null>(null);
   const animationSourceGame = visualGame || game;
   const battleAnimations = useBattleAnimations(animationSourceGame, effectiveMyUid, isSpectator, cardBackUrl);
@@ -2643,19 +2643,6 @@ export const BattleField: React.FC = () => {
               {battleAnimationsEnabled && battleAnimations.events.some(e => e.type === 'card-played') && (
                 <div className="absolute inset-0 z-[210] pointer-events-auto bg-transparent cursor-wait" />
               )}
-              <button
-                type="button"
-                onClick={() => setBattleAnimationsEnabled(!battleAnimationsEnabled)}
-                className={cn(
-                  "absolute right-3 top-3 z-[220] flex h-9 w-9 items-center justify-center rounded-full border text-white shadow-2xl backdrop-blur-md transition-all hover:scale-105 active:scale-95 md:h-10 md:w-10",
-                  battleAnimationsEnabled
-                    ? "border-[#f27d26]/45 bg-[#f27d26]/20 text-[#f27d26]"
-                    : "border-white/10 bg-black/50 text-white/35"
-                )}
-                title={battleAnimationsEnabled ? '关闭战斗动画' : '开启战斗动画'}
-              >
-                <Sparkles className="h-4 w-4 md:h-5 md:w-5" />
-              </button>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
-import { GameState, PlayerState, Card, CardEffect, TriggerLocation, GAME_TIMEOUTS } from '../types/game';
+import { GameState, PlayerState, Card, CardEffect, TriggerLocation, GAME_TIMEOUTS, EffectQuery } from '../types/game';
 import { socket, getAuthUser, onceAuthenticated, isSocketAuthenticated } from '../socket';
 
 import { GameService } from '../services/gameService';
@@ -19,7 +19,7 @@ import { cn, getCardColorHanzi, getCardColorLabel, getCardImageUrl, getCardIdent
 import { KeywordBadges } from './KeywordBadges';
 import { BattleLogPanel } from './BattleLogPanel';
 import { battleLogText } from '../lib/battleLog';
-import { BattleAnimationLayer } from './BattleAnimationLayer';
+import { BattleAnimationLayer, battleAnimationGroupDuration, isBlockingBattleAnimation } from './BattleAnimationLayer';
 import { useBattleAnimationPreference, useBattleAnimations } from '../hooks/useBattleAnimations';
 
 const EFFECT_TYPE_LABELS: Record<string, string> = {
@@ -220,11 +220,15 @@ export const BattleField: React.FC = () => {
   const [interruptionNotice, setInterruptionNotice] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [isPopupHidden, setIsPopupHidden] = useState(false);
+  const [queryHandoff, setQueryHandoff] = useState<{ query: EffectQuery; clearAt: number } | null>(null);
   const [dismissedPublicRevealId, setDismissedPublicRevealId] = useState<string | null>(null);
   const [hoverPreviewCard, setHoverPreviewCard] = useState<Card | null>(null);
   const lastStrategyUpdateRef = useRef<number>(0);
   const lastJoinEmitRef = useRef<number>(0);
   const [pregameNow, setPregameNow] = useState(Date.now());
+  const cardBackUrl = useMemo(() => {
+    return CARD_BACKS.find(b => b.id === favoriteBackId)?.url || DEFAULT_CARD_BACK_URL;
+  }, [favoriteBackId]);
 
   const getPreviewFullImage = (card: Card) =>
     card.fullImageUrl || getCardImageUrl(card.id, card.rarity, false, card.availableRarities);
@@ -237,7 +241,9 @@ export const BattleField: React.FC = () => {
   const confrontationStrategy = (me?.confrontationStrategy || 'AUTO') as 'ON' | 'AUTO' | 'OFF';
   const [localStrategy, setLocalStrategy] = useState<'ON' | 'AUTO' | 'OFF'>(confrontationStrategy);
   const [battleAnimationsEnabled, setBattleAnimationsEnabled] = useBattleAnimationPreference();
-  const battleAnimations = useBattleAnimations(game, effectiveMyUid);
+  const [visualGame, setVisualGame] = useState<GameState | null>(null);
+  const animationSourceGame = visualGame || game;
+  const battleAnimations = useBattleAnimations(animationSourceGame, effectiveMyUid, isSpectator, cardBackUrl);
   const battleAnimationsRef = useRef(battleAnimations);
   useEffect(() => {
     battleAnimationsRef.current = battleAnimations;
@@ -245,47 +251,78 @@ export const BattleField: React.FC = () => {
 
   const lastEmittedAnimationTimeRef = useRef<string | null>(null);
   const stateBufferRef = useRef<any[]>([]);
+  const [stateBufferVersion, setStateBufferVersion] = useState(0);
+  const serverAnimationHoldUntilRef = useRef(0);
+  const [serverAnimationHoldUntil, setServerAnimationHoldUntil] = useState(0);
   const applyGameStateRef = useRef<((state: any) => void) | null>(null);
-
-  useEffect(() => {
-    if (!battleAnimationsEnabled) return;
-    const isAnimationPlaying = battleAnimations.events.some(e => 
-      e.type === 'card-played' || e.type === 'erosion-flip' || e.type === 'card-draw'
-    );
-    if (!isAnimationPlaying && stateBufferRef.current.length > 0) {
-      const latestState = stateBufferRef.current[stateBufferRef.current.length - 1];
-      stateBufferRef.current = [];
-      if (applyGameStateRef.current) {
-        applyGameStateRef.current(latestState);
-      }
+  const applyBufferedGameState = useCallback(() => {
+    if (stateBufferRef.current.length === 0) return;
+    const latestState = stateBufferRef.current[stateBufferRef.current.length - 1];
+    console.log('[BattleFieldAnimationBuffer] applying buffered state', {
+      phase: latestState.phase,
+      droppedBufferedStates: Math.max(0, stateBufferRef.current.length - 1)
+    });
+    stateBufferRef.current = [];
+    setStateBufferVersion(version => version + 1);
+    serverAnimationHoldUntilRef.current = 0;
+    setServerAnimationHoldUntil(0);
+    setVisualGame(null);
+    if (applyGameStateRef.current) {
+      applyGameStateRef.current(latestState);
     }
+  }, []);
+  const activeBlockingAnimationEvents = useMemo(() => {
+    if (!battleAnimationsEnabled) return [];
+    if (!battleAnimations.events.length) return [];
+    const first = battleAnimations.events[0];
+    if (!isBlockingBattleAnimation(first)) return [];
+    const group = [];
+    for (const event of battleAnimations.events) {
+      if (event.type !== first.type) break;
+      group.push(event);
+    }
+    return group;
   }, [battleAnimations.events, battleAnimationsEnabled]);
 
   useEffect(() => {
-    if (!battleAnimationsEnabled || !battleAnimations.events.length || !socket || !gameId) return;
+    if (activeBlockingAnimationEvents.length === 0 && stateBufferRef.current.length > 0) {
+      const remaining = serverAnimationHoldUntilRef.current - Date.now();
+      if (remaining > 0) {
+        setServerAnimationHoldUntil(serverAnimationHoldUntilRef.current);
+        return;
+      }
+      applyBufferedGameState();
+    }
+  }, [activeBlockingAnimationEvents, applyBufferedGameState, stateBufferVersion]);
 
-    // Filter to only parallel card movement/flip events
-    const parallelEvents = battleAnimations.events.filter(event => 
-      event.type === 'card-played' || event.type === 'erosion-flip' || event.type === 'card-draw'
-    );
-    if (!parallelEvents.length) return;
+  useEffect(() => {
+    if (activeBlockingAnimationEvents.length > 0 || stateBufferRef.current.length === 0) return;
+    const remaining = serverAnimationHoldUntil - Date.now();
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(() => {
+      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(isBlockingBattleAnimation) || false);
+      if (isAnimationPlaying || stateBufferRef.current.length === 0) return;
+      applyBufferedGameState();
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [activeBlockingAnimationEvents.length, applyBufferedGameState, battleAnimationsEnabled, serverAnimationHoldUntil, stateBufferVersion]);
+
+  useEffect(() => {
+    if (!battleAnimationsEnabled || !activeBlockingAnimationEvents.length || !socket || !gameId) return;
 
     // Generate a unique key for this parallel group to avoid duplicate emissions
-    const groupKey = parallelEvents.map(e => e.id).join(',');
+    const groupKey = activeBlockingAnimationEvents.map(e => e.id).join(',');
     if (lastEmittedAnimationTimeRef.current === groupKey) return;
     lastEmittedAnimationTimeRef.current = groupKey;
 
-    // Calculate total duration based on type base + stagger
-    const baseDuration = parallelEvents[0].type === 'erosion-flip' ? 1500 : 
-                         parallelEvents[0].type === 'card-draw' ? 2000 : 1100;
-    const duration = baseDuration + (parallelEvents.length - 1) * 120;
+    const duration = battleAnimationGroupDuration(activeBlockingAnimationEvents);
     socket.emit('gameAction', { gameId, action: 'ADD_ANIMATION_TIME', payload: { duration } });
-  }, [battleAnimations.events, battleAnimationsEnabled, socket, gameId]);
+  }, [activeBlockingAnimationEvents, battleAnimationsEnabled, socket, gameId]);
 
   const animatingCardIds = useMemo(() => {
     const ids = new Set<string>();
     battleAnimations.events.forEach(event => {
-      if ((event.type === 'card-played' || event.type === 'erosion-flip' || event.type === 'card-draw') && event.sourceCardId) {
+      if (isBlockingBattleAnimation(event) && event.sourceCardId) {
         ids.add(event.sourceCardId);
       }
     });
@@ -454,10 +491,6 @@ export const BattleField: React.FC = () => {
     fetchProfile();
   }, []);
 
-  const cardBackUrl = useMemo(() => {
-    return CARD_BACKS.find(b => b.id === favoriteBackId)?.url || DEFAULT_CARD_BACK_URL;
-  }, [favoriteBackId]);
-
   // Universal Visual Timer Logic - Stabilized with gameRef
   useEffect(() => {
     if (!gameId || !myUid || isSpectator) return;
@@ -470,7 +503,7 @@ export const BattleField: React.FC = () => {
       const elapsed = now - (game.phaseTimerStart || now);
 
       const me = game.players[myUid];
-      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(e => e.type === 'card-played' || e.type === 'erosion-flip' || e.type === 'card-draw') || false);
+      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(isBlockingBattleAnimation) || false);
       const isWaiting = game.isResolvingStack ||
         game.currentProcessingItem ||
         game.pendingQuery ||
@@ -552,7 +585,7 @@ export const BattleField: React.FC = () => {
     console.log('[BattleField] Registering socket listeners for game:', gameId);
     let active = true;
     let cardLibraryReady = false;
-    let pendingState: any = null;
+    let pendingStates: any[] = [];
 
     const applyGameState = (newState: any) => {
       if (newState.gameId !== gameId) return;
@@ -600,9 +633,15 @@ export const BattleField: React.FC = () => {
     loadCardLibrary().then(() => {
       if (!active) return;
       cardLibraryReady = true;
-      if (pendingState) {
-        applyGameState(pendingState);
-        pendingState = null;
+      if (pendingStates.length) {
+        console.log('[BattleField] Replaying queued states after card library load', {
+          count: pendingStates.length,
+          phases: pendingStates.map(state => state.phase),
+          animationHints: pendingStates.map(state => state.animationHint?.id).filter(Boolean)
+        });
+        const statesToReplay = pendingStates;
+        pendingStates = [];
+        statesToReplay.forEach(onGameStateUpdate);
       }
     }).catch(err => {
       console.error('[BattleField] Failed to load card scripts:', err);
@@ -611,14 +650,57 @@ export const BattleField: React.FC = () => {
     const onGameStateUpdate = (newState: any) => {
       if (newState.gameId !== gameId) return;
       if (!cardLibraryReady) {
-        pendingState = newState;
+        pendingStates.push(newState);
+        if (newState.animationHint) {
+          console.log('[BattleField] Queued animation hint before card library ready', {
+            phase: newState.phase,
+            animationHint: newState.animationHint.id,
+            queued: pendingStates.length
+          });
+        }
         return;
       }
+      if (newState.animationHint) {
+        console.log('[BattleField] Received animation hint state', {
+          phase: newState.phase,
+          animationHint: newState.animationHint.id,
+          animationUntil: newState.animationUntil
+        });
+        setVisualGame(newState);
+      }
       
-      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(e => e.type === 'card-played' || e.type === 'erosion-flip' || e.type === 'card-draw') || false);
+      const hintDuration = Number(newState.animationHint?.durationMs || 0);
+      const serverAnimationUntil = Number(newState.animationUntil || 0);
+      const serverHoldUntil = hintDuration > 0 ? Date.now() + hintDuration : serverAnimationUntil;
+      const isServerAnimationHold = serverHoldUntil > Date.now();
+      const localAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(isBlockingBattleAnimation) || false);
+      const existingServerHold = serverAnimationHoldUntilRef.current > Date.now();
+      const startsServerHold = isServerAnimationHold && serverAnimationHoldUntilRef.current === 0;
+      const isAnimationPlaying = localAnimationPlaying || existingServerHold;
       if (isAnimationPlaying) {
+        console.log('[BattleFieldAnimationBuffer] buffering state', {
+          phase: newState.phase,
+          previousPhase: gameRef.current?.phase,
+          localAnimationPlaying,
+          existingServerHold,
+          serverAnimationUntil: serverHoldUntil,
+          bufferSize: stateBufferRef.current.length + 1
+        });
         stateBufferRef.current.push(newState);
+        setStateBufferVersion(version => version + 1);
         return;
+      }
+      if (isServerAnimationHold) {
+        serverAnimationHoldUntilRef.current = Math.max(serverAnimationHoldUntilRef.current, serverHoldUntil);
+        setServerAnimationHoldUntil(serverAnimationHoldUntilRef.current);
+        if (startsServerHold) {
+          console.log('[BattleFieldAnimationBuffer] applying visual frame and starting hold', {
+            phase: newState.phase,
+            serverAnimationUntil: serverHoldUntil,
+            holdMs: Math.max(0, serverHoldUntil - Date.now()),
+            source: hintDuration > 0 ? 'animationHint.durationMs' : 'animationUntil'
+          });
+        }
       }
       
       applyGameState(newState);
@@ -739,6 +821,8 @@ export const BattleField: React.FC = () => {
   useEffect(() => {
     // Always clear if a new query has arrived
     if (game?.pendingQuery) {
+      setQueryHandoff(null);
+      setIsPopupHidden(false);
       setSelectedQueryIds([]);
       setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
     } else if (!pendingPlayCard) {
@@ -755,6 +839,19 @@ export const BattleField: React.FC = () => {
       setAllianceConfirmation(null);
     }
   }, [game?.phase]);
+
+  useEffect(() => {
+    if (!queryHandoff) return;
+    if (game?.pendingQuery) {
+      setQueryHandoff(null);
+      return;
+    }
+    const delay = Math.max(0, queryHandoff.clearAt - Date.now());
+    const timer = window.setTimeout(() => {
+      setQueryHandoff(current => current?.query.id === queryHandoff.query.id ? null : current);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [queryHandoff, game?.pendingQuery?.id]);
 
 
 
@@ -1011,7 +1108,9 @@ export const BattleField: React.FC = () => {
   const displayedPreviewCard = previewCostDisplay?.card || previewCard;
   const previewEffectiveColors = displayedPreviewCard ? getEffectiveCardColors(displayedPreviewCard) : [];
 
-  const pendingQuery = game?.pendingQuery;
+  const displayedPendingQuery = game?.pendingQuery || queryHandoff?.query || null;
+  const isQueryHandoffWaiting = !!queryHandoff && !game?.pendingQuery;
+  const pendingQuery = displayedPendingQuery;
   const normalizedPendingQueryType = pendingQuery?.type?.replace(/-/g, '_').toUpperCase();
   const rawPendingQueryOptions = Array.isArray(pendingQuery?.options) ? pendingQuery.options : [];
   const isSelectCardPendingQuery = normalizedPendingQueryType === 'SELECT_CARD';
@@ -1690,12 +1789,14 @@ export const BattleField: React.FC = () => {
   };
 
   const handleQuerySubmit = async () => {
-    if (!gameId || !game?.pendingQuery) return;
-    setIsPopupHidden(true);
+    if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+    const submittingQuery = displayedPendingQuery;
+    setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
+    setIsPopupHidden(false);
 
     if (import.meta.env.ENABLE_PERF_LOGS === '1') {
-      console.log(`[Query] Submitting choice for ${game.pendingQuery.type}:`, {
-        id: game.pendingQuery.id,
+      console.log(`[Query] Submitting choice for ${submittingQuery.type}:`, {
+        id: submittingQuery.id,
         selectedIds: selectedQueryIds,
         payment: paymentSelection
       });
@@ -1704,7 +1805,7 @@ export const BattleField: React.FC = () => {
     try {
       let selections = selectedQueryIds;
       // Normalize type check to handle potential variations
-      const queryType = game.pendingQuery.type?.replace(/-/g, '_').toUpperCase();
+      const queryType = submittingQuery.type?.replace(/-/g, '_').toUpperCase();
 
       if (queryType === 'SELECT_PAYMENT') {
         const mappedPayment = {
@@ -1715,7 +1816,7 @@ export const BattleField: React.FC = () => {
         selections = [JSON.stringify(mappedPayment)];
       }
 
-      await GameService.submitQueryChoice(gameId, game.pendingQuery.id, selections);
+      await GameService.submitQueryChoice(gameId, submittingQuery.id, selections);
       setSelectedQueryIds([]);
     } catch (error: any) {
       console.error('[Query] Submission error:', error);
@@ -3188,10 +3289,10 @@ export const BattleField: React.FC = () => {
 
       {/* Standardized My Pending Query Popup */}
       <StandardPopup
-        key={`${game.pendingQuery?.id || 'no-query'}-${pendingQueryPopupMode}`}
-        isOpen={!!(!isSpectator && game.pendingQuery && game.pendingQuery.playerUid === myUid && (!battleAnimationsEnabled || !battleAnimations.events.some(e => e.type === 'card-played')))}
-        title={game.pendingQuery?.title || ''}
-        description={game.pendingQuery?.description || ''}
+        key={`${displayedPendingQuery?.id || 'no-query'}-${pendingQueryPopupMode}`}
+        isOpen={!!(!isSpectator && displayedPendingQuery && displayedPendingQuery.playerUid === myUid)}
+        title={isQueryHandoffWaiting ? '处理中...' : (displayedPendingQuery?.title || '')}
+        description={isQueryHandoffWaiting ? '正在连续处理下一段效果选择' : (displayedPendingQuery?.description || '')}
         mode={pendingQueryPopupMode}
         options={
           normalizedPendingQueryType === 'ASK_TRIGGER' || normalizedPendingQueryType === 'SELECT_CHOICE' || normalizedPendingQueryType === 'SELECT_CARD'
@@ -3224,8 +3325,8 @@ export const BattleField: React.FC = () => {
             })
         )}
         selectedIds={selectedQueryIds}
-        minSelections={game.pendingQuery?.minSelections}
-        maxSelections={game.pendingQuery?.maxSelections}
+        minSelections={displayedPendingQuery?.minSelections}
+        maxSelections={displayedPendingQuery?.maxSelections}
         onCardClick={(card) => {
           const optionId = card.gamecardId || card.id;
           const option = pendingQueryOptions.find(o => getPendingOptionId(o) === optionId);
@@ -3234,46 +3335,52 @@ export const BattleField: React.FC = () => {
           setSelectedQueryIds(prev => {
             const alreadySelected = prev.includes(optionId);
             if (alreadySelected) return prev.filter(id => id !== optionId);
-            if (prev.length >= (game.pendingQuery?.maxSelections || 1)) {
-              if (game.pendingQuery?.maxSelections === 1) return [optionId];
+            if (prev.length >= (displayedPendingQuery?.maxSelections || 1)) {
+              if (displayedPendingQuery?.maxSelections === 1) return [optionId];
               return prev;
             }
             return [...prev, optionId];
           });
         }}
         onSelectionComplete={handleQuerySubmit}
-        paymentCost={game.pendingQuery?.paymentCost}
+        paymentCost={displayedPendingQuery?.paymentCost}
         paymentCurrent={
-          (game.pendingQuery?.paymentCost || 0) > 0
-            ? formatSelectedPaymentValue(game.pendingQuery?.paymentCost || 0, game.pendingQuery?.paymentColor)
+          (displayedPendingQuery?.paymentCost || 0) > 0
+            ? formatSelectedPaymentValue(displayedPendingQuery?.paymentCost || 0, displayedPendingQuery?.paymentColor)
             : paymentSelection.erosionFrontIds.length
         }
         squarePanel={normalizedPendingQueryType === 'ASK_TRIGGER'}
-        confirmText={pendingQueryPopupMode === 'double_selection' ? binaryConfirmText : querySubmitLabel}
-        cancelText={binaryCancelText}
+        confirmText={isQueryHandoffWaiting ? '处理中' : (pendingQueryPopupMode === 'double_selection' ? binaryConfirmText : querySubmitLabel)}
+        cancelText={isQueryHandoffWaiting ? '处理中' : binaryCancelText}
+        confirmDisabled={isQueryHandoffWaiting}
         onConfirm={() => {
-          setIsPopupHidden(true);
-          GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryConfirmOption) || 'YES']);
+          if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+          const submittingQuery = displayedPendingQuery;
+          setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
+          GameService.submitQueryChoice(gameId, submittingQuery.id, [getPendingOptionId(binaryConfirmOption) || 'YES']);
         }}
         onCancel={() => {
-          setIsPopupHidden(true);
-          GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryCancelOption) || 'NO']);
+          if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+          const submittingQuery = displayedPendingQuery;
+          setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
+          GameService.submitQueryChoice(gameId, submittingQuery.id, [getPendingOptionId(binaryCancelOption) || 'NO']);
         }}
         cardBackUrl={cardBackUrl}
         onHide={() => setIsPopupHidden(true)}
         isHidden={isPopupHidden}
+        instant
       >
-        {normalizedPendingQueryType === 'SELECT_PAYMENT' && (
+        {normalizedPendingQueryType === 'SELECT_PAYMENT' && !isQueryHandoffWaiting && displayedPendingQuery && (
           <div className="flex flex-col gap-8 w-full max-w-4xl max-h-[50vh] overflow-y-auto p-4 custom-scrollbar">
             {/* Hand Replacement Section */}
-            {(game.pendingQuery!.paymentCost || 0) > 0 && getHandPaymentOptions(game.pendingQuery?.paymentColor, game.pendingQuery?.paymentCost).length > 0 && (
+            {(displayedPendingQuery.paymentCost || 0) > 0 && getHandPaymentOptions(displayedPendingQuery.paymentColor, displayedPendingQuery.paymentCost).length > 0 && (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2 text-blue-400 font-black uppercase italic tracking-widest text-sm">
                   <Zap className="w-4 h-4" />
                   手牌代替支付
                 </div>
                 <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
-                  {getHandPaymentOptions(game.pendingQuery?.paymentColor, game.pendingQuery?.paymentCost).map((card, i) => {
+                  {getHandPaymentOptions(displayedPendingQuery.paymentColor, displayedPendingQuery.paymentCost).map((card, i) => {
                     const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
                     return (
                       <motion.div
@@ -3300,7 +3407,7 @@ export const BattleField: React.FC = () => {
             )}
 
             {/* Exhaust Section */}
-            {(game.pendingQuery!.paymentCost || 0) > 0 && me.unitZone.some(c => canCardBeExhausted(c) && !getPaymentExcludedExhaustIds().includes(c.gamecardId)) && (
+            {(displayedPendingQuery.paymentCost || 0) > 0 && me.unitZone.some(c => canCardBeExhausted(c) && !getPaymentExcludedExhaustIds().includes(c.gamecardId)) && (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
                   <Sword className="w-4 h-4" />
@@ -3309,7 +3416,7 @@ export const BattleField: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
                   {me.unitZone.filter(c => canCardBeExhausted(c) && !getPaymentExcludedExhaustIds().includes(c!.gamecardId)).map((card, i) => {
                     const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
-                    const accessValue = getAccessPaymentLabel(card, game.pendingQuery?.paymentColor);
+                    const accessValue = getAccessPaymentLabel(card, displayedPendingQuery.paymentColor);
                     return (
                       <motion.div
                         key={`${card!.gamecardId}-${i}`}
@@ -3335,7 +3442,7 @@ export const BattleField: React.FC = () => {
             )}
 
             {/* Erosion Front Section (Horizontal Units) - Only for negative costs */}
-            {(game.pendingQuery!.paymentCost || 0) < 0 && me.erosionFront.some(c => c && c.displayState === 'FRONT_UPRIGHT') && (
+            {(displayedPendingQuery.paymentCost || 0) < 0 && me.erosionFront.some(c => c && c.displayState === 'FRONT_UPRIGHT') && (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2 text-red-400 font-black uppercase italic tracking-widest text-sm">
                   <Layers className="w-4 h-4" />

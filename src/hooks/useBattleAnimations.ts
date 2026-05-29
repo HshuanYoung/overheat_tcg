@@ -80,7 +80,7 @@ function getAnchorForZone(uid: string, zone: string, slotIndex?: number): string
   return `player:${uid}:${zone.toLowerCase()}`;
 }
 
-export function useBattleAnimations(game: GameState | null, perspectiveUid?: string | null) {
+export function useBattleAnimations(game: GameState | null, perspectiveUid?: string | null, isSpectator = false, cardBackUrl?: string) {
   const [events, setEvents] = useState<BattleAnimationEvent[]>([]);
   const seenLogIdsRef = useRef<Set<string>>(new Set());
   const previousGoddessRef = useRef<Record<string, boolean>>({});
@@ -90,6 +90,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
   const previousCounterLengthRef = useRef(0);
   const previousResolvingStackRef = useRef(false);
   const previousCardLocationsRef = useRef<Record<string, { zone: string; ownerUid: string; card: Card; slotIndex?: number }>>({});
+  const seenAnimationHintsRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
   const maxChainLengthRef = useRef(0);
 
@@ -119,6 +120,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       previousCounterLengthRef.current = 0;
       previousResolvingStackRef.current = false;
       previousCardLocationsRef.current = {};
+      seenAnimationHintsRef.current.clear();
       initializedRef.current = false;
       maxChainLengthRef.current = 0;
       return;
@@ -142,10 +144,47 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       previousResolvingStackRef.current = !!game.isResolvingStack;
       initializedRef.current = true;
       maxChainLengthRef.current = game.counterStack?.length || 0;
+      if (game.animationHint?.id) {
+        seenAnimationHintsRef.current.add(game.animationHint.id);
+      }
       return;
     }
 
     const nextEvents: BattleAnimationEvent[] = [];
+    if (game.animationHint?.type === 'DRAW_CARD' && !seenAnimationHintsRef.current.has(game.animationHint.id)) {
+      seenAnimationHintsRef.current.add(game.animationHint.id);
+      const ownerUid = game.animationHint.playerUid;
+      const isNormalDrawPhase = game.phase === 'DRAW' && ownerUid === game.playerIds[game.currentTurnPlayer];
+      const revealTo = isNormalDrawPhase
+        ? (!isSpectator && perspectiveUid && ownerUid === perspectiveUid ? 'owner' : 'hidden')
+        : (game.animationHint.revealTo || 'all');
+      const shouldRevealCard = revealTo !== 'hidden';
+      const hintedCard = shouldRevealCard
+        ? (game.animationHint.card || findCardByGamecardId(game, game.animationHint.cardId))
+        : undefined;
+      console.log('[BattleAnimationHint] enqueue draw animation', {
+        hintId: game.animationHint.id,
+        phase: game.phase,
+        ownerUid,
+        revealTo,
+        hasCard: !!hintedCard
+      });
+      nextEvents.push({
+        id: `card_draw_hint_${game.animationHint.id}`,
+        type: 'card-draw',
+        side: sideForUid(ownerUid, perspectiveUid, game),
+        title: isNormalDrawPhase ? '抽牌' : '卡组加入手牌',
+        cardName: hintedCard?.fullName || hintedCard?.name || '抽到的卡',
+        cardImageUrl: hintedCard ? getCardPreviewImage(hintedCard) : undefined,
+        sourceCardId: game.animationHint.cardId,
+        playerUid: ownerUid,
+        sourceAnchor: getAnchorForZone(ownerUid, 'DECK'),
+        targetAnchor: getAnchorForZone(ownerUid, 'HAND'),
+        targetZone: 'HAND',
+        revealTo,
+        cardBackUrl
+      });
+    }
     let isPaymentFeeState = false;
     (game.logs || []).forEach((log, index) => {
       const entry = normalizeBattleLogEntry(log, game, index);
@@ -177,11 +216,19 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
         );
         if (isAlreadyQueued) return;
 
+        const isFromPlay = sourceZone === 'PLAY';
+        const isFromErosion = sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK';
+        const isFromGrave = sourceZone === 'GRAVE';
+        const isFromExile = sourceZone === 'EXILE';
+        const isFromHand = sourceZone === 'HAND';
+        const isFromDeck = sourceZone === 'DECK';
+        const isStoryLeavingPlay = isFromPlay && (targetZone === 'GRAVE' || targetZone === 'EXILE');
         const isToBattlefield = targetZone === 'UNIT' || targetZone === 'ITEM' || targetZone === 'PLAY';
+        const shouldAnimateCardMove = isToBattlefield || isStoryLeavingPlay;
 
         // Exclusions:
         // a. Payment fees (only apply if the card is NOT entering the battlefield)
-        if (isPaymentFeeState && !isToBattlefield) return;
+        if (isPaymentFeeState && !shouldAnimateCardMove) return;
 
         // c. Cards sent from the erosion zone to the cemetery during the erosion phase
         const isErosionPhaseGraveMove = game.phase === 'EROSION' && (sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK') && targetZone === 'GRAVE';
@@ -190,15 +237,8 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
         // d. Addition to hand from Play, Erosion, Grave, Exile (which are non-DECK additions)
         if (targetZone === 'HAND' && sourceZone !== 'DECK') return;
 
-        const isFromPlay = sourceZone === 'PLAY';
-        const isFromErosion = sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK';
-        const isFromGrave = sourceZone === 'GRAVE';
-        const isFromExile = sourceZone === 'EXILE';
-        const isFromHand = sourceZone === 'HAND';
-        const isFromDeck = sourceZone === 'DECK';
-
         // Bug 2: Only animate cards entering battlefield
-        if (isToBattlefield) {
+        if (shouldAnimateCardMove) {
           let moveTitle = '卡牌移动';
           if (isFromPlay) moveTitle = '打出区移动';
           else if (isFromErosion) moveTitle = '侵蚀区移动';
@@ -226,7 +266,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
         else if (isFromDeck && (targetZone === 'EROSION_FRONT' || targetZone === 'EROSION_BACK')) {
           nextEvents.push({
             id: `erosion_flip_${gamecardId}_${Date.now()}_${Math.random()}`,
-            type: 'erosion-flip' as any,
+            type: 'erosion-flip',
             side: sideForUid(currentLoc.ownerUid, perspectiveUid, game),
             title: '侵蚀翻牌',
             cardName: currentLoc.card.fullName,
@@ -234,22 +274,33 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
             sourceCardId: gamecardId,
             playerUid: currentLoc.ownerUid,
             sourceAnchor: getAnchorForZone(prevLoc.ownerUid, prevLoc.zone, prevLoc.slotIndex),
-            targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex)
+            targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex),
+            targetZone
           });
         }
         // Bug 5: Card Draw
         else if (isFromDeck && targetZone === 'HAND') {
+          if (game.phase === 'MULLIGAN') return;
+          if (game.animationHint?.type === 'DRAW_CARD' && game.animationHint.cardId === gamecardId) return;
+          const isNormalDrawPhase = game.phase === 'DRAW' && currentLoc.ownerUid === game.playerIds[game.currentTurnPlayer];
+            const revealTo = isNormalDrawPhase
+              ? (!isSpectator && perspectiveUid && currentLoc.ownerUid === perspectiveUid ? 'owner' : 'hidden')
+              : 'all';
+          const shouldRevealCard = revealTo !== 'hidden';
           nextEvents.push({
             id: `card_draw_${gamecardId}_${Date.now()}_${Math.random()}`,
-            type: 'card-draw' as any,
+            type: 'card-draw',
             side: sideForUid(currentLoc.ownerUid, perspectiveUid, game),
-            title: '抽牌',
-            cardName: currentLoc.card.fullName,
-            cardImageUrl: getCardPreviewImage(currentLoc.card),
+            title: isNormalDrawPhase ? '抽牌' : '卡组加入手牌',
+            cardName: shouldRevealCard ? currentLoc.card.fullName : '抽到的卡',
+            cardImageUrl: shouldRevealCard ? getCardPreviewImage(currentLoc.card) : undefined,
             sourceCardId: gamecardId,
             playerUid: currentLoc.ownerUid,
             sourceAnchor: getAnchorForZone(prevLoc.ownerUid, prevLoc.zone, prevLoc.slotIndex),
-            targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex)
+            targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex),
+            targetZone,
+            revealTo,
+            cardBackUrl
           });
         }
       }
@@ -277,7 +328,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
             rarity: topPlayedCard.rarity,
             playerUid: player.uid,
             sourceAnchor: anchor(player.uid, 'hand'),
-            targetAnchor: targetAnchorForCard(player.uid, topPlayedCard)
+            targetAnchor: anchor(player.uid, 'play')
           });
         }
       }
@@ -358,7 +409,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
     previousWinnerRef.current = game.winnerId;
 
     enqueue(nextEvents);
-  }, [enqueue, game, perspectiveUid, playersByName]);
+  }, [enqueue, game, perspectiveUid, playersByName, isSpectator, cardBackUrl]);
 
   return { events, dismiss };
 }
@@ -387,7 +438,7 @@ function animationFromLog(
       rarity: sourceCardDetails?.rarity,
       playerUid: actorUid,
       sourceAnchor: actorUid ? anchor(actorUid, 'hand') : undefined,
-      targetAnchor: actorUid && sourceCardDetails ? targetAnchorForCard(actorUid, sourceCardDetails) : actorUid ? anchor(actorUid, 'play') : undefined
+      targetAnchor: actorUid ? anchor(actorUid, 'play') : undefined
     });
   }
 
@@ -403,10 +454,9 @@ function animationFromLog(
     });
   }
 
-  if (log.category === 'DAMAGE' || text.includes('受到了') || text.includes('造成了')) {
+  if (log.category === 'DAMAGE' || text.includes('受到了')) {
     const damagedUid =
       String(log.metadata?.defenderId || '') ||
-      uidFromText(text.match(/对\s+(.+?)\s+造成了/)?.[1] || '', playersByName) ||
       uidFromText(text, playersByName);
     return buildEvent(log, 'damage', sideForUid(damagedUid || actorUid, perspectiveUid, game), '受到伤害', {
       amount: parseDamageAmount(text, log.metadata),
@@ -462,12 +512,6 @@ function anchor(uid: string, zone: string) {
   return `player:${uid}:${zone}`;
 }
 
-function targetAnchorForCard(uid: string, card: Card) {
-  if (card.type === 'UNIT') return anchor(uid, 'unit-row');
-  if (card.type === 'ITEM') return anchor(uid, 'item');
-  return anchor(uid, 'play');
-}
-
 function findCardByLogRef(game: GameState, gamecardId?: string, cardId?: string, cardName?: string) {
   const candidates: Card[] = [];
   Object.values(game.players || {}).forEach(player => {
@@ -489,6 +533,11 @@ function findCardByLogRef(game: GameState, gamecardId?: string, cardId?: string,
   return candidates.find(card => gamecardId && card.gamecardId === gamecardId) ||
     candidates.find(card => cardId && card.id === cardId) ||
     candidates.find(card => cardName && card.fullName === cardName);
+}
+
+function findCardByGamecardId(game: GameState, gamecardId?: string) {
+  if (!gamecardId) return undefined;
+  return findCardByLogRef(game, gamecardId);
 }
 
 function processingItemKey(game: GameState) {

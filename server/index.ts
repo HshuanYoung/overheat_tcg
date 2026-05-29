@@ -839,46 +839,79 @@ function decideFirstPlayerChoiceTimeout(gameState: any) {
     chooseFirstPlayer(gameState, chooserUid, opponentUid);
 }
 
+const MULLIGAN_REVEAL_TOTAL_MS = 3600;
+
+async function finalizeMulliganReveal(gameId: string, expectedStartedAt?: number): Promise<boolean> {
+    const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
+    if (rows.length === 0) return false;
+
+    const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
+    ServerGameService.hydrateGameState(gameState);
+
+    const startedAt = Number(gameState.mulliganRevealStartedAt || 0);
+    const allDone = Object.values(gameState.players || {}).every((p: any) => p.mulliganDone);
+    if (
+        gameState.phase !== 'MULLIGAN' ||
+        !startedAt ||
+        (expectedStartedAt !== undefined && startedAt !== expectedStartedAt) ||
+        Date.now() - startedAt < MULLIGAN_REVEAL_TOTAL_MS ||
+        !allDone
+    ) {
+        console.log('[MulliganFinalize] skipped', {
+            gameId,
+            phase: gameState.phase,
+            startedAt,
+            expectedStartedAt,
+            elapsed: startedAt ? Date.now() - startedAt : 0,
+            allDone
+        });
+        return false;
+    }
+
+    gameState.phase = 'START';
+    gameState.turnCount = 1;
+    delete gameState.mulliganRevealStartedAt;
+
+    const currentUid = gameState.playerIds[gameState.currentTurnPlayer];
+    gameState.playerIds.forEach((uid: string) => {
+        gameState.players[uid].isTurn = (uid === currentUid);
+        if (gameState.players[uid]?.mulliganReveal) {
+            delete gameState.players[uid].mulliganReveal;
+        }
+    });
+
+    const firstPlayerName = gameState.players[currentUid]?.displayName || '玩家';
+    const playerNames = gameState.playerIds.map((uid: string) => gameState.players[uid]?.displayName || '玩家');
+    addBattleLog(gameState, {
+        category: 'SYSTEM',
+        actorUid: currentUid,
+        actorName: firstPlayerName,
+        text: `对战开始：${playerNames[0]} vs ${playerNames[1]}，${firstPlayerName} 先攻。`
+    });
+    console.log('[MulliganFinalize] advancing to battle', {
+        gameId,
+        currentUid,
+        firstPlayerName
+    });
+    await advancePhase(gameState, gameId, currentUid);
+    return true;
+}
+
 async function finishMulliganAfterReveal(gameId: string, expectedStartedAt: number) {
+    console.log('[MulliganFinalize] scheduled', {
+        gameId,
+        expectedStartedAt,
+        delayMs: MULLIGAN_REVEAL_TOTAL_MS
+    });
     setTimeout(async () => {
         await withGameLock(gameId, async () => {
-            const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
-            if (rows.length === 0) return;
-
-            const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
-            ServerGameService.hydrateGameState(gameState);
-
-            if (
-                gameState.phase !== 'MULLIGAN' ||
-                gameState.mulliganRevealStartedAt !== expectedStartedAt ||
-                !Object.values(gameState.players || {}).every((p: any) => p.mulliganDone)
-            ) {
-                return;
-            }
-
-            gameState.phase = 'START';
-            gameState.turnCount = 1;
-            delete gameState.mulliganRevealStartedAt;
-
-            const currentUid = gameState.playerIds[gameState.currentTurnPlayer];
-            gameState.playerIds.forEach((uid: string) => {
-                gameState.players[uid].isTurn = (uid === currentUid);
-                if (gameState.players[uid]?.mulliganReveal) {
-                    delete gameState.players[uid].mulliganReveal;
-                }
+            console.log('[MulliganFinalize] timeout fired', {
+                gameId,
+                expectedStartedAt
             });
-
-            const firstPlayerName = gameState.players[currentUid]?.displayName || '玩家';
-            const playerNames = gameState.playerIds.map((uid: string) => gameState.players[uid]?.displayName || '玩家');
-            addBattleLog(gameState, {
-                category: 'SYSTEM',
-                actorUid: currentUid,
-                actorName: firstPlayerName,
-                text: `对战开始：${playerNames[0]} vs ${playerNames[1]}，${firstPlayerName} 先攻。`
-            });
-            await advancePhase(gameState, gameId, currentUid);
+            await finalizeMulliganReveal(gameId, expectedStartedAt);
         });
-    }, 3600);
+    }, MULLIGAN_REVEAL_TOTAL_MS);
 }
 
 async function saveMatchLog(gameState: any, gameId?: string): Promise<boolean> {
@@ -945,6 +978,10 @@ type SyncStateOptions = {
     persist?: boolean;
 };
 
+function cloneStateForEmit(gameState: any) {
+    return JSON.parse(JSON.stringify(gameState));
+}
+
 async function syncAndSaveState(gameId: string, gameState: any, options: SyncStateOptions = {}) {
     if (!gameState) return;
     const totalStart = process.hrtime.bigint();
@@ -979,7 +1016,17 @@ async function syncAndSaveState(gameId: string, gameState: any, options: SyncSta
 
     // 3. Emit full state to clients (they need logs for display)
     const emitStart = process.hrtime.bigint();
-    io.to(gameId).emit('gameStateUpdate', gameState);
+    const emitState = cloneStateForEmit(gameState);
+    if (emitState.animationHint) {
+        console.log('[StateEmit] emitting animation hint', {
+            gameId,
+            source: options.source || 'unknown',
+            phase: emitState.phase,
+            animationHint: emitState.animationHint.id,
+            animationUntil: emitState.animationUntil
+        });
+    }
+    io.to(gameId).emit('gameStateUpdate', emitState);
     timings.emitMs = elapsedMs(emitStart);
 
     if (options.persist === false) {
@@ -1121,7 +1168,7 @@ setInterval(async () => {
             ? ` OR id IN (${activeRoomIds.map(() => '?').join(',')})`
             : '';
         const games = await pool.query(
-            `SELECT id FROM games WHERE status = 0 AND (updated_at IS NULL OR updated_at >= ?${activeRoomParams})`,
+            `SELECT id FROM games WHERE (status = 0 AND (updated_at IS NULL OR updated_at >= ?))${activeRoomParams}`,
             [Date.now() - ACTIVE_GAME_SCAN_WINDOW_MS, ...activeRoomIds]
         );
         for (const row of games) {
@@ -1154,7 +1201,45 @@ setInterval(async () => {
                         stateChanged = true;
                     }
                 } else if (gameState.phase === 'MULLIGAN') {
-                    // Mulligan countdown is visual-only here; player choices still drive state transitions.
+                    const revealStartedAt = Number(gameState.mulliganRevealStartedAt || 0);
+                    const allMulliganDone = Object.values(gameState.players || {}).every((p: any) => p.mulliganDone);
+                    if (revealStartedAt && allMulliganDone && now - revealStartedAt >= MULLIGAN_REVEAL_TOTAL_MS) {
+                        await finalizeMulliganReveal(gameId, revealStartedAt);
+                        return;
+                    }
+                } else if (gameState.phase === 'DRAW' && gameState.drawAnimationResume && !gameState.pendingQuery) {
+                    const resumeAt = Number(gameState.drawAnimationResume.resumeAt || 0);
+                    if (!gameState.drawAnimationResume.visualStateEmitted) {
+                        gameState.drawAnimationResume.visualStateEmitted = true;
+                        await syncAndSaveState(gameId, gameState, { source: 'drawAnimationResume:visualFrame' });
+                        return;
+                    }
+                    if (resumeAt && now >= resumeAt) {
+                        const playerUid = gameState.drawAnimationResume.playerUid || gameState.playerIds[gameState.currentTurnPlayer];
+                        const player = gameState.players[playerUid];
+                        if (!player) {
+                            delete gameState.drawAnimationResume;
+                            delete gameState.animationHint;
+                            delete gameState.animationUntil;
+                            await syncAndSaveState(gameId, gameState, { source: 'drawAnimationResume:missingPlayer' });
+                            return;
+                        }
+
+                        console.log('[DrawPhaseAnimation] resuming draw phase after fallback', {
+                            gameId,
+                            playerUid,
+                            resumeAt,
+                            animationHint: gameState.animationHint?.id
+                        });
+                        delete gameState.drawAnimationResume;
+                        delete gameState.animationHint;
+                        delete gameState.animationUntil;
+                        gameState.phase = 'EROSION';
+                        await ServerGameService.executeErosionPhase(gameState, player);
+                        await syncAndSaveState(gameId, gameState, { source: 'drawAnimationResume' });
+                        triggerBotIfNeeded(gameState, gameId);
+                        return;
+                    }
                 } else {
                     activePlayerUid = getActiveTimerPlayerUid(gameState);
                 }
@@ -3933,7 +4018,7 @@ io.on('connection', (socket) => {
                         }
                     } catch (err: any) {
                         socket.emit('error', err.message || '无法加入该席位');
-                        socket.emit('gameStateUpdate', gameState);
+                        socket.emit('gameStateUpdate', cloneStateForEmit(gameState));
                         return;
                     }
                 }
@@ -4019,7 +4104,7 @@ io.on('connection', (socket) => {
                 }
 
                 // Always emit current state to the joining socket so they don't get stuck on "Syncing Battlefield"
-                socket.emit('gameStateUpdate', gameState);
+                socket.emit('gameStateUpdate', cloneStateForEmit(gameState));
             });
         } catch (err) {
             console.error('[Socket] joinGame exception:', err);
@@ -4091,9 +4176,40 @@ io.on('connection', (socket) => {
 
                 const executeStart = process.hrtime.bigint();
                 if (action === 'RPS_CHOICE') {
+                    const previousPhase = gameState.phase;
                     submitRpsChoice(gameState, myUid, payload?.choice);
+                    console.log('[PregameFlow] action synced', {
+                        gameId,
+                        action,
+                        playerUid: myUid,
+                        previousPhase,
+                        nextPhase: gameState.phase,
+                        broadcast: true
+                    });
+                    actionTimings.executeActionMs = elapsedMs(executeStart);
+                    await syncAndSaveState(gameId, gameState, {
+                        recalc: false,
+                        source: action
+                    });
+                    return;
                 } else if (action === 'CHOOSE_FIRST_PLAYER') {
+                    const previousPhase = gameState.phase;
                     chooseFirstPlayer(gameState, myUid, payload?.firstPlayerUid);
+                    console.log('[PregameFlow] action synced', {
+                        gameId,
+                        action,
+                        playerUid: myUid,
+                        previousPhase,
+                        nextPhase: gameState.phase,
+                        firstPlayerUid: payload?.firstPlayerUid,
+                        broadcast: true
+                    });
+                    actionTimings.executeActionMs = elapsedMs(executeStart);
+                    await syncAndSaveState(gameId, gameState, {
+                        recalc: false,
+                        source: action
+                    });
+                    return;
                 } else if (action === 'MULLIGAN') {
                     if (gameState.phase !== 'MULLIGAN') return;
                     const selectedIds: string[] = payload || [];

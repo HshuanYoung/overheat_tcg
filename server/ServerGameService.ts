@@ -3781,14 +3781,14 @@ export const ServerGameService = {
       if (currentSelections[0] !== 'YES' || !sourceCard) {
         gameState.logs.push(`[抽牌阶段] ${gameState.players[playerUid].displayName} 选择通常抽卡。`);
         (gameState.players[playerUid] as any).skipDrawReplacementOnce = gameState.turnCount;
-        await ServerGameService.executeDrawPhase(gameState, gameState.players[playerUid]);
+        await ServerGameService.executeDrawPhase(gameState, gameState.players[playerUid], onUpdate);
         return gameState;
       }
 
       const player = gameState.players[playerUid];
       const candidates = player.grave.filter(Boolean) as Card[];
       if (candidates.length < 2) {
-        await ServerGameService.executeDrawPhase(gameState, player);
+        await ServerGameService.executeDrawPhase(gameState, player, onUpdate);
         return gameState;
       }
 
@@ -3825,6 +3825,11 @@ export const ServerGameService = {
         }
       });
       gameState.logs.push(`[${sourceCard?.fullName || '替代抽卡'}] 代替通常抽卡，将2张墓地卡放置到卡组底。`);
+      if (onUpdate) {
+        gameState.animationUntil = Date.now() + 1200;
+        await onUpdate(gameState);
+        await new Promise(resolve => setTimeout(resolve, 1200));
+      }
       gameState.phase = 'EROSION';
       await ServerGameService.executeErosionPhase(gameState, player);
       return gameState;
@@ -6894,13 +6899,18 @@ export const ServerGameService = {
       return;
     }
 
+    let drewCard = false;
+    let drawnCard: Card | undefined;
+
     // Check effects at DRAW phase (TODO)
     if (player.deck.length > 0) {
       const card = player.deck.pop();
       if (card) {
         card.cardlocation = 'HAND';
         player.hand.push(card);
-        gameState.logs.push(`${player.displayName} 鎶戒簡涓€寮犲崱`);
+        drewCard = true;
+        drawnCard = card;
+        gameState.logs.push(`${player.displayName} 抽了一张卡`);
         EventEngine.dispatchEvent(gameState, {
           type: 'CARD_DRAWN',
           playerUid: player.uid,
@@ -6917,10 +6927,67 @@ export const ServerGameService = {
       return; // Stop processing further phases
     }
 
-    if (onUpdate) await onUpdate(gameState);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    if (drewCard) {
+      gameState.animationUntil = Date.now() + 2000;
+      if (drawnCard) {
+        gameState.animationHint = {
+          id: `draw_${player.uid}_${drawnCard.gamecardId}_${Date.now()}`,
+          type: 'DRAW_CARD',
+          playerUid: player.uid,
+          cardId: drawnCard.gamecardId,
+          card: { ...drawnCard },
+          revealTo: 'owner',
+          durationMs: 2000,
+          createdAt: Date.now()
+        };
+      }
+      console.log('[DrawPhaseAnimation] draw visual frame', {
+        gameId: gameState.gameId,
+        phase: gameState.phase,
+        playerUid: player.uid,
+        pendingQuery: !!gameState.pendingQuery,
+        animationUntil: gameState.animationUntil,
+        animationHint: gameState.animationHint?.id
+      });
+      if (onUpdate) {
+        await onUpdate(gameState);
+      } else {
+        console.error('[DrawPhaseAnimation] missing onUpdate; visual frame will be emitted by resume fallback', {
+          gameId: gameState.gameId,
+          phase: gameState.phase,
+          playerUid: player.uid,
+          animationHint: gameState.animationHint?.id
+        });
+      }
+      if (gameState.pendingQuery) {
+        console.log('[DrawPhaseAnimation] pending query opened after draw; waiting before erosion', {
+          gameId: gameState.gameId,
+          playerUid: player.uid,
+          queryId: gameState.pendingQuery.id
+        });
+        return;
+      }
+      if (onUpdate) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } else {
+        gameState.drawAnimationResume = {
+          playerUid: player.uid,
+          resumeAt: gameState.animationUntil || Date.now() + 2000
+        };
+        console.log('[DrawPhaseAnimation] queued resume fallback', {
+          gameId: gameState.gameId,
+          playerUid: player.uid,
+          resumeAt: gameState.drawAnimationResume.resumeAt,
+          animationHint: gameState.animationHint?.id
+        });
+        return;
+      }
+    }
 
     // Automatically move to EROSION phase
+    delete gameState.drawAnimationResume;
+    delete gameState.animationHint;
+    delete gameState.animationUntil;
     gameState.phase = 'EROSION';
     await ServerGameService.executeErosionPhase(gameState, player);
   },
@@ -8791,7 +8858,7 @@ export const ServerGameService = {
 
     // Handle Shenyi Choice (Bot chooses to confirm)
     if (gameState.phase === 'SHENYI_CHOICE' && gameState.priorityPlayerId === playerUid) {
-      await ServerGameService.advancePhase(gameState, 'CONFIRM_SHENYI', playerUid);
+      await ServerGameService.advancePhase(gameState, 'CONFIRM_SHENYI', playerUid, onUpdate);
       return;
     }
 
@@ -8962,7 +9029,7 @@ export const ServerGameService = {
             askConfront: gameState.battleState.askConfront,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid, onUpdate);
         return;
       }
     }
@@ -9136,7 +9203,7 @@ export const ServerGameService = {
             forcedAttack: true,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
         return;
       }
 
@@ -9156,7 +9223,7 @@ export const ServerGameService = {
         });
         delete (bot as any).lastBotPlayFailure;
         delete (bot as any).botHeldUnfavorableAttackTurn;
-        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid, onUpdate);
         return;
       }
 
@@ -9183,7 +9250,7 @@ export const ServerGameService = {
               score: scoreAttackCandidate(gameState, bot, card, profile),
             })),
           });
-          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
           return;
         }
 
@@ -9198,7 +9265,7 @@ export const ServerGameService = {
           },
         });
         delete (bot as any).lastBotPlayFailure;
-        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid, onUpdate);
         return;
       }
 
@@ -9230,7 +9297,7 @@ export const ServerGameService = {
               score: scoreAttackCandidate(gameState, bot, card, profile),
             })),
           });
-          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
           return;
         }
       }
@@ -9264,7 +9331,7 @@ export const ServerGameService = {
               score: scoreAttackCandidate(gameState, bot, card, profile),
             })),
           });
-          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
           return;
         }
       }
@@ -9598,7 +9665,7 @@ export const ServerGameService = {
             score: scoreAttackCandidate(gameState, bot, card, profile),
           })),
         });
-        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
       } else {
         // console.log('[Bot] Ending Turn');
         ServerGameService.recordAiDecision(gameState, playerUid, {
@@ -9617,7 +9684,7 @@ export const ServerGameService = {
           },
         });
         delete (bot as any).lastBotPlayFailure;
-        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid, onUpdate);
       }
       return;
     }
@@ -9875,7 +9942,7 @@ export const ServerGameService = {
             planMode: turnPlan?.mode,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'RETURN_MAIN', playerUid);
+        await ServerGameService.advancePhase(gameState, 'RETURN_MAIN', playerUid, onUpdate);
       }
       return;
     }
@@ -9903,7 +9970,7 @@ export const ServerGameService = {
             attackers: gameState.battleState?.attackers?.length || 0,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'PROPOSE_DAMAGE_CALCULATION', playerUid);
+        await ServerGameService.advancePhase(gameState, 'PROPOSE_DAMAGE_CALCULATION', playerUid, onUpdate);
       } else if (gameState.battleState.askConfront === 'ASKING_TURN_PLAYER') {
         // Player declined, bot now asked if it wants to counter? 
         // Bot usually just declines to get to resolution.
@@ -9916,7 +9983,7 @@ export const ServerGameService = {
             askConfront: gameState.battleState.askConfront,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid, onUpdate);
       }
       return;
     }

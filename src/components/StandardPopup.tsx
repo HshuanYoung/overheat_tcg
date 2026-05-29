@@ -420,31 +420,31 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 1 }}
+        animate={{ opacity: isHidden ? 0 : 1 }}
         exit={{ opacity: 0 }}
-        transition={(instant || isHidden) ? { duration: 0 } : undefined}
+        transition={{ duration: 0 }}
         className={cn(
           "fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 md:p-8",
-          (instant || isHidden) ? "transition-none" : "transition-all duration-500 ease-in-out",
+          "transition-none",
           isHidden ? "opacity-0 pointer-events-none invisible" : "opacity-100 pointer-events-auto visible"
         )}
         onClick={onClose}
       >
         <motion.div
-          initial={instant ? { scale: 1, opacity: 1, y: 0 } : { scale: 0.9, opacity: 0, y: 20 }}
-          animate={isHidden ? { scale: 0.8, opacity: 0, y: 40 } : { scale: 1, opacity: 1, y: 0 }}
-          exit={instant ? { scale: 1, opacity: 0, y: 0 } : { scale: 0.9, opacity: 0, y: 20 }}
-          transition={(instant || isHidden) ? { duration: 0 } : undefined}
+          initial={{ scale: 1, opacity: 1, y: 0 }}
+          animate={isHidden ? { scale: 1, opacity: 0, y: 0 } : { scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 1, opacity: 0, y: 0 }}
+          transition={{ duration: 0 }}
           className={cn(
             "relative w-full bg-zinc-900/90 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col",
-            (instant || isHidden) ? "transition-none" : "transition-all duration-500 ease-in-out",
+            "transition-none",
             squarePanel
               ? "max-w-[22rem] md:max-w-[24rem] max-h-[90vh]"
               : (mode === 'double_selection' && !children) ? "max-w-md" : "max-w-6xl max-h-[90vh]",
-            isHidden && "scale-95 blur-sm"
+            isHidden && "pointer-events-none"
           )}
           onClick={e => e.stopPropagation()}
         >

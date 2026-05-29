@@ -56,7 +56,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             
             // Broadcast new state to room
                         gameState.gameId = gameId;
-            io.to(gameId).emit('gameStateUpdate', gameState);
+            io.to(gameId).emit('gameStateUpdate', JSON.parse(JSON.stringify(gameState)));
             
         } catch (err: any) {
             // console.error('Game Action Error:', err);

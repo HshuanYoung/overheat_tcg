@@ -5,75 +5,12 @@ import { CardComponent } from './Card';
 import { StandardPopup } from './StandardPopup';
 import { KeywordBadges } from './KeywordBadges';
 import { GameService } from '../services/gameService';
-import { ArrowDown, Shield, Sword, Zap, Flag, BookOpen, Play, X, LogOut, Coins, Sparkles, RefreshCw, Swords } from 'lucide-react';
-import { cn, getCardImageUrl } from '../lib/utils';
+import { ArrowDown, Shield, Sword, Zap, Flag, BookOpen, Play, X, LogOut, Coins, Sparkles } from 'lucide-react';
+import { cn } from '../lib/utils';
 import { getPlayerWealthCount } from '../lib/wealth';
 import { getPlayerOngoingEffects } from '../lib/playerOngoingEffects';
 
 export const AnimatingCardsContext = createContext<Set<string> | undefined>(undefined);
-
-const getPhaseEndLinkVisual = (item: StackItem) => {
-  if (item.nextPhase === 'DAMAGE_CALCULATION') {
-    return {
-      label: '宣言结束战斗自由阶段',
-      Icon: RefreshCw,
-      className: 'from-sky-950 via-cyan-950 to-zinc-950',
-      iconClass: 'text-cyan-200',
-      textClass: 'text-cyan-100'
-    };
-  }
-  if (item.nextPhase === 'DISCARD') {
-    return {
-      label: '宣言进入回合结束阶段',
-      Icon: RefreshCw,
-      className: 'from-amber-950 via-orange-950 to-zinc-950',
-      iconClass: 'text-amber-300',
-      textClass: 'text-amber-100'
-    };
-  }
-  return {
-    label: '阶段宣言',
-    Icon: Play,
-    className: 'from-violet-950 via-zinc-950 to-black',
-    iconClass: 'text-violet-200',
-    textClass: 'text-violet-100'
-  };
-};
-
-const DeclarationLinkIcon: React.FC<{ item: StackItem }> = ({ item }) => {
-  if (item.type === 'ATTACK') {
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-gradient-to-br from-red-950 via-rose-950 to-zinc-950 p-2">
-        <div className="relative flex h-16 w-16 items-center justify-center rounded-full border border-red-300/30 bg-red-500/15 shadow-[0_0_22px_rgba(239,68,68,0.45)] md:h-20 md:w-20">
-          <Swords className="h-9 w-9 text-red-200 md:h-11 md:w-11" />
-          <Sword className="absolute -right-1 -top-1 h-6 w-6 rotate-45 text-orange-200 md:h-7 md:w-7" />
-        </div>
-        <span className="px-1 text-center text-sm font-black leading-tight text-red-100 md:text-base">攻击宣言</span>
-      </div>
-    );
-  }
-
-  if (item.type === 'PHASE_END') {
-    const visual = getPhaseEndLinkVisual(item);
-    const Icon = visual.Icon;
-    return (
-      <div className={cn("flex h-full w-full flex-col items-center justify-center gap-3 bg-gradient-to-br p-2", visual.className)}>
-        <div className="relative flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-white/10 shadow-[0_0_22px_rgba(242,125,38,0.25)] md:h-20 md:w-20">
-          <Icon className={cn("h-9 w-9 md:h-11 md:w-11", visual.iconClass)} />
-        </div>
-        <span className={cn("px-1 text-center text-sm font-black leading-tight md:text-base", visual.textClass)}>
-          {visual.label}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full w-full items-center justify-center">
-      <Zap className="h-6 w-6 text-[#f27d26]" />
-    </div>
-  );
-};
 
 interface PlayFieldProps {
   player: PlayerState;
@@ -922,7 +859,7 @@ const PlayerHalf: React.FC<{
 
 export const PlayField: React.FC<PlayFieldProps> = ({
   player, opponent, game, onCardClick, onPreviewCard, onPlayCard,
-  paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers,
+  paymentSelection, pendingPlayCard, myUid, selectedAttackers,
   selectedDefender, allianceInitiator, timer, cardBackUrl, viewingZone,
   setViewingZone, highlightedCardIds, onShowLogs, onOpenRulebook,
   onSurrender, onPhaseClick, confrontationStrategy, onUpdateStrategy,
@@ -1275,53 +1212,6 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           isSpectator={isSpectator}
         />
       </div>
-
-      {/* Adversarial Chain Panel */}
-      {stack && stack.length > 0 && (
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 z-[150] flex flex-col items-center gap-2 p-2 bg-black/60 backdrop-blur-md border border-white/10 rounded-l-2xl max-h-[90%] overflow-y-auto custom-scrollbar pointer-events-auto">
-          {stack.map((item, index) => (
-            <React.Fragment key={`${item.timestamp}-${index}`}>
-              <div 
-                className="relative group w-32 h-48 md:w-40 md:h-56 rounded-lg overflow-hidden border border-[#f27d26]/50 shadow-[0_0_15px_rgba(242,125,38,0.3)] shrink-0 bg-zinc-900 cursor-pointer transition-transform hover:scale-105" 
-                onClick={() => {
-                  if (item.card) {
-                    onPreviewCard?.(item.card);
-                  } else if (item.attackerIds && item.attackerIds.length > 0) {
-                    // Try to find the attacker card to preview it if it's an attack
-                    const firstAttackerId = item.attackerIds[0];
-                    const findCardInGame = () => {
-                      for (const uid in game.players) {
-                        const p = game.players[uid];
-                        const cardInUnit = p.unitZone?.find(c => c?.gamecardId === firstAttackerId);
-                        if (cardInUnit) return cardInUnit;
-                      }
-                      return null;
-                    };
-                    const card = findCardInGame();
-                    if (card) onPreviewCard?.(card);
-                  }
-                }}
-              >
-                {item.card ? (
-                  <img src={getCardImageUrl(item.card.id, item.card.rarity, false, item.card.availableRarities) || cardBackUrl} alt={item.card.fullName} className="w-full h-full object-cover" draggable={false} />
-                ) : (
-                  <DeclarationLinkIcon item={item} />
-                )}
-                {/* Link Label */}
-                <div className="absolute bottom-1 left-1 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-black tracking-wider text-white border border-white/20">
-                  L{index + 1}
-                </div>
-              </div>
-              {/* Connector Arrow */}
-              {index < stack.length - 1 && (
-                <div className="h-4 w-px bg-white/20 relative">
-                  <div className="absolute bottom-[-2px] left-1/2 -translate-x-1/2 w-2 h-2 border-b-2 border-r-2 border-white/40 rotate-45" />
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

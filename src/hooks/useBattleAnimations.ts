@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BattleLogEntry, Card, GameState } from '../types/game';
+import type { BattleLogEntry, Card, GameState, StackItem } from '../types/game';
 import { battleLogText, normalizeBattleLogEntry } from '../lib/battleLog';
 import { getCardImageUrl } from '../lib/utils';
 import type { BattleAnimationEvent, BattleAnimationType } from '../components/BattleAnimationLayer';
@@ -379,17 +379,21 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
     }
     previousProcessingKeyRef.current = currentProcessingKey;
 
-    // Play confrontation animation whenever the chain increases and is >= 2
+    // Play confrontation animation whenever a new chain link is added.
     const startedLongChain = counterLength > previousCounterLengthRef.current && counterLength >= 2;
-    const startedResolvingLongChain = !previousResolvingStackRef.current && !!game.isResolvingStack && counterLength > 1;
-    if (startedLongChain || startedResolvingLongChain) {
+    if (startedLongChain) {
+      const chainStartIndex = Math.max(0, counterLength - 3);
+      const latestChainItems = (game.counterStack || []).slice(chainStartIndex).map((item, offset) =>
+        stackItemToChainAnimationItem(item, chainStartIndex + offset + 1, game, perspectiveUid)
+      );
       nextEvents.push({
-        id: `confrontation_chain_${counterLength}_${game.counterStack?.[counterLength - 1]?.timestamp || Date.now()}_${startedResolvingLongChain ? 'resolve' : 'build'}`,
+        id: `confrontation_chain_${counterLength}_${game.counterStack?.[counterLength - 1]?.timestamp || Date.now()}_build`,
         type: 'confrontation',
         side: 'neutral',
-        title: startedResolvingLongChain ? '对抗结算' : '对抗连锁',
+        title: '对抗连锁',
         subtitle: `L1-L${counterLength}`,
-        chainLength: counterLength
+        chainLength: counterLength,
+        chainItems: latestChainItems
       });
     }
     previousCounterLengthRef.current = counterLength;
@@ -551,6 +555,50 @@ function processingItemKey(game: GameState) {
     item.effectIndex,
     item.attackerIds?.join(',')
   ].filter(value => value !== undefined && value !== null).join('_');
+}
+
+function stackItemToChainAnimationItem(
+  item: StackItem,
+  linkNumber: number,
+  game: GameState,
+  perspectiveUid: string | null | undefined
+): NonNullable<BattleAnimationEvent['chainItems']>[number] {
+  const side = sideForUid(item.ownerUid, perspectiveUid, game);
+  const phaseTitle = phaseEndTitle(item);
+  const title = item.card?.fullName || phaseTitle || (item.type === 'ATTACK' ? '攻击宣言' : '对抗宣言');
+  const subtitle = item.type === 'PLAY'
+    ? '打出卡牌'
+    : item.type === 'EFFECT'
+      ? effectSubtitle(item)
+      : item.type === 'ATTACK'
+        ? (item.isAlliance ? '联军攻击宣言' : '攻击宣言')
+        : phaseTitle;
+
+  return {
+    linkNumber,
+    side,
+    type: item.type,
+    title,
+    subtitle,
+    cardName: item.card?.fullName,
+    cardImageUrl: item.card ? getCardPreviewImage(item.card) : undefined,
+    sourceCardId: item.card?.gamecardId
+  };
+}
+
+function phaseEndTitle(item: StackItem) {
+  if (item.type !== 'PHASE_END') return undefined;
+  if (item.nextPhase === 'DAMAGE_CALCULATION') return '宣言结束战斗自由阶段';
+  if (item.nextPhase === 'DISCARD') return '宣言进入回合结束阶段';
+  if (item.nextPhase === 'BATTLE_DECLARATION') return '宣言进入战斗阶段';
+  if (item.nextPhase === 'MAIN') return '宣言返回主要阶段';
+  return '阶段宣言';
+}
+
+function effectSubtitle(item: StackItem) {
+  const effect = item.effectIndex !== undefined ? item.card?.effects?.[item.effectIndex] : undefined;
+  if (!effect?.description) return '发动效果';
+  return compactText(effect.description);
 }
 
 function sideForUid(uid: string | null | undefined, perspectiveUid: string | null | undefined, game: GameState): BattleAnimationEvent['side'] {

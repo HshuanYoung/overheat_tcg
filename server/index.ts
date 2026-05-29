@@ -857,14 +857,6 @@ async function finalizeMulliganReveal(gameId: string, expectedStartedAt?: number
         Date.now() - startedAt < MULLIGAN_REVEAL_TOTAL_MS ||
         !allDone
     ) {
-        console.log('[MulliganFinalize] skipped', {
-            gameId,
-            phase: gameState.phase,
-            startedAt,
-            expectedStartedAt,
-            elapsed: startedAt ? Date.now() - startedAt : 0,
-            allDone
-        });
         return false;
     }
 
@@ -888,27 +880,13 @@ async function finalizeMulliganReveal(gameId: string, expectedStartedAt?: number
         actorName: firstPlayerName,
         text: `对战开始：${playerNames[0]} vs ${playerNames[1]}，${firstPlayerName} 先攻。`
     });
-    console.log('[MulliganFinalize] advancing to battle', {
-        gameId,
-        currentUid,
-        firstPlayerName
-    });
     await advancePhase(gameState, gameId, currentUid);
     return true;
 }
 
 async function finishMulliganAfterReveal(gameId: string, expectedStartedAt: number) {
-    console.log('[MulliganFinalize] scheduled', {
-        gameId,
-        expectedStartedAt,
-        delayMs: MULLIGAN_REVEAL_TOTAL_MS
-    });
     setTimeout(async () => {
         await withGameLock(gameId, async () => {
-            console.log('[MulliganFinalize] timeout fired', {
-                gameId,
-                expectedStartedAt
-            });
             await finalizeMulliganReveal(gameId, expectedStartedAt);
         });
     }, MULLIGAN_REVEAL_TOTAL_MS);
@@ -1018,13 +996,6 @@ async function syncAndSaveState(gameId: string, gameState: any, options: SyncSta
     const emitStart = process.hrtime.bigint();
     const emitState = cloneStateForEmit(gameState);
     if (emitState.animationHint) {
-        console.log('[StateEmit] emitting animation hint', {
-            gameId,
-            source: options.source || 'unknown',
-            phase: emitState.phase,
-            animationHint: emitState.animationHint.id,
-            animationUntil: emitState.animationUntil
-        });
     }
     io.to(gameId).emit('gameStateUpdate', emitState);
     timings.emitMs = elapsedMs(emitStart);
@@ -1225,12 +1196,6 @@ setInterval(async () => {
                             return;
                         }
 
-                        console.log('[DrawPhaseAnimation] resuming draw phase after fallback', {
-                            gameId,
-                            playerUid,
-                            resumeAt,
-                            animationHint: gameState.animationHint?.id
-                        });
                         delete gameState.drawAnimationResume;
                         delete gameState.animationHint;
                         delete gameState.animationUntil;
@@ -4176,16 +4141,7 @@ io.on('connection', (socket) => {
 
                 const executeStart = process.hrtime.bigint();
                 if (action === 'RPS_CHOICE') {
-                    const previousPhase = gameState.phase;
                     submitRpsChoice(gameState, myUid, payload?.choice);
-                    console.log('[PregameFlow] action synced', {
-                        gameId,
-                        action,
-                        playerUid: myUid,
-                        previousPhase,
-                        nextPhase: gameState.phase,
-                        broadcast: true
-                    });
                     actionTimings.executeActionMs = elapsedMs(executeStart);
                     await syncAndSaveState(gameId, gameState, {
                         recalc: false,
@@ -4193,17 +4149,7 @@ io.on('connection', (socket) => {
                     });
                     return;
                 } else if (action === 'CHOOSE_FIRST_PLAYER') {
-                    const previousPhase = gameState.phase;
                     chooseFirstPlayer(gameState, myUid, payload?.firstPlayerUid);
-                    console.log('[PregameFlow] action synced', {
-                        gameId,
-                        action,
-                        playerUid: myUid,
-                        previousPhase,
-                        nextPhase: gameState.phase,
-                        firstPlayerUid: payload?.firstPlayerUid,
-                        broadcast: true
-                    });
                     actionTimings.executeActionMs = elapsedMs(executeStart);
                     await syncAndSaveState(gameId, gameState, {
                         recalc: false,

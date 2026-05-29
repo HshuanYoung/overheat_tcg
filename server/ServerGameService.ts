@@ -6941,30 +6941,10 @@ export const ServerGameService = {
           createdAt: Date.now()
         };
       }
-      console.log('[DrawPhaseAnimation] draw visual frame', {
-        gameId: gameState.gameId,
-        phase: gameState.phase,
-        playerUid: player.uid,
-        pendingQuery: !!gameState.pendingQuery,
-        animationUntil: gameState.animationUntil,
-        animationHint: gameState.animationHint?.id
-      });
       if (onUpdate) {
         await onUpdate(gameState);
-      } else {
-        console.error('[DrawPhaseAnimation] missing onUpdate; visual frame will be emitted by resume fallback', {
-          gameId: gameState.gameId,
-          phase: gameState.phase,
-          playerUid: player.uid,
-          animationHint: gameState.animationHint?.id
-        });
       }
       if (gameState.pendingQuery) {
-        console.log('[DrawPhaseAnimation] pending query opened after draw; waiting before erosion', {
-          gameId: gameState.gameId,
-          playerUid: player.uid,
-          queryId: gameState.pendingQuery.id
-        });
         return;
       }
       if (onUpdate) {
@@ -6974,12 +6954,6 @@ export const ServerGameService = {
           playerUid: player.uid,
           resumeAt: gameState.animationUntil || Date.now() + 2000
         };
-        console.log('[DrawPhaseAnimation] queued resume fallback', {
-          gameId: gameState.gameId,
-          playerUid: player.uid,
-          resumeAt: gameState.drawAnimationResume.resumeAt,
-          animationHint: gameState.animationHint?.id
-        });
         return;
       }
     }

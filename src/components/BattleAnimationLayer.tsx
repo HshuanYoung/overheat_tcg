@@ -1,7 +1,7 @@
 import React, { RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Flame, Shield, Sparkles, Swords, Trophy, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Flame, Play, RefreshCw, Shield, Sparkles, Swords, Trophy, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { Card, CardType, Rarity } from '../types/game';
 
@@ -35,6 +35,18 @@ export interface BattleAnimationEvent {
   targetZone?: string;
   revealTo?: 'owner' | 'all' | 'hidden';
   cardBackUrl?: string;
+  chainItems?: BattleAnimationChainItem[];
+}
+
+export interface BattleAnimationChainItem {
+  linkNumber: number;
+  side: 'player' | 'opponent' | 'neutral';
+  type: 'PLAY' | 'EFFECT' | 'ATTACK' | 'PHASE_END';
+  title: string;
+  subtitle?: string;
+  cardName?: string;
+  cardImageUrl?: string;
+  sourceCardId?: string;
 }
 
 interface BattleAnimationLayerProps {
@@ -48,7 +60,7 @@ const DISPLAY_MS: Record<BattleAnimationType, number> = {
   'card-played': 1100,
   damage: 950,
   attack: 1000,
-  confrontation: 1000,
+  confrontation: 3000,
   resolving: 1000,
   goddess: 1800,
   defeat: 1700,
@@ -658,43 +670,128 @@ const AttackAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) =
   </motion.div>
 );
 
-const ConfrontationAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    className="absolute inset-0 flex items-center justify-center bg-black/20"
-  >
+const ConfrontationAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) => {
+  const items = event.chainItems?.length
+    ? event.chainItems
+    : [{
+        linkNumber: event.chainLength || 1,
+        side: 'neutral' as const,
+        type: 'EFFECT' as const,
+        title: event.title || '对抗连锁',
+        subtitle: event.subtitle,
+        cardName: event.cardName,
+        cardImageUrl: event.cardImageUrl,
+        sourceCardId: event.sourceCardId
+      }];
+
+  return (
     <motion.div
-      initial={{ x: '-46vw', opacity: 0 }}
-      animate={{ x: ['-46vw', '-5vw', '-3vw'], opacity: [0, 1, 0] }}
-      transition={{ duration: 1.15, times: [0, 0.45, 1], ease: 'easeOut' }}
-      className="h-2 w-[45vw] rounded-full bg-gradient-to-r from-transparent via-sky-300 to-white shadow-[0_0_36px_rgba(56,189,248,0.85)]"
-    />
-    <motion.div
-      initial={{ x: '46vw', opacity: 0 }}
-      animate={{ x: ['46vw', '5vw', '3vw'], opacity: [0, 1, 0] }}
-      transition={{ duration: 1.15, times: [0, 0.45, 1], ease: 'easeOut' }}
-      className="h-2 w-[45vw] rounded-full bg-gradient-to-l from-transparent via-red-300 to-white shadow-[0_0_36px_rgba(248,113,113,0.85)]"
-    />
-    <motion.div
-      initial={{ scale: 0.25, opacity: 0, rotate: -20 }}
-      animate={{ scale: [0.25, 1.2, 1.05, 0], opacity: [0, 1, 1, 0], rotate: 0 }}
-      transition={{ duration: 1.15, times: [0, 0.35, 0.72, 1], ease: 'easeOut' }}
-      className="absolute flex h-32 w-32 items-center justify-center rounded-full border border-white/35 bg-white/10 shadow-[0_0_70px_rgba(255,255,255,0.8)] backdrop-blur-sm md:h-44 md:w-44"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: [0, 1, 1, 0] }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 3, times: [0, 0.08, 0.88, 1], ease: 'easeOut' }}
+      className="absolute inset-0 flex items-center justify-center bg-black/10"
     >
-      <Zap className="h-14 w-14 text-white md:h-20 md:w-20" />
+      <motion.div
+        initial={{ y: -96, scale: 0.96 }}
+        animate={{ y: [-96, 0, 18], scale: [0.96, 1, 0.98] }}
+        transition={{ duration: 3, times: [0, 0.2, 1], ease: 'easeOut' }}
+        className="relative flex w-[min(86vw,820px)] flex-col gap-3"
+      >
+        <div className="absolute left-1/2 top-2 h-[calc(100%-1rem)] w-1 -translate-x-1/2 rounded-full bg-gradient-to-b from-cyan-200/0 via-cyan-100/75 to-cyan-200/0 shadow-[0_0_24px_rgba(103,232,249,0.8)]" />
+        {items.map((item, index) => (
+          <ConfrontationChainRow key={`${item.linkNumber}-${item.sourceCardId || item.title}-${index}`} item={item} index={index} />
+        ))}
+      </motion.div>
     </motion.div>
+  );
+};
+
+const ConfrontationChainRow: React.FC<{ item: BattleAnimationChainItem; index: number }> = ({ item, index }) => {
+  const isMine = item.side === 'player';
+  const isOpponent = item.side === 'opponent';
+  const hasCard = !!item.cardImageUrl;
+  const Icon = item.type === 'ATTACK'
+    ? Swords
+    : item.type === 'PHASE_END'
+      ? RefreshCw
+      : item.type === 'PLAY'
+        ? Play
+        : Zap;
+
+  return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: [0, 1, 0], y: [40, 0, -12] }}
-      transition={{ duration: 1.15, times: [0, 0.3, 1] }}
-      className="absolute bottom-[18vh] rounded-full border border-white/20 bg-black/80 px-6 py-2 text-sm font-black italic tracking-[0.28em] text-white backdrop-blur-md md:text-base"
+      initial={{ opacity: 0, y: -28, x: isMine ? 32 : isOpponent ? -32 : 0, scale: 0.96 }}
+      animate={{ opacity: [0, 1, 1, 0], y: [-28, 0, 0, 22], x: [isMine ? 32 : isOpponent ? -32 : 0, 0, 0, 0], scale: [0.96, 1, 1, 0.98] }}
+      transition={{ duration: 2.72, delay: index * 0.12, times: [0, 0.12, 0.88, 1], ease: 'easeOut' }}
+      className={cn(
+        "relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-3",
+        isMine ? "justify-items-end" : isOpponent ? "justify-items-start" : "justify-items-center"
+      )}
     >
-      {event.title || '对抗'}
+      <div className={cn("w-full", isOpponent ? "flex justify-end" : "hidden md:block")} />
+      <div className="flex h-11 w-11 items-center justify-center rounded-full border border-cyan-100/40 bg-black/80 text-base font-black text-cyan-100 shadow-[0_0_28px_rgba(103,232,249,0.75)]">
+        L{item.linkNumber}
+      </div>
+      <div className={cn("w-full", isMine ? "flex justify-start" : "hidden md:block")} />
+
+      <div
+        className={cn(
+          "col-span-3 row-start-1 flex items-center gap-3",
+          isMine ? "justify-start pl-[calc(50%+2.25rem)] md:pl-[calc(50%+2.75rem)]" : "justify-end pr-[calc(50%+2.25rem)] md:pr-[calc(50%+2.75rem)]",
+          !isMine && !isOpponent && "justify-center pl-0 pr-0"
+        )}
+      >
+        {isMine && <ArrowLeft className="h-7 w-7 text-cyan-100 drop-shadow-[0_0_10px_rgba(103,232,249,0.9)]" />}
+        <div
+          className={cn(
+            "relative flex h-[92px] w-[250px] items-center gap-3 overflow-hidden rounded-lg border bg-zinc-950/88 p-3 shadow-[0_0_34px_rgba(8,145,178,0.45)] backdrop-blur-md md:h-[108px] md:w-[300px]",
+            isMine ? "border-cyan-200/45" : "border-red-200/35"
+          )}
+        >
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+          <div className="absolute bottom-1 left-1 rounded bg-black/85 px-1.5 py-0.5 text-[8px] font-black leading-none text-cyan-100 shadow-[0_0_10px_rgba(103,232,249,0.8)] md:text-[9px]">
+            L{item.linkNumber}
+          </div>
+          <div className="relative flex h-full aspect-[3/4] shrink-0 items-center justify-center overflow-hidden rounded border border-white/15 bg-black/60">
+            {hasCard ? (
+              <>
+                <img
+                  src={item.cardImageUrl}
+                  alt={item.cardName || item.title}
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                />
+                {(item.type === 'PLAY' || item.type === 'EFFECT') && (
+                  <div className="absolute left-1/2 top-1 -translate-x-1/2 rounded bg-cyan-100/95 px-1.5 py-0.5 text-[9px] font-black leading-none text-black shadow-[0_0_12px_rgba(103,232,249,0.9)]">
+                    L{item.linkNumber}
+                  </div>
+                )}
+              </>
+            ) : (
+              <Icon className="h-8 w-8 text-cyan-100 md:h-10 md:w-10" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className={cn("mb-1 text-[10px] font-black tracking-[0.2em]", isMine ? "text-cyan-200" : "text-red-200")}>
+              {isMine ? '我方对抗' : isOpponent ? '对方对抗' : '对抗'}
+            </div>
+            <div className="line-clamp-2 text-sm font-black leading-tight text-white md:text-base">
+              {item.cardName || item.title}
+            </div>
+            {item.subtitle && (
+              <div className="mt-1 line-clamp-1 text-[10px] leading-tight text-white/55 md:text-xs">
+                {item.subtitle}
+              </div>
+            )}
+          </div>
+        </div>
+        {isOpponent && <ArrowRight className="h-7 w-7 text-red-100 drop-shadow-[0_0_10px_rgba(248,113,113,0.9)]" />}
+      </div>
     </motion.div>
-  </motion.div>
-);
+  );
+};
 
 const ResolvingAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) => (
   <motion.div

@@ -1292,6 +1292,65 @@ export const PlayField: React.FC<PlayFieldProps> = ({
         />
       </div>
 
+      {/* Adversarial Chain Panel */}
+      {stack && stack.length > 0 && (
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 z-[150] flex flex-col items-center gap-2 p-2 bg-black/60 backdrop-blur-md border border-white/10 rounded-l-2xl max-h-[90%] overflow-y-auto custom-scrollbar pointer-events-auto">
+          {stack.map((item, index) => (
+            <React.Fragment key={`${item.timestamp}-${index}`}>
+              <div 
+                className="relative group w-16 h-24 md:w-20 md:h-28 rounded-lg overflow-hidden border border-[#f27d26]/50 shadow-[0_0_15px_rgba(242,125,38,0.3)] shrink-0 bg-zinc-900 cursor-pointer transition-transform hover:scale-105" 
+                onClick={() => {
+                  if (item.card) {
+                    onPreviewCard?.(item.card);
+                  } else if (item.attackerIds && item.attackerIds.length > 0) {
+                    // Try to find the attacker card to preview it if it's an attack
+                    const firstAttackerId = item.attackerIds[0];
+                    const findCardInGame = () => {
+                      for (const uid in game.players) {
+                        const p = game.players[uid];
+                        const cardInUnit = p.unitZone?.find(c => c?.gamecardId === firstAttackerId);
+                        if (cardInUnit) return cardInUnit;
+                      }
+                      return null;
+                    };
+                    const card = findCardInGame();
+                    if (card) onPreviewCard?.(card);
+                  }
+                }}
+              >
+                {item.card ? (
+                  <img src={getCardImageUrl(item.card.id, item.card.rarity, false, item.card.availableRarities) || cardBackUrl} alt={item.card.fullName} className="w-full h-full object-cover" draggable={false} />
+                ) : item.type === 'ATTACK' ? (
+                  <div className="flex w-full h-full items-center justify-center flex-col gap-1 bg-red-950/40">
+                    <Sword className="h-6 w-6 text-red-500" />
+                    <span className="text-[10px] text-red-300 font-bold tracking-widest">攻击</span>
+                  </div>
+                ) : item.type === 'PHASE_END' ? (
+                  <div className="flex w-full h-full items-center justify-center flex-col gap-1 bg-amber-950/40">
+                    <Flag className="h-6 w-6 text-amber-500" />
+                    <span className="text-[10px] text-amber-300 font-bold tracking-widest">跳过</span>
+                  </div>
+                ) : (
+                  <div className="flex w-full h-full items-center justify-center">
+                    <Zap className="h-6 w-6 text-[#f27d26]" />
+                  </div>
+                )}
+                {/* Link Label */}
+                <div className="absolute bottom-1 left-1 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-black tracking-wider text-white border border-white/20">
+                  L{index + 1}
+                </div>
+              </div>
+              {/* Connector Arrow */}
+              {index < stack.length - 1 && (
+                <div className="h-4 w-px bg-white/20 relative">
+                  <div className="absolute bottom-[-2px] left-1/2 -translate-x-1/2 w-2 h-2 border-b-2 border-r-2 border-white/40 rotate-45" />
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 2px;

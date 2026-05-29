@@ -1,4 +1,4 @@
-import React, { RefObject, useEffect, useRef, useState } from 'react';
+import React, { RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Shield, Sparkles, Swords, Trophy, Zap } from 'lucide-react';
@@ -12,7 +12,9 @@ export type BattleAnimationType =
   | 'confrontation'
   | 'resolving'
   | 'goddess'
-  | 'defeat';
+  | 'defeat'
+  | 'erosion-flip'
+  | 'card-draw';
 
 export interface BattleAnimationEvent {
   id: string;
@@ -46,7 +48,9 @@ const DISPLAY_MS: Record<BattleAnimationType, number> = {
   confrontation: 1000,
   resolving: 1000,
   goddess: 1800,
-  defeat: 1700
+  defeat: 1700,
+  'erosion-flip': 1500,
+  'card-draw': 2000
 };
 
 const EVENT_TONE: Record<BattleAnimationType, string> = {
@@ -56,7 +60,9 @@ const EVENT_TONE: Record<BattleAnimationType, string> = {
   confrontation: 'from-sky-400 via-white to-red-400',
   resolving: 'from-violet-400 via-white to-[#f27d26]',
   goddess: 'from-amber-200 via-[#f27d26] to-red-600',
-  defeat: 'from-zinc-500 via-white to-red-500'
+  defeat: 'from-zinc-500 via-white to-red-500',
+  'erosion-flip': 'from-zinc-800 via-purple-500 to-black',
+  'card-draw': 'from-blue-400 via-cyan-300 to-white'
 };
 
 const ParallelEventPlayer: React.FC<{
@@ -116,13 +122,19 @@ export const BattleAnimationLayer: React.FC<BattleAnimationLayerProps> = ({
   // Group parallel events: contiguous 'card-played' events at the front can play simultaneously
   const parallelEvents = React.useMemo(() => {
     const list: BattleAnimationEvent[] = [];
+    let groupType: string | null = null;
+    
     for (const event of events) {
-      if (event.type === 'card-played') {
+      if (!groupType) {
+        groupType = event.type === 'card-played' || event.type === 'erosion-flip' || event.type === 'card-draw' ? event.type : 'cinematic';
+      }
+      
+      if (groupType === 'cinematic') {
+        if (list.length === 0) list.push(event);
+        break;
+      } else if (event.type === groupType) {
         list.push(event);
       } else {
-        if (list.length === 0) {
-          list.push(event); // The first event is a cinematic event, play it solo
-        }
         break;
       }
     }
@@ -164,6 +176,8 @@ const AnimationScene: React.FC<{
   if (event.type === 'confrontation') return <ConfrontationAnimation event={event} />;
   if (event.type === 'resolving') return <ResolvingAnimation event={event} />;
   if (event.type === 'attack') return <AttackAnimation event={event} />;
+  if (event.type === 'erosion-flip') return <ErosionFlipAnimation event={event} layerRef={layerRef} index={index} total={total} />;
+  if (event.type === 'card-draw') return <CardDrawAnimation event={event} layerRef={layerRef} index={index} total={total} />;
   return <CardPlayedAnimation event={event} layerRef={layerRef} index={index} total={total} />;
 };
 
@@ -335,6 +349,103 @@ const CardPlayedAnimation: React.FC<{
           style={{ left: end.x, top: end.y }}
         />
       )}
+    </motion.div>
+  );
+};
+
+const ErosionFlipAnimation: React.FC<{
+  event: BattleAnimationEvent;
+  layerRef: RefObject<HTMLDivElement>;
+  index: number;
+  total: number;
+}> = ({ event, layerRef, index, total }) => {
+  const start = useMemo(() => resolveAnchorRect(layerRef.current, event.sourceAnchor, event.sourceCardId) || zoneFallbackPoint(event.side, layerRef.current), [layerRef, event.sourceAnchor, event.sourceCardId, event.side]);
+  const end = useMemo(() => resolveAnchorRect(layerRef.current, event.targetAnchor, event.sourceCardId) || zoneFallbackPoint(event.side, layerRef.current, true), [layerRef, event.targetAnchor, event.sourceCardId, event.side]);
+
+  const cardWidth = Math.max(58, Math.min(128, (start.width || 96) * 0.9));
+  const staggerDelay = index * 0.12;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50">
+      <motion.div
+        initial={{ opacity: 0, x: 0, y: 0, scale: 0.75, rotateY: 180, rotateZ: event.side === 'opponent' ? 14 : -10 }}
+        animate={{
+          opacity: [0, 1, 1, 0],
+          x: [0, dx * 0.5, dx],
+          y: [0, dy * 0.5 - 60, dy],
+          scale: [0.75, 1.2, 0.94],
+          rotateY: [180, 180, 0],
+          rotateZ: [event.side === 'opponent' ? 14 : -10, 0, 0]
+        }}
+        transition={{ duration: 1.1, delay: staggerDelay, times: [0, 0.45, 1], ease: 'easeOut' }}
+        className="absolute [transform-style:preserve-3d]"
+        style={{ left: start.x - cardWidth / 2, top: start.y - (cardWidth * 4 / 3) / 2, width: cardWidth }}
+      >
+        <div className="absolute inset-0 aspect-[3/4] overflow-hidden rounded-lg border border-purple-400/50 shadow-[0_0_34px_rgba(168,85,247,0.6)] bg-zinc-950 [backface-visibility:hidden]">
+          <img src={event.cardImageUrl} alt={event.cardName} className="h-full w-full object-cover" draggable={false} referrerPolicy="no-referrer" />
+          <div className="absolute inset-0 bg-purple-500/10 mix-blend-screen" />
+        </div>
+        <div className="absolute inset-0 aspect-[3/4] overflow-hidden rounded-lg border border-purple-400/50 shadow-[0_0_34px_rgba(168,85,247,0.6)] bg-zinc-950 [transform:rotateY(180deg)] [backface-visibility:hidden]">
+          <div className="h-full w-full bg-[#1a1a1a] flex items-center justify-center border-4 border-[#2a2a2a] overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-black opacity-50" />
+            <div className="w-10 h-10 border-4 border-zinc-700 rotate-45" />
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const CardDrawAnimation: React.FC<{
+  event: BattleAnimationEvent;
+  layerRef: RefObject<HTMLDivElement>;
+  index: number;
+  total: number;
+}> = ({ event, layerRef, index, total }) => {
+  const start = useMemo(() => resolveAnchorRect(layerRef.current, event.sourceAnchor, event.sourceCardId) || zoneFallbackPoint(event.side, layerRef.current), [layerRef, event.sourceAnchor, event.sourceCardId, event.side]);
+  const end = useMemo(() => resolveAnchorRect(layerRef.current, event.targetAnchor, event.sourceCardId) || zoneFallbackPoint(event.side, layerRef.current, true), [layerRef, event.targetAnchor, event.sourceCardId, event.side]);
+
+  const cardWidth = Math.max(58, Math.min(128, (start.width || 96) * 0.9));
+  const staggerDelay = index * 0.12;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  
+  const isOpponent = event.side === 'opponent';
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50">
+      <motion.div
+        initial={{ opacity: 0, x: 0, y: 0, scale: 0.75, rotateY: 180 }}
+        animate={{
+          opacity: [0, 1, 1, 1, 0],
+          x: [0, dx * 0.5, dx * 0.5, dx, dx],
+          y: [0, dy * 0.5 - 40, dy * 0.5 - 40, dy, dy],
+          scale: [0.75, 1.5, 1.5, 0.94, 0.94],
+          rotateY: isOpponent ? [180, 180, 180, 180, 180] : [180, 0, 0, 0, 0]
+        }}
+        transition={{ duration: 1.8, delay: staggerDelay, times: [0, 0.15, 0.8, 0.95, 1], ease: 'easeInOut' }}
+        className="absolute [transform-style:preserve-3d]"
+        style={{ left: start.x - cardWidth / 2, top: start.y - (cardWidth * 4 / 3) / 2, width: cardWidth }}
+      >
+        <div className="absolute inset-0 aspect-[3/4] overflow-hidden rounded-lg border border-cyan-300/50 shadow-[0_0_24px_rgba(34,211,238,0.5)] bg-zinc-950 [backface-visibility:hidden]">
+          {isOpponent ? (
+            <div className="h-full w-full bg-[#1a1a1a] flex items-center justify-center border-4 border-[#2a2a2a] overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-black opacity-50" />
+              <div className="w-10 h-10 border-4 border-zinc-700 rotate-45" />
+            </div>
+          ) : (
+            <img src={event.cardImageUrl} alt={event.cardName} className="h-full w-full object-cover" draggable={false} referrerPolicy="no-referrer" />
+          )}
+        </div>
+        <div className="absolute inset-0 aspect-[3/4] overflow-hidden rounded-lg border border-cyan-300/50 shadow-[0_0_24px_rgba(34,211,238,0.5)] bg-zinc-950 [transform:rotateY(180deg)] [backface-visibility:hidden]">
+          <div className="h-full w-full bg-[#1a1a1a] flex items-center justify-center border-4 border-[#2a2a2a] overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-black opacity-50" />
+            <div className="w-10 h-10 border-4 border-zinc-700 rotate-45" />
+          </div>
+        </div>
+      </motion.div>
     </motion.div>
   );
 };

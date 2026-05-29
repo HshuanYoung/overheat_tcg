@@ -6546,13 +6546,13 @@ export const ServerGameService = {
         gameState.logs.push(`[阶段切换] 进入开始阶段`);
         await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } }, onUpdate);
         if (gameState.pendingQuery || gameState.phase !== 'START') return gameState;
-        await ServerGameService.executeStartPhase(gameState, turnPlayer);
+        await ServerGameService.executeStartPhase(gameState, turnPlayer, onUpdate);
         break;
       case 'START':
         gameState.phase = 'DRAW';
         gameState.logs.push(`[阶段切换] 进入抽牌阶段`);
         EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'DRAW' } });
-        await ServerGameService.executeDrawPhase(gameState, turnPlayer);
+        await ServerGameService.executeDrawPhase(gameState, turnPlayer, onUpdate);
         break;
       case 'DRAW':
         gameState.phase = 'EROSION';
@@ -6716,7 +6716,7 @@ export const ServerGameService = {
     return gameState;
   },
 
-  async executeStartPhase(gameState: GameState, player: PlayerState) {
+  async executeStartPhase(gameState: GameState, player: PlayerState, onUpdate?: (state: GameState) => Promise<void>) {
     // console.log(`[ServerGameService] executeStartPhase for ${player.displayName}`);
 
     // Update public hand duration
@@ -6839,10 +6839,10 @@ export const ServerGameService = {
     // Automatically move to DRAW phase
     gameState.phase = 'DRAW';
     gameState.phaseTimerStart = Date.now();
-    await ServerGameService.executeDrawPhase(gameState, player);
+    await ServerGameService.executeDrawPhase(gameState, player, onUpdate);
   },
 
-  async executeDrawPhase(gameState: GameState, player: PlayerState) {
+  async executeDrawPhase(gameState: GameState, player: PlayerState, onUpdate?: (state: GameState) => Promise<void>) {
     if (player.skipDrawPhase) {
       player.skipDrawPhase = false;
       gameState.logs.push(`${player.displayName} 的抽牌阶段被跳过了。`);
@@ -6916,6 +6916,9 @@ export const ServerGameService = {
       gameState.winnerId = gameState.playerIds.find(id => id !== player.uid);
       return; // Stop processing further phases
     }
+
+    if (onUpdate) await onUpdate(gameState);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Automatically move to EROSION phase
     gameState.phase = 'EROSION';

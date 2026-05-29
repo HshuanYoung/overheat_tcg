@@ -277,6 +277,11 @@ async function handleBotMove(gameState: any, gameId: string) {
     botMovingGames.add(gameId);
 
     // Use a delay to simulate thinking and allow final state propagation
+    const now = Date.now();
+    const delay = gameState.animationUntil && gameState.animationUntil > now 
+        ? Math.max(1600, gameState.animationUntil - now + 500) 
+        : 1600;
+
     setTimeout(async () => {
         try {
             await withGameLock(gameId, async () => {
@@ -342,7 +347,7 @@ async function handleBotMove(gameState: any, gameId: string) {
             console.error('[Bot] handleBotMove outer error:', err);
             botMovingGames.delete(gameId);
         }
-    }, 1600);
+    }, delay);
 }
 
 function triggerBotIfNeeded(gameState: any, gameId: string) {
@@ -4223,6 +4228,7 @@ io.on('connection', (socket) => {
                     const duration = Math.min(5000, Number(payload?.duration || 0));
                     if (duration > 0) {
                         gameState.phaseTimerStart = (gameState.phaseTimerStart || Date.now()) + duration;
+                        gameState.animationUntil = Date.now() + duration;
                     }
                 } else if (action === 'SURRENDER') {
                     await ServerGameService.surrender(gameState, myUid);

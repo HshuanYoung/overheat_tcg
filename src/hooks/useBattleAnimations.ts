@@ -188,7 +188,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
         if (isErosionPhaseGraveMove) return;
 
         // d. Addition to hand from Play, Erosion, Grave, Exile (which are non-DECK additions)
-        if (targetZone === 'HAND') return;
+        if (targetZone === 'HAND' && sourceZone !== 'DECK') return;
 
         const isFromPlay = sourceZone === 'PLAY';
         const isFromErosion = sourceZone === 'EROSION_FRONT' || sourceZone === 'EROSION_BACK';
@@ -197,10 +197,8 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
         const isFromHand = sourceZone === 'HAND';
         const isFromDeck = sourceZone === 'DECK';
 
-        if (
-          isFromPlay || isFromErosion || isFromGrave || isFromExile ||
-          ((isFromHand || isFromDeck) && isToBattlefield)
-        ) {
+        // Bug 2: Only animate cards entering battlefield
+        if (isToBattlefield) {
           let moveTitle = '卡牌移动';
           if (isFromPlay) moveTitle = '打出区移动';
           else if (isFromErosion) moveTitle = '侵蚀区移动';
@@ -219,6 +217,36 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
             sourceCardId: gamecardId,
             cardType: currentLoc.card.type,
             rarity: currentLoc.card.rarity,
+            playerUid: currentLoc.ownerUid,
+            sourceAnchor: getAnchorForZone(prevLoc.ownerUid, prevLoc.zone, prevLoc.slotIndex),
+            targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex)
+          });
+        }
+        // Bug 3: Erosion Flip
+        else if (isFromDeck && (targetZone === 'EROSION_FRONT' || targetZone === 'EROSION_BACK')) {
+          nextEvents.push({
+            id: `erosion_flip_${gamecardId}_${Date.now()}_${Math.random()}`,
+            type: 'erosion-flip' as any,
+            side: sideForUid(currentLoc.ownerUid, perspectiveUid, game),
+            title: '侵蚀翻牌',
+            cardName: currentLoc.card.fullName,
+            cardImageUrl: getCardPreviewImage(currentLoc.card),
+            sourceCardId: gamecardId,
+            playerUid: currentLoc.ownerUid,
+            sourceAnchor: getAnchorForZone(prevLoc.ownerUid, prevLoc.zone, prevLoc.slotIndex),
+            targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex)
+          });
+        }
+        // Bug 5: Card Draw
+        else if (isFromDeck && targetZone === 'HAND') {
+          nextEvents.push({
+            id: `card_draw_${gamecardId}_${Date.now()}_${Math.random()}`,
+            type: 'card-draw' as any,
+            side: sideForUid(currentLoc.ownerUid, perspectiveUid, game),
+            title: '抽牌',
+            cardName: currentLoc.card.fullName,
+            cardImageUrl: getCardPreviewImage(currentLoc.card),
+            sourceCardId: gamecardId,
             playerUid: currentLoc.ownerUid,
             sourceAnchor: getAnchorForZone(prevLoc.ownerUid, prevLoc.zone, prevLoc.slotIndex),
             targetAnchor: getAnchorForZone(currentLoc.ownerUid, currentLoc.zone, currentLoc.slotIndex)

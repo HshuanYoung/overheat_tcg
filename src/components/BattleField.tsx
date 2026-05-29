@@ -244,12 +244,30 @@ export const BattleField: React.FC = () => {
   }, [battleAnimations]);
 
   const lastEmittedAnimationTimeRef = useRef<string | null>(null);
+  const stateBufferRef = useRef<any[]>([]);
+  const applyGameStateRef = useRef<((state: any) => void) | null>(null);
+
+  useEffect(() => {
+    if (!battleAnimationsEnabled) return;
+    const isAnimationPlaying = battleAnimations.events.some(e => 
+      e.type === 'card-played' || e.type === 'erosion-flip' || e.type === 'card-draw'
+    );
+    if (!isAnimationPlaying && stateBufferRef.current.length > 0) {
+      const latestState = stateBufferRef.current[stateBufferRef.current.length - 1];
+      stateBufferRef.current = [];
+      if (applyGameStateRef.current) {
+        applyGameStateRef.current(latestState);
+      }
+    }
+  }, [battleAnimations.events, battleAnimationsEnabled]);
 
   useEffect(() => {
     if (!battleAnimationsEnabled || !battleAnimations.events.length || !socket || !gameId) return;
 
-    // Filter to only parallel card-played (movement) events
-    const parallelEvents = battleAnimations.events.filter(event => event.type === 'card-played');
+    // Filter to only parallel card movement/flip events
+    const parallelEvents = battleAnimations.events.filter(event => 
+      event.type === 'card-played' || event.type === 'erosion-flip' || event.type === 'card-draw'
+    );
     if (!parallelEvents.length) return;
 
     // Generate a unique key for this parallel group to avoid duplicate emissions
@@ -257,15 +275,17 @@ export const BattleField: React.FC = () => {
     if (lastEmittedAnimationTimeRef.current === groupKey) return;
     lastEmittedAnimationTimeRef.current = groupKey;
 
-    // Calculate total duration: 1100ms base + 120ms stagger for each additional card
-    const duration = 1100 + (parallelEvents.length - 1) * 120;
+    // Calculate total duration based on type base + stagger
+    const baseDuration = parallelEvents[0].type === 'erosion-flip' ? 1500 : 
+                         parallelEvents[0].type === 'card-draw' ? 2000 : 1100;
+    const duration = baseDuration + (parallelEvents.length - 1) * 120;
     socket.emit('gameAction', { gameId, action: 'ADD_ANIMATION_TIME', payload: { duration } });
   }, [battleAnimations.events, battleAnimationsEnabled, socket, gameId]);
 
   const animatingCardIds = useMemo(() => {
     const ids = new Set<string>();
     battleAnimations.events.forEach(event => {
-      if (event.type === 'card-played' && event.sourceCardId) {
+      if ((event.type === 'card-played' || event.type === 'erosion-flip' || event.type === 'card-draw') && event.sourceCardId) {
         ids.add(event.sourceCardId);
       }
     });
@@ -450,7 +470,7 @@ export const BattleField: React.FC = () => {
       const elapsed = now - (game.phaseTimerStart || now);
 
       const me = game.players[myUid];
-      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(e => e.type === 'card-played') || false);
+      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(e => e.type === 'card-played' || e.type === 'erosion-flip' || e.type === 'card-draw') || false);
       const isWaiting = game.isResolvingStack ||
         game.currentProcessingItem ||
         game.pendingQuery ||
@@ -574,6 +594,8 @@ export const BattleField: React.FC = () => {
         setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
       }
     };
+    
+    applyGameStateRef.current = applyGameState;
 
     loadCardLibrary().then(() => {
       if (!active) return;
@@ -592,6 +614,13 @@ export const BattleField: React.FC = () => {
         pendingState = newState;
         return;
       }
+      
+      const isAnimationPlaying = battleAnimationsEnabled && (battleAnimationsRef.current?.events?.some(e => e.type === 'card-played' || e.type === 'erosion-flip' || e.type === 'card-draw') || false);
+      if (isAnimationPlaying) {
+        stateBufferRef.current.push(newState);
+        return;
+      }
+      
       applyGameState(newState);
     };
 

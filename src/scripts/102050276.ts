@@ -5,7 +5,6 @@ import {
   addTempPower,
   battlingUnits,
   canPutUnitOntoBattlefield,
-  createPlayerSelectQuery,
   createSelectCardQuery,
   damagePlayerByEffect,
   getOpponentUid,
@@ -180,19 +179,8 @@ const effect_102050276_main_damage: CardEffect = {
     if (context?.step === 'SAC') {
       // Legacy fallback for stack entries created before cost separation.
       if (!sacrificeYellowOrBlueNonGodUnit(gameState, playerState, instance, selections)) return;
-      createPlayerSelectQuery(
-        gameState,
-        playerState.uid,
-        '选择对手',
-        '选择1名对手，给予他2点伤害。',
-        { sourceCardId: instance.gamecardId, effectId: '102050276_main_damage', step: 'DAMAGE' },
-        { includeSelf: false, includeOpponent: true }
-      );
-      return;
+      await damagePlayerByEffect(gameState, playerState.uid, getOpponentUid(gameState, playerState.uid), 2, instance);
     }
-
-    if (context?.step !== 'DAMAGE') return;
-    await damagePlayerByEffect(gameState, playerState.uid, getOpponentUid(gameState, playerState.uid), 2, instance);
   }
 };
 

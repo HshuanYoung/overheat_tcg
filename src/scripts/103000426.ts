@@ -1,5 +1,5 @@
 import { Card, CardEffect } from '../types/game';
-import { AtomicEffectExecutor, addInfluence, cardsInZones, createPlayerSelectQuery, ensureData, getOpponentUid, millTop, moveCard } from './BaseUtil';
+import { AtomicEffectExecutor, addInfluence, cardsInZones, ensureData, getOpponentUid, millTop, moveCardAsCost } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [{
   id: '103000426_god_limit',
@@ -39,7 +39,7 @@ const cardEffects: CardEffect[] = [{
     playerState.isTurn &&
     gameState.phase === 'MAIN' &&
     cardsInZones(playerState, ['HAND', 'DECK', 'GRAVE']).filter(({ card }) => card.godMark && card.specialName === '萨拉拉').length >= 2,
-  execute: async (instance, gameState, playerState) => {
+  cost: async (gameState, playerState, instance) => {
     const costs = cardsInZones(playerState, ['HAND', 'DECK', 'GRAVE']).filter(({ card }) => card.godMark && card.specialName === '萨拉拉');
     gameState.pendingQuery = {
       id: Math.random().toString(36).substring(7),
@@ -51,25 +51,34 @@ const cardEffects: CardEffect[] = [{
       minSelections: 2,
       maxSelections: 2,
       callbackKey: 'EFFECT_RESOLVE',
-      context: { sourceCardId: instance.gamecardId, effectId: '103000426_mill_three', step: 'COST' }
-    };
-  },
-  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
-    if (context?.step === 'COST') {
-      selections.forEach(id => {
-        const cost = AtomicEffectExecutor.findCardById(gameState, id);
-        const ownerUid = cost ? AtomicEffectExecutor.findCardOwnerKey(gameState, cost.gamecardId) : undefined;
-        if (cost && ownerUid) moveCard(gameState, ownerUid, cost, 'EXILE', instance);
-      });
-      createPlayerSelectQuery(gameState, playerState.uid, '选择对手', '选择1名对手，将其卡组顶3张送去墓地。', {
+      context: {
         sourceCardId: instance.gamecardId,
         effectId: '103000426_mill_three',
-        step: 'PLAYER'
-      }, { includeSelf: false, includeOpponent: true });
+        step: 'SALALA_EXILE_COST',
+        costType: 'CUSTOM_CARD_COST',
+        skipEffectResolveAfterCost: true
+      }
+    };
+    return true;
+  },
+  onCostResolve: async (instance, gameState, playerState, selections, context) => {
+    if (context?.step !== 'SALALA_EXILE_COST') return;
+    const costEntries = cardsInZones(playerState, ['HAND', 'DECK', 'GRAVE'])
+      .filter(({ card }) => card.godMark && card.specialName === '萨拉拉');
+    const selected = selections
+      .map(id => costEntries.find(({ card }) => card.gamecardId === id)?.card)
+      .filter((card): card is Card => !!card);
+    if (selected.length !== 2 || new Set(selected.map(card => card.gamecardId)).size !== 2) {
+      context.cancelActivation = true;
       return;
     }
-    const opponentUid = getOpponentUid(gameState, playerState.uid);
-    millTop(gameState, opponentUid, 3, instance);
+    selected.forEach(card => {
+      const ownerUid = AtomicEffectExecutor.findCardOwnerKey(gameState, card.gamecardId);
+      if (ownerUid) moveCardAsCost(gameState, ownerUid, card, 'EXILE', instance);
+    });
+  },
+  execute: async (instance, gameState, playerState) => {
+    millTop(gameState, getOpponentUid(gameState, playerState.uid), 3, instance);
   }
 }];
 

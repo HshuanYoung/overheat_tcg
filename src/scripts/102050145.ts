@@ -65,16 +65,6 @@ const cardEffects: CardEffect[] = [{
   description: '10+：选择1名对手，给予其3点伤害。若未使对手败北，则你败北。',
   condition: (gameState, playerState) => canUseInBattleFreeOrDamageRequest(gameState, playerState),
   execute: async (instance, gameState, playerState) => {
-    createPlayerSelectQuery(
-      gameState,
-      playerState.uid,
-      '选择对手',
-      '选择1名对手，给予他3点伤害。',
-      { sourceCardId: instance.gamecardId, effectId: '102050145_ten_damage' },
-      { includeSelf: false, includeOpponent: true }
-    );
-  },
-  onQueryResolve: async (instance, gameState, playerState) => {
     const opponentUid = getOpponentUid(gameState, playerState.uid);
     await damagePlayerByEffect(gameState, playerState.uid, opponentUid, 3, instance);
     if (gameState.gameStatus !== 2) {

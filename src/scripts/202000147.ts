@@ -1,7 +1,6 @@
 import { Card, CardEffect } from '../types/game';
 import {
   createChoiceQuery,
-  createPlayerSelectQuery,
   damagePlayerByEffect,
   ensureData,
   canMeetBattlefieldColorRequirement,
@@ -64,19 +63,7 @@ const effect_202000147_main_start_damage: CardEffect = {
       canMeetBattlefieldColorRequirement(playerState, instance);
   },
   execute: async (instance, gameState, playerState) => {
-    createPlayerSelectQuery(
-      gameState,
-      playerState.uid,
-      '选择伤害对象',
-      `选择1名对手，给予${flameBombDamage(playerState)}点伤害。`,
-      { sourceCardId: instance.gamecardId, effectId: '202000147_main_start_damage', step: 'DAMAGE' },
-      { includeSelf: false, includeOpponent: true }
-    );
-  },
-  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
-    if (context?.step !== 'DAMAGE') return;
-    const targetUid = selections[0] === 'PLAYER_SELF' ? playerState.uid : getOpponentUid(gameState, playerState.uid);
-    await damagePlayerByEffect(gameState, playerState.uid, targetUid, flameBombDamage(playerState), instance);
+    await damagePlayerByEffect(gameState, playerState.uid, getOpponentUid(gameState, playerState.uid), flameBombDamage(playerState), instance);
   }
 };
 

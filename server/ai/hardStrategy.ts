@@ -3435,7 +3435,10 @@ function scoreElementMagicInstructorModeChoice(
   option: any,
   profile: DeckAiProfile
 ) {
-  if (query.context?.effectId !== ELEMENT_MAGIC_INSTRUCTOR_EFFECT_ID || query.context?.step !== 'CHOOSE_MODE') {
+  if (
+    query.context?.effectId !== ELEMENT_MAGIC_INSTRUCTOR_EFFECT_ID ||
+    query.callbackKey !== 'DECLARE_EFFECT_TARGET_MODE'
+  ) {
     return undefined;
   }
 
@@ -3447,7 +3450,7 @@ function scoreElementMagicInstructorModeChoice(
     .filter((unit): unit is Card => !!unit && (unit.power || 0) <= 1500);
   const opponentWeakUnits = weakUnits.filter(unit => findCardOwnerUid(gameState, unit) !== playerUid);
   const ownWeakUnits = weakUnits.filter(unit => findCardOwnerUid(gameState, unit) === playerUid);
-  const optionId = String(option.id || option.label || '').toUpperCase();
+  const optionId = String(option.value || option.id || option.label || '').toUpperCase();
 
   if (optionId === 'DRAW') {
     const deckRisk = deckPressurePenalty(player.deck.length, profile);

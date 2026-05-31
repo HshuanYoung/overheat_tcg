@@ -185,6 +185,32 @@ async function activateAndResolveByOpponentPass(state: any, playerUid: string, c
   await ServerGameService.passConfrontation(state, state.priorityPlayerId);
 }
 
+async function activateKuyaMode(state: any, playerUid: string, card: Card, modeId: string) {
+  await ServerGameService.activateEffect(state, playerUid, card.gamecardId, 0);
+  if (state.pendingQuery?.callbackKey !== 'DECLARE_EFFECT_TARGET_MODE') {
+    throw new Error(`Expected Kuya mode query, got ${state.pendingQuery?.callbackKey || 'none'}`);
+  }
+  await answerPendingQuery(state, state.pendingQuery.playerUid, [modeId]);
+}
+
+function markDiscardedAsCostFromHandThisTurn(card: Card, state: any) {
+  (card as any).data = {
+    ...((card as any).data || {}),
+    lastMovedAsCostTurn: state.turnCount,
+    lastMovedFromZone: 'HAND',
+    lastMovedToZone: 'GRAVE'
+  };
+}
+
+async function expectKuyaOnceLimitBlocks(state: any, playerUid: string, card: Card) {
+  try {
+    await ServerGameService.activateEffect(state, playerUid, card.gamecardId, 0);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 async function testPowderSnowAttackDestroysAndBoosts(): Promise<ScenarioResult> {
   const name = 'SP03-W01 destroys another Seiso on attack and boosts AC3 units';
   const powder = cloneScriptCard(sp03W01 as Card, 'UNIT');
@@ -532,11 +558,15 @@ async function testKuyaBeastGirlSearchAndGravePut(): Promise<ScenarioResult> {
     deck: [search, fillerA, fillerB, fillerC],
   });
 
-  await activateAndResolveByOpponentPass(state, 'BOT', beastGirl, 0);
-  if (state.pendingQuery?.context?.step !== 'DISCARD') {
+  await activateKuyaMode(state, 'BOT', beastGirl, 'HAND_SEARCH');
+  if (state.pendingQuery?.context?.step !== 'DISCARD_COST') {
     return fail(name, `expected discard query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
   await answerPendingQuery(state, 'BOT', [otherDiscard.gamecardId]);
+  if (state.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING after discard cost, got ${state.phase}`);
+  }
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
   if (state.pendingQuery?.context?.step !== 'SEARCH') {
     return fail(name, `expected search query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
@@ -548,15 +578,30 @@ async function testKuyaBeastGirlSearchAndGravePut(): Promise<ScenarioResult> {
     return fail(name, `searched=${searched}, inGrave=${inGrave}`);
   }
 
-  const graveCountBeforeSelfPut = state.players.BOT.grave.length;
-  await activateAndResolveByOpponentPass(state, 'BOT', beastGirl, 1);
-  const live = state.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === beastGirl.gamecardId);
-  const milled = [fillerA, fillerB, fillerC].every(card =>
-    state.players.BOT.grave.some((grave: Card) => grave.gamecardId === card.gamecardId)
+  const sameTurnBlocked = await expectKuyaOnceLimitBlocks(state, 'BOT', beastGirl);
+
+  const graveBeastGirl = cloneScriptCard(sp03G05 as Card, 'GRAVE');
+  const graveFillerA = testCard({ id: 'GRAVE_FILLER_A', fullName: 'Grave Filler A', cardlocation: 'DECK' });
+  const graveFillerB = testCard({ id: 'GRAVE_FILLER_B', fullName: 'Grave Filler B', cardlocation: 'DECK' });
+  const graveFillerC = testCard({ id: 'GRAVE_FILLER_C', fullName: 'Grave Filler C', cardlocation: 'DECK' });
+  const graveState = game({
+    deck: [graveFillerA, graveFillerB, graveFillerC],
+    grave: [graveBeastGirl],
+  });
+  markDiscardedAsCostFromHandThisTurn(graveBeastGirl, graveState);
+
+  await activateKuyaMode(graveState, 'BOT', graveBeastGirl, 'GRAVE_SELF_PUT');
+  if (graveState.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING for grave mode, got ${graveState.phase}`);
+  }
+  await ServerGameService.passConfrontation(graveState, graveState.priorityPlayerId);
+  const live = graveState.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === graveBeastGirl.gamecardId);
+  const milled = [graveFillerA, graveFillerB, graveFillerC].every(card =>
+    graveState.players.BOT.grave.some((grave: Card) => grave.gamecardId === card.gamecardId)
   );
-  return live && milled
-    ? pass(name, `searched=${searched}, live=${live}, grave=${state.players.BOT.grave.length}`)
-    : fail(name, `live=${live}, graveBefore=${graveCountBeforeSelfPut}, grave=${state.players.BOT.grave.length}`);
+  return sameTurnBlocked && live && milled
+    ? pass(name, `searched=${searched}, onceBlocked=${sameTurnBlocked}, live=${live}`)
+    : fail(name, `onceBlocked=${sameTurnBlocked}, live=${live}, milled=${milled}`);
 }
 
 async function testKuyaColdDewSearchAndDestroy(): Promise<ScenarioResult> {
@@ -577,11 +622,15 @@ async function testKuyaColdDewSearchAndDestroy(): Promise<ScenarioResult> {
     unitZone: [target, invalidHigh, invalidGod, null, null, null],
   });
 
-  await activateAndResolveByOpponentPass(state, 'BOT', coldDew, 0);
-  if (state.pendingQuery?.context?.step !== 'DISCARD') {
+  await activateKuyaMode(state, 'BOT', coldDew, 'HAND_SEARCH');
+  if (state.pendingQuery?.context?.step !== 'DISCARD_COST') {
     return fail(name, `expected discard query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
   await answerPendingQuery(state, 'BOT', [otherDiscard.gamecardId]);
+  if (state.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING after discard cost, got ${state.phase}`);
+  }
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
   if (state.pendingQuery?.context?.step !== 'SEARCH') {
     return fail(name, `expected search query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
@@ -592,30 +641,45 @@ async function testKuyaColdDewSearchAndDestroy(): Promise<ScenarioResult> {
   if (!searched || !inGrave) {
     return fail(name, `searched=${searched}, inGrave=${inGrave}`);
   }
+  const sameTurnBlocked = await expectKuyaOnceLimitBlocks(state, 'BOT', coldDew);
 
-  await ServerGameService.activateEffect(state, 'BOT', coldDew.gamecardId, 1);
-  if (state.pendingQuery?.callbackKey !== 'ACTIVATE_COST_RESOLVE') {
-    return fail(name, `expected payment query, got ${state.pendingQuery?.context?.effectId || state.pendingQuery?.callbackKey || 'none'}`);
+  const graveColdDew = cloneScriptCard(sp03R01 as Card, 'GRAVE');
+  const graveTarget = testCard({ id: 'GRAVE_ACCESS3_TARGET', fullName: 'Grave Access 3 Target', acValue: 3, godMark: false, cardlocation: 'UNIT' });
+  const graveInvalidHigh = testCard({ id: 'GRAVE_ACCESS4_TARGET', fullName: 'Grave Access 4 Target', acValue: 4, godMark: false, cardlocation: 'UNIT' });
+  const graveInvalidGod = testCard({ id: 'GRAVE_GOD_TARGET', fullName: 'Grave God Target', acValue: 3, godMark: true, cardlocation: 'UNIT' });
+  const gravePayerA = testCard({ id: 'GRAVE_COLD_DEW_PAYER_A', fullName: 'Grave Cold Dew Payer A', color: 'RED', cardlocation: 'UNIT', isExhausted: false });
+  const gravePayerB = testCard({ id: 'GRAVE_COLD_DEW_PAYER_B', fullName: 'Grave Cold Dew Payer B', color: 'RED', cardlocation: 'UNIT', isExhausted: false });
+  const graveState = game({
+    grave: [graveColdDew],
+    unitZone: [gravePayerA, gravePayerB, null, null, null, null],
+  }, {
+    unitZone: [graveTarget, graveInvalidHigh, graveInvalidGod, null, null, null],
+  });
+  markDiscardedAsCostFromHandThisTurn(graveColdDew, graveState);
+
+  await activateKuyaMode(graveState, 'BOT', graveColdDew, 'GRAVE_DESTROY');
+  if (graveState.pendingQuery?.context?.step !== 'GRAVE_DESTROY') {
+    return fail(name, `expected destroy target query, got ${graveState.pendingQuery?.context?.step || graveState.pendingQuery?.callbackKey || 'none'}`);
   }
-  await answerPendingQuery(state, 'BOT', [JSON.stringify({ exhaustUnitIds: [payerA.gamecardId, payerB.gamecardId] })]);
-  if (state.phase !== 'COUNTERING') {
-    return fail(name, `expected COUNTERING after payment, got ${state.phase}`);
-  }
-  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
-  if (state.pendingQuery?.context?.effectId !== '102000288_grave_destroy_access_three') {
-    return fail(name, `expected destroy query, got ${state.pendingQuery?.context?.effectId || state.pendingQuery?.callbackKey || 'none'}`);
-  }
-  const options = (state.pendingQuery.options || []).map((option: any) => option.card.gamecardId);
-  if (!options.includes(target.gamecardId) || options.includes(invalidHigh.gamecardId) || options.includes(invalidGod.gamecardId)) {
+  const options = (graveState.pendingQuery.options || []).map((option: any) => option.card.gamecardId);
+  if (!options.includes(graveTarget.gamecardId) || options.includes(graveInvalidHigh.gamecardId) || options.includes(graveInvalidGod.gamecardId)) {
     return fail(name, `options=${options.join(',')}`);
   }
-  await answerPendingQuery(state, 'BOT', [target.gamecardId]);
+  await answerPendingQuery(graveState, 'BOT', [graveTarget.gamecardId]);
+  if (graveState.pendingQuery?.callbackKey !== 'ACTIVATE_COST_RESOLVE') {
+    return fail(name, `expected payment query, got ${graveState.pendingQuery?.context?.effectId || graveState.pendingQuery?.callbackKey || 'none'}`);
+  }
+  await answerPendingQuery(graveState, 'BOT', [JSON.stringify({ exhaustUnitIds: [gravePayerA.gamecardId, gravePayerB.gamecardId] })]);
+  if (graveState.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING after payment, got ${graveState.phase}`);
+  }
+  await ServerGameService.passConfrontation(graveState, graveState.priorityPlayerId);
 
-  const paid = payerA.isExhausted === true && payerB.isExhausted === true;
-  const destroyed = state.players.P1.grave.some((card: Card) => card.gamecardId === target.gamecardId);
-  return paid && destroyed
-    ? pass(name, `searched=${searched}, paid=${paid}, destroyed=${destroyed}`)
-    : fail(name, `paid=${paid}, destroyed=${destroyed}`);
+  const paid = gravePayerA.isExhausted === true && gravePayerB.isExhausted === true;
+  const destroyed = graveState.players.P1.grave.some((card: Card) => card.gamecardId === graveTarget.gamecardId);
+  return sameTurnBlocked && paid && destroyed
+    ? pass(name, `searched=${searched}, onceBlocked=${sameTurnBlocked}, paid=${paid}, destroyed=${destroyed}`)
+    : fail(name, `onceBlocked=${sameTurnBlocked}, paid=${paid}, destroyed=${destroyed}`);
 }
 
 async function testKuyaFrostRiverSearchAndRecover(): Promise<ScenarioResult> {
@@ -631,28 +695,46 @@ async function testKuyaFrostRiverSearchAndRecover(): Promise<ScenarioResult> {
     grave: [recover, sameName],
   });
 
-  await activateAndResolveByOpponentPass(state, 'BOT', frostRiver, 0);
-  if (state.pendingQuery?.context?.step !== 'DISCARD') {
+  await activateKuyaMode(state, 'BOT', frostRiver, 'HAND_SEARCH');
+  if (state.pendingQuery?.context?.step !== 'DISCARD_COST') {
     return fail(name, `expected discard query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
   await answerPendingQuery(state, 'BOT', [otherDiscard.gamecardId]);
+  if (state.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING after discard cost, got ${state.phase}`);
+  }
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
   await answerPendingQuery(state, 'BOT', [search.gamecardId]);
 
   const searched = state.players.BOT.hand.some((card: Card) => card.gamecardId === search.gamecardId);
-  await activateAndResolveByOpponentPass(state, 'BOT', frostRiver, 1);
-  if (state.pendingQuery?.context?.effectId !== '102000289_grave_recover_kuya') {
-    return fail(name, `searched=${searched}, expected recover query got ${state.pendingQuery?.context?.effectId || 'none'}`);
+  const sameTurnBlocked = await expectKuyaOnceLimitBlocks(state, 'BOT', frostRiver);
+
+  const graveFrostRiver = cloneScriptCard(sp03R02 as Card, 'GRAVE');
+  const graveRecover = cloneScriptCard(sp03G05 as Card, 'GRAVE');
+  const graveSameName = cloneScriptCard(sp03R02 as Card, 'GRAVE');
+  const graveState = game({
+    grave: [graveFrostRiver, graveRecover, graveSameName],
+  });
+  markDiscardedAsCostFromHandThisTurn(graveFrostRiver, graveState);
+
+  await activateKuyaMode(graveState, 'BOT', graveFrostRiver, 'GRAVE_RECOVER');
+  if (graveState.pendingQuery?.context?.step !== 'GRAVE_RECOVER') {
+    return fail(name, `searched=${searched}, expected recover query got ${graveState.pendingQuery?.context?.step || graveState.pendingQuery?.callbackKey || 'none'}`);
   }
-  const options = (state.pendingQuery.options || []).map((option: any) => option.card.gamecardId);
-  if (!options.includes(recover.gamecardId) || options.includes(sameName.gamecardId) || options.includes(frostRiver.gamecardId)) {
+  const options = (graveState.pendingQuery.options || []).map((option: any) => option.card.gamecardId);
+  if (!options.includes(graveRecover.gamecardId) || options.includes(graveSameName.gamecardId) || options.includes(graveFrostRiver.gamecardId)) {
     return fail(name, `options=${options.join(',')}`);
   }
-  await answerPendingQuery(state, 'BOT', [recover.gamecardId]);
+  await answerPendingQuery(graveState, 'BOT', [graveRecover.gamecardId]);
+  if (graveState.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING for recover mode, got ${graveState.phase}`);
+  }
+  await ServerGameService.passConfrontation(graveState, graveState.priorityPlayerId);
 
-  const recovered = state.players.BOT.hand.some((card: Card) => card.gamecardId === recover.gamecardId);
-  return searched && recovered
-    ? pass(name, `searched=${searched}, recovered=${recovered}`)
-    : fail(name, `searched=${searched}, recovered=${recovered}`);
+  const recovered = graveState.players.BOT.hand.some((card: Card) => card.gamecardId === graveRecover.gamecardId);
+  return searched && sameTurnBlocked && recovered
+    ? pass(name, `searched=${searched}, onceBlocked=${sameTurnBlocked}, recovered=${recovered}`)
+    : fail(name, `searched=${searched}, onceBlocked=${sameTurnBlocked}, recovered=${recovered}`);
 }
 
 async function testFlameRayIrodoriDestroysWithSacrifice(): Promise<ScenarioResult> {
@@ -769,22 +851,39 @@ async function testKuyaDinnerGirlsSearchAndDraw(): Promise<ScenarioResult> {
     deck: [draw, search],
   });
 
-  await activateAndResolveByOpponentPass(state, 'BOT', girls, 0);
-  if (state.pendingQuery?.context?.step !== 'DISCARD') {
+  await activateKuyaMode(state, 'BOT', girls, 'HAND_SEARCH');
+  if (state.pendingQuery?.context?.step !== 'DISCARD_COST') {
     return fail(name, `expected discard query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
   await answerPendingQuery(state, 'BOT', [otherDiscard.gamecardId]);
+  if (state.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING after discard cost, got ${state.phase}`);
+  }
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
   if (state.pendingQuery?.context?.step !== 'SEARCH') {
     return fail(name, `expected search query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
   await answerPendingQuery(state, 'BOT', [search.gamecardId]);
   const searched = state.players.BOT.hand.some((card: Card) => card.gamecardId === search.gamecardId);
+  const sameTurnBlocked = await expectKuyaOnceLimitBlocks(state, 'BOT', girls);
 
-  await activateAndResolveByOpponentPass(state, 'BOT', girls, 1);
-  const drew = state.players.BOT.hand.some((card: Card) => card.gamecardId === draw.gamecardId);
-  return searched && drew
-    ? pass(name, `searched=${searched}, drew=${drew}`)
-    : fail(name, `searched=${searched}, drew=${drew}`);
+  const graveGirls = cloneScriptCard(sp03B01 as Card, 'GRAVE');
+  const graveDraw = testCard({ id: 'GRAVE_DRAW_CARD', fullName: 'Grave Draw Card', cardlocation: 'DECK' });
+  const graveState = game({
+    deck: [graveDraw],
+    grave: [graveGirls],
+  });
+  markDiscardedAsCostFromHandThisTurn(graveGirls, graveState);
+
+  await activateKuyaMode(graveState, 'BOT', graveGirls, 'GRAVE_DRAW');
+  if (graveState.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING for draw mode, got ${graveState.phase}`);
+  }
+  await ServerGameService.passConfrontation(graveState, graveState.priorityPlayerId);
+  const drew = graveState.players.BOT.hand.some((card: Card) => card.gamecardId === graveDraw.gamecardId);
+  return searched && sameTurnBlocked && drew
+    ? pass(name, `searched=${searched}, onceBlocked=${sameTurnBlocked}, drew=${drew}`)
+    : fail(name, `searched=${searched}, onceBlocked=${sameTurnBlocked}, drew=${drew}`);
 }
 
 async function testXiaoxueIrodoriRecoversGraveOrErosion(): Promise<ScenarioResult> {

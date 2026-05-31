@@ -230,6 +230,16 @@ async function playStoryAndResolve(state: any, playerUid: string, card: Card) {
   await ServerGameService.passConfrontation(state, state.priorityPlayerId);
 }
 
+async function playStoryWithEffectCostAndResolve(state: any, playerUid: string, card: Card, costSelections: string[]) {
+  await ServerGameService.playCard(state, playerUid, card.gamecardId, {});
+  if (state.pendingQuery?.callbackKey !== 'ACTIVATE_COST_RESOLVE') {
+    throw new Error(`Expected effect cost query after story play, got ${state.pendingQuery?.callbackKey || 'none'}`);
+  }
+  await answerPendingQuery(state, playerUid, costSelections);
+  if (state.phase !== 'COUNTERING') throw new Error(`Expected COUNTERING after story cost, got ${state.phase}`);
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+}
+
 async function activateAndResolveByOpponentPass(state: any, playerUid: string, card: Card, effectIndex: number) {
   await ServerGameService.activateEffect(state, playerUid, card.gamecardId, effectIndex);
   if (state.pendingQuery?.callbackKey === 'ACTIVATE_COST_RESOLVE') {
@@ -556,11 +566,7 @@ async function testDevotionProtectsFromOpponentLeaveEffect(): Promise<ScenarioRe
     unitZone: [opponentSource, null, null, null, null, null],
   });
 
-  await playStoryAndResolve(state, 'BOT', devotionCard);
-  if (state.pendingQuery?.context?.effectId !== '201100099_devotion') {
-    return fail(name, `expected Devotion cost query, got ${state.pendingQuery?.context?.effectId || 'none'}`);
-  }
-  await answerPendingQuery(state, 'BOT', [costUnit.gamecardId]);
+  await playStoryWithEffectCostAndResolve(state, 'BOT', devotionCard, [costUnit.gamecardId]);
   const liveProtected = state.players.BOT.unitZone.find((unit: Card | null) => unit?.gamecardId === protectedUnit.gamecardId);
   if (!liveProtected || !(liveProtected as any).data?.cannotLeaveFieldByOpponentEffectTurn) {
     return fail(name, `protected marker missing, live=${!!liveProtected}`);
@@ -590,11 +596,7 @@ async function testAngelAdventPlacesShingiMarkedUnit(): Promise<ScenarioResult> 
     unitZone: [fodder[0], fodder[1], fodder[2], extraFodder[0], extraFodder[1], extraFodder[2]],
   });
 
-  await playStoryAndResolve(state, 'BOT', storyCard);
-  if (state.pendingQuery?.context?.step !== 'EXILE_UNITS') {
-    return fail(name, `expected cost query, got ${state.pendingQuery?.context?.step || 'none'}`);
-  }
-  await answerPendingQuery(state, 'BOT', fodder.map(card => card.gamecardId));
+  await playStoryWithEffectCostAndResolve(state, 'BOT', storyCard, fodder.map(card => card.gamecardId));
   if (state.pendingQuery?.context?.step !== 'PUT_UNIT') {
     return fail(name, `expected put query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }
@@ -626,8 +628,7 @@ async function testDawnRitualPlacesGoddessChurchAc3(): Promise<ScenarioResult> {
     unitZone: [fodder[0], fodder[1], fodder[2], extraFodder[0], extraFodder[1], extraFodder[2]],
   });
 
-  await playStoryAndResolve(state, 'BOT', storyCard);
-  await answerPendingQuery(state, 'BOT', fodder.map(card => card.gamecardId));
+  await playStoryWithEffectCostAndResolve(state, 'BOT', storyCard, fodder.map(card => card.gamecardId));
   if (state.pendingQuery?.context?.step !== 'PUT_UNIT') {
     return fail(name, `expected put query, got ${state.pendingQuery?.context?.step || 'none'}`);
   }

@@ -6,7 +6,7 @@ const isSeisoUnit = (card: Card) =>
   card.type === 'UNIT' && (card.fullName.includes('清霜') || !!card.specialName?.includes('清霜'));
 
 const isSeisoMochiyuki = (card: Card) =>
-  card.id === '103000299' || card.fullName.includes('清霜玉雪') || card.specialName?.includes('玉雪');
+  card.id === '103000300' || card.fullName.includes('清霜玉雪') || card.specialName?.includes('玉雪');
 
 const isAccessThree = (card: Card) => Number(card.acValue || 0) === 3;
 

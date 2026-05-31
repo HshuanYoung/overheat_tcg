@@ -6,7 +6,7 @@ const isSeisoUnit = (card: Card) =>
   card.type === 'UNIT' && (card.fullName.includes('清霜') || !!card.specialName?.includes('清霜'));
 
 const isSeisoMochiyuki = (card: Card) =>
-  card.id === '103000299' || card.fullName.includes('清霜饼雪') || card.specialName?.includes('饼雪');
+  card.id === '101000291' || card.fullName.includes('清霜粉雪') || card.specialName?.includes('粉雪');
 
 const isAccessThree = (card: Card) => Number(card.acValue || 0) === 3;
 
@@ -17,7 +17,7 @@ const effect_101000291_attack_destroy_boost: CardEffect = {
   isGlobal: true,
   isMandatory: false,
   triggerLocation: ['UNIT'],
-  description: '这个单位宣言攻击时，可以破坏自己场上1个《清霜饼雪》以外的《清霜》单位。之后己方ACCESS 3单位本回合力量+1000。',
+  description: '这个单位宣言攻击时，可以破坏自己场上1个《清霜粉雪》以外的《清霜》单位。之后己方ACCESS 3单位本回合力量+1000。',
   condition: (_gameState, playerState, instance, event) =>
     event?.playerUid === playerState.uid &&
     (event.data?.attackerIds || []).includes(instance.gamecardId) &&
@@ -37,7 +37,7 @@ const effect_101000291_attack_destroy_boost: CardEffect = {
       playerState.uid,
       candidates,
       '选择破坏的清霜单位',
-      '选择自己战场上的1个《清霜饼雪》以外的《清霜》单位破坏。之后ACCESS 3单位力量+1000。',
+      '选择自己战场上的1个《清霜粉雪》以外的《清霜》单位破坏。之后ACCESS 3单位力量+1000。',
       1,
       1,
       { sourceCardId: instance.gamecardId, effectId: '101000291_attack_destroy_boost' },
@@ -122,7 +122,7 @@ const effect_101000291_leave_destroy: CardEffect = {
  * ID Source: card-xlsx
  * Keywords: N/A
  * Card Detail:
- * 【诱】{这个单位宣言攻击时}：你可以将你的战场上的《清霜饼雪》以外的1个卡名含有《清霜》的单位破坏。之后，你的战场上所有的ACCESS值+3的单位本回合中〖力量+1000〗。
+ * 【诱】{这个单位宣言攻击时}：你可以将你的战场上的《清霜粉雪》以外的1个卡名含有《清霜》的单位破坏。之后，你的战场上所有的ACCESS值+3的单位本回合中〖力量+1000〗。
  * 【诱】〖同名1回合1次〗{这张卡由于战斗或你的卡的效果从战场离开时，选择战场上1个ACCESS值+3以下的非神蚀单位}：将被选择的单位破坏。
  */
 const card: Card = {

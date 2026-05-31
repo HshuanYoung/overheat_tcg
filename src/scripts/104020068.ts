@@ -1,6 +1,6 @@
 import { Card, GameState, PlayerState, CardEffect, TriggerLocation, GameEvent } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { canMeetBattlefieldColorRequirement } from './BaseUtil';
+import { allCardsOnField, canMeetBattlefieldColorRequirement, erosionCost } from './BaseUtil';
 
 const effect_104020068_trigger: CardEffect = {
   id: 'aketi_rotation_trigger',
@@ -71,84 +71,44 @@ const effect_104020068_activate: CardEffect = {
   limitCount: 1,
   limitGlobal: true,
   limitNameType: true,
-  execute: async (instance: Card, gameState: GameState, playerState: PlayerState) => {
-    // 1. Cost: Select 2 from Erosion Front
-    const frontCards = playerState.erosionFront.filter(c => c !== null) as Card[];
-    gameState.pendingQuery = {
-      id: Math.random().toString(36).substring(7),
-      type: 'SELECT_CARD',
-      playerUid: playerState.uid,
-      options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, frontCards.map(c => ({ card: c, source: 'EROSION_FRONT' }))),
-      title: '支付发动代价',
-      description: '选择侵蚀区域两张卡牌转为背面。',
-      minSelections: 2,
-      maxSelections: 2,
-      callbackKey: 'EFFECT_RESOLVE',
-      context: {
-        effectId: 'aketi_goddess_bounce',
-        sourceCardId: instance.gamecardId,
-        step: 'COST'
-      }
-    };
+  cost: async (gameState, playerState, instance) => {
+    const paid = await erosionCost(2)(gameState, playerState, instance);
+    if (gameState.pendingQuery) {
+      gameState.pendingQuery.context = {
+        ...gameState.pendingQuery.context,
+        skipEffectResolveAfterCost: true
+      };
+    }
+    return paid;
   },
   onQueryResolve: async (instance: Card, gameState: GameState, playerState: PlayerState, selections: string[], context: any) => {
-    if (context.step === 'COST') {
-      // Move to back face-down
+    if (context?.costType === 'EROSION_COST') return;
+
+    for (const id of selections) {
+      const target = AtomicEffectExecutor.findCardById(gameState, id);
+      if (!target) continue;
+
       await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-        type: 'TURN_EROSION_FACE_DOWN',
-        value: 2
-      }, instance, undefined, selections);
-
-      gameState.logs.push(`[${instance.fullName}] 支付了代价，将侵蚀区卡牌转为背面状态。`);
-
-      // 2. Select up to 2 units/items
-      const targets: Card[] = [];
-      Object.values(gameState.players).forEach(p => {
-        p.unitZone.forEach(c => { if (c) targets.push(c); });
-        p.itemZone.forEach(c => { if (c) targets.push(c); });
-      });
-
-      if (targets.length > 0) {
-        gameState.pendingQuery = {
-          id: Math.random().toString(36).substring(7),
-          type: 'SELECT_CARD',
-          playerUid: playerState.uid,
-          options: AtomicEffectExecutor.enrichQueryOptions(gameState, playerState.uid, targets.map(c => ({ card: c, source: c.cardlocation as TriggerLocation }))),
-          title: '选择目标卡牌',
-          description: '选择最多两张单位或道具卡牌返回持有者手牌。',
-          minSelections: 1,
-          maxSelections: 2,
-          callbackKey: 'EFFECT_RESOLVE',
-          context: {
-            effectId: 'aketi_goddess_bounce',
-            sourceCardId: instance.gamecardId,
-            step: 'BOUNCE'
-          }
-        };
-      }
-    } else if (context.step === 'BOUNCE') {
-      for (const id of selections) {
-        const target = AtomicEffectExecutor.findCardById(gameState, id)!;
-        const owner = AtomicEffectExecutor.findCardOwnerKey(gameState, id)!;
-        const sourceZone = target.cardlocation as TriggerLocation;
-
-        let type: any = 'MOVE_FROM_FIELD';
-        if (sourceZone === 'ITEM') type = 'MOVE_FROM_FIELD'; // Atomic handles both in MOVE_FROM_FIELD usually, or I should check implementation
-
-        await AtomicEffectExecutor.execute(gameState, owner, {
-          type,
-          targetFilter: { gamecardId: id },
-          destinationZone: 'HAND'
-        }, instance);
-      }
-      gameState.logs.push(`[${instance.fullName}] 使 ${selections.length} 张卡牌回到了手牌。`);
-
-      // Self damage
-      await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-        type: 'DEAL_EFFECT_DAMAGE_SELF',
-        value: 2
+        type: 'MOVE_FROM_FIELD',
+        targetFilter: { gamecardId: id },
+        destinationZone: 'HAND'
       }, instance);
     }
+    gameState.logs.push(`[${instance.fullName}] 使 ${selections.length} 张卡牌回到了手牌。`);
+
+    await AtomicEffectExecutor.execute(gameState, playerState.uid, {
+      type: 'DEAL_EFFECT_DAMAGE_SELF',
+      value: 2
+    }, instance);
+  },
+  targetSpec: {
+    title: '选择目标卡牌',
+    description: '选择最多两张单位或道具卡牌返回持有者手牌。',
+    minSelections: 0,
+    maxSelections: 2,
+    zones: ['UNIT', 'ITEM'],
+    getCandidates: (gameState) =>
+      allCardsOnField(gameState).map(card => ({ card, source: card.cardlocation as TriggerLocation }))
   }
 };
 

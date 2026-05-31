@@ -3,41 +3,55 @@ import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 import { backErosionCount, createSelectCardQuery, ensureData, moveCard, moveCardAsCost, ownUnits, story } from './BaseUtil';
 
 const cardEffects: CardEffect[] = [story('201100099_devotion', '创痕2：将你战场上的1个神蚀单位放逐。本回合中，你的单位不会由于对手的卡的效果从战场上离开，防止你将要受到的所有伤害。放逐这张卡。', async (instance, gameState, playerState) => {
-  const candidates = ownUnits(playerState).filter(unit => unit.godMark);
-  if (candidates.length === 0) return;
-  createSelectCardQuery(
-    gameState,
-    playerState.uid,
-    candidates,
-    '选择献身单位',
-    '选择你战场上的1个神蚀单位放逐作为费用。',
-    1,
-    1,
-    { sourceCardId: instance.gamecardId, effectId: '201100099_devotion', step: 'EXILE_GODMARK_UNIT' },
-    () => 'UNIT'
-  );
+  ownUnits(playerState).forEach(unit => {
+    const data = ensureData(unit);
+    data.cannotLeaveFieldByOpponentEffectTurn = gameState.turnCount;
+    data.cannotLeaveFieldByOpponentEffectSourceName = instance.fullName;
+  });
+  (playerState as any).preventAllDamageTurn = gameState.turnCount;
+  (playerState as any).preventAllDamageSourceName = instance.fullName;
+
+  const liveStory = AtomicEffectExecutor.findCardById(gameState, instance.gamecardId);
+  if (liveStory?.cardlocation === 'PLAY' || liveStory?.cardlocation === 'GRAVE') {
+    moveCard(gameState, playerState.uid, liveStory, 'EXILE', instance);
+  }
 }, {
   condition: (_gameState, playerState) =>
     backErosionCount(playerState) >= 2 &&
     ownUnits(playerState).some(unit => unit.godMark),
-  onQueryResolve: async (instance, gameState, playerState, selections, context) => {
+  cost: async (gameState, playerState, instance) => {
+    const candidates = ownUnits(playerState).filter(unit => unit.godMark);
+    if (candidates.length === 0) return false;
+    createSelectCardQuery(
+      gameState,
+      playerState.uid,
+      candidates,
+      '选择献身单位',
+      '选择你战场上的1个神蚀单位放逐作为费用。',
+      1,
+      1,
+      {
+        sourceCardId: instance.gamecardId,
+        effectId: '201100099_devotion',
+        step: 'EXILE_GODMARK_UNIT',
+        skipEffectResolveAfterCost: true
+      },
+      () => 'UNIT'
+    );
+    return true;
+  },
+  onCostResolve: async (instance, gameState, playerState, selections, context) => {
     if (context?.step !== 'EXILE_GODMARK_UNIT') return;
-    const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
-    if (!target || target.cardlocation !== 'UNIT' || !target.godMark) return;
+    const target = selections[0]
+      ? ownUnits(playerState).find(unit => unit.gamecardId === selections[0])
+      : undefined;
+    if (!target || target.cardlocation !== 'UNIT' || !target.godMark) {
+      context.cancelActivation = true;
+      gameState.logs.push(`[${instance.fullName}] 献身费用不合法，发动中止。`);
+      return;
+    }
 
     moveCardAsCost(gameState, playerState.uid, target, 'EXILE', instance);
-    ownUnits(playerState).forEach(unit => {
-      const data = ensureData(unit);
-      data.cannotLeaveFieldByOpponentEffectTurn = gameState.turnCount;
-      data.cannotLeaveFieldByOpponentEffectSourceName = instance.fullName;
-    });
-    (playerState as any).preventAllDamageTurn = gameState.turnCount;
-    (playerState as any).preventAllDamageSourceName = instance.fullName;
-
-    const liveStory = AtomicEffectExecutor.findCardById(gameState, instance.gamecardId);
-    if (liveStory?.cardlocation === 'PLAY' || liveStory?.cardlocation === 'GRAVE') {
-      moveCard(gameState, playerState.uid, liveStory, 'EXILE', instance);
-    }
   }
 })];
 

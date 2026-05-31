@@ -1981,7 +1981,7 @@ export const ServerGameService = {
     return true;
   },
 
-  canPlayCard(gameState: GameState, player: PlayerState, card: Card, options?: { skipPlayEffectRequirementCheck?: boolean }): { canPlay: boolean; reason?: string } {
+  canPlayCard(gameState: GameState, player: PlayerState, card: Card, options?: { skipColorRequirementCheck?: boolean; skipPlayEffectRequirementCheck?: boolean }): { canPlay: boolean; reason?: string } {
     if (player.negatedNames && player.negatedNames.includes(card.fullName)) {
       return { canPlay: false, reason: `该卡牌 [${card.fullName}] 在本回合已被禁止打出或发动` };
     }
@@ -2036,52 +2036,54 @@ export const ServerGameService = {
     }
 
     // 3. Color Requirements
-    const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
-    let omniColorCount = 0;
+    if (!options?.skipColorRequirementCheck) {
+      const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
+      let omniColorCount = 0;
 
-    const checkOmni = (c: Card | null) => {
-      if (!c) return false;
-      // Use robust ID matching (string/number safe)
-      const isTargetId = String(c.id) === '105000481';
-      const hasOmniEffect = c.effects && c.effects.some(e => e.id === '105000481_omni');
-      return isTargetId || hasOmniEffect;
-    };
+      const checkOmni = (c: Card | null) => {
+        if (!c) return false;
+        // Use robust ID matching (string/number safe)
+        const isTargetId = String(c.id) === '105000481';
+        const hasOmniEffect = c.effects && c.effects.some(e => e.id === '105000481_omni');
+        return isTargetId || hasOmniEffect;
+      };
 
-    // Count fixed colors from Unit Zone
-    player.unitZone.forEach(c => {
-      if (!c) return;
-      if (checkOmni(c)) {
-        omniColorCount++;
-      } else if (c.color !== 'NONE') {
-        availableColors[c.color] = (availableColors[c.color] || 0) + 1;
-      }
-      const extraColors = [
-        ...((c as any).temporaryExtraColors || []),
-        ...((c as any).persistentExtraColors || [])
-      ];
-      extraColors.forEach(color => {
-        if (typeof color === 'string' && color !== c.color && color in availableColors) {
-          availableColors[color] = (availableColors[color] || 0) + 1;
+      // Count fixed colors from Unit Zone
+      player.unitZone.forEach(c => {
+        if (!c) return;
+        if (checkOmni(c)) {
+          omniColorCount++;
+        } else if (c.color !== 'NONE') {
+          availableColors[c.color] = (availableColors[c.color] || 0) + 1;
         }
+        const extraColors = [
+          ...((c as any).temporaryExtraColors || []),
+          ...((c as any).persistentExtraColors || [])
+        ];
+        extraColors.forEach(color => {
+          if (typeof color === 'string' && color !== c.color && color in availableColors) {
+            availableColors[color] = (availableColors[color] || 0) + 1;
+          }
+        });
       });
-    });
 
-    const colorReqOptions = [card.colorReq || {}];
-    if ((card as any).data?.spiritCostTarget103080185 || ServerGameService.hasSpiritDiscountTargetOnField(gameState, card)) {
-      colorReqOptions.unshift({ GREEN: 1 });
-    }
-    const colorRequirementResults = colorReqOptions.map(req => {
-      let totalDeficit = 0;
-      for (const [color, reqCount] of Object.entries(req)) {
-        const deficit = Math.max(0, (reqCount as number) - (availableColors[color] || 0));
-        totalDeficit += deficit;
+      const colorReqOptions = [card.colorReq || {}];
+      if ((card as any).data?.spiritCostTarget103080185 || ServerGameService.hasSpiritDiscountTargetOnField(gameState, card)) {
+        colorReqOptions.unshift({ GREEN: 1 });
       }
-      return { valid: totalDeficit <= omniColorCount, totalDeficit };
-    });
+      const colorRequirementResults = colorReqOptions.map(req => {
+        let totalDeficit = 0;
+        for (const [color, reqCount] of Object.entries(req)) {
+          const deficit = Math.max(0, (reqCount as number) - (availableColors[color] || 0));
+          totalDeficit += deficit;
+        }
+        return { valid: totalDeficit <= omniColorCount, totalDeficit };
+      });
 
-    if (!colorRequirementResults.some(result => result.valid)) {
-      const bestDeficit = Math.min(...colorRequirementResults.map(result => result.totalDeficit));
-      return { canPlay: false, reason: `缺少颜色需求 (缺口: ${bestDeficit}, 可用变色单位: ${omniColorCount})` };
+      if (!colorRequirementResults.some(result => result.valid)) {
+        const bestDeficit = Math.min(...colorRequirementResults.map(result => result.totalDeficit));
+        return { canPlay: false, reason: `缺少颜色需求 (缺口: ${bestDeficit}, 可用变色单位: ${omniColorCount})` };
+      }
     }
 
 
@@ -2640,14 +2642,17 @@ export const ServerGameService = {
     }
 
     const canPlay = ServerGameService.canPlayCard(gameState, player, card, {
+      skipColorRequirementCheck: !!options?.effectCostResolved,
       skipPlayEffectRequirementCheck: !!options?.effectCostResolved || (!!options?.resumeFromQuery && !!declaredTargets)
     });
     if (!canPlay.canPlay) throw new Error(canPlay.reason);
 
     const usesSpiritDiscount = ServerGameService.isSpiritDiscountFromDeclaredTargets(gameState, card, declaredTargets);
-    const colorCheck = ServerGameService.getColorRequirementResult(player, usesSpiritDiscount ? { GREEN: 1 } : (card.colorReq || {}));
-    if (!colorCheck.valid) {
-      throw new Error(`缺少颜色需求 (缺口: ${colorCheck.totalDeficit}, 可用变色单位: ${colorCheck.omniColorCount})`);
+    if (!options?.effectCostResolved) {
+      const colorCheck = ServerGameService.getColorRequirementResult(player, usesSpiritDiscount ? { GREEN: 1 } : (card.colorReq || {}));
+      if (!colorCheck.valid) {
+        throw new Error(`缺少颜色需求 (缺口: ${colorCheck.totalDeficit}, 可用变色单位: ${colorCheck.omniColorCount})`);
+      }
     }
 
     const cost = usesSpiritDiscount ? 0 : ServerGameService.getEffectivePlayCost(player, card, gameState);
@@ -2866,10 +2871,14 @@ export const ServerGameService = {
       });
       if (opened) return gameState;
     }
+    const declaredModeId = (declaredTargets as any)?.declaredModeId || declaredTargets?.[0]?.modeId || options?.declaredModeId;
     // 3. Payment/Cost Check
     if (effect.cost) {
       const player = gameState.players[playerId];
-      const costResult = await effect.cost(gameState, player, card);
+      const costResult = await (effect.cost as any)(gameState, player, card, {
+        declaredTargets,
+        declaredModeId
+      });
 
       // If cost triggered a query, wait for it
       if (gameState.pendingQuery) {
@@ -2880,7 +2889,7 @@ export const ServerGameService = {
           effectIndex: effectIndex,
           activationPlayerUid: playerId,
           declaredTargets,
-          declaredModeId: options?.declaredModeId
+          declaredModeId
         };
         return gameState;
       }
@@ -2890,7 +2899,7 @@ export const ServerGameService = {
       }
     }
 
-    ServerGameService.finalizeEffectActivation(gameState, playerId, card, effect, effectIndex, declaredTargets, options?.declaredModeId);
+    ServerGameService.finalizeEffectActivation(gameState, playerId, card, effect, effectIndex, declaredTargets, declaredModeId);
     return gameState;
 
     ServerGameService.recordEffectUsage(gameState, playerId, card, effect);
@@ -4466,13 +4475,15 @@ export const ServerGameService = {
         }
       }
 
-      if (defendingUnit && !gameState.battleState.resolvedUnitIds?.includes(defenderUnitId)) {
+      let defenderDestroyed = gameState.battleState.resolvedUnitIds?.includes(defenderUnitId) || false;
+      if (defendingUnit && !defenderDestroyed) {
         const destroyedDefender = await ServerGameService.destroyUnit(gameState, defenderId, defenderUnitId);
         if (destroyedDefender === undefined) return gameState;
         if (destroyedDefender !== false) {
           gameState.logs.push(`[联军结算] ${defendingUnit.fullName} 被联军破坏。`);
           gameState.battleState.resolvedUnitIds = gameState.battleState.resolvedUnitIds || [];
           gameState.battleState.resolvedUnitIds.push(defenderUnitId);
+          defenderDestroyed = true;
         }
       }
 
@@ -4489,8 +4500,10 @@ export const ServerGameService = {
       });
 
       // Annihilation is based on attackers that actually survived destruction/prevention.
-      const survivors = ServerGameService.getSurvivingAllianceAttackers(gameState, attackerId, attackerIds);
-      ServerGameService.applyAllianceAnnihilationDamage(gameState, defenderId, survivors);
+      if (defenderDestroyed) {
+        const survivors = ServerGameService.getSurvivingAllianceAttackers(gameState, attackerId, attackerIds);
+        ServerGameService.applyAllianceAnnihilationDamage(gameState, defenderId, survivors);
+      }
       await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
       if (gameState.pendingQuery) {
         (gameState as any).pendingBattleEndAfterQuery = {
@@ -5322,12 +5335,20 @@ export const ServerGameService = {
           const defenderResult = await destroyDefender();
           const res1 = await destroyAttacker(attackingUnits[0]);
           const res2 = await destroyAttacker(attackingUnits[1]);
+          if (defenderResult === undefined || res1 === undefined || res2 === undefined) return gameState;
           if (defenderResult !== false && res1 !== false && res2 !== false) {
             gameState.logs.push(`联军与 ${defendingUnit.fullName} 同归于尽`);
           }
-          if (defenderResult === undefined || res1 === undefined || res2 === undefined) return gameState;
+          if (defenderResult !== false) {
+            ServerGameService.applyAllianceAnnihilationDamage(
+              gameState,
+              defenderId,
+              ServerGameService.getSurvivingAllianceAttackers(gameState, attackerId, gameState.battleState.attackers)
+            );
+          }
         } else if (aHigher && bHigher) {
           const defenderResult = await destroyDefender();
+          if (defenderResult === undefined) return gameState;
           if (defenderResult !== false) {
             gameState.logs.push(`${defendingUnit.fullName} 被联军破坏`);
             ServerGameService.applyAllianceAnnihilationDamage(
@@ -5336,21 +5357,24 @@ export const ServerGameService = {
               ServerGameService.getSurvivingAllianceAttackers(gameState, attackerId, gameState.battleState.attackers)
             );
           }
-          if (defenderResult === undefined) return gameState;
         } else if (aHigher || bHigher) {
           const survivingUnit = aHigher ? attackerA : attackerB;
           const sacrificedUnit = aHigher ? attackerB : attackerA;
           const defenderResult = await destroyDefender();
           const attackerResult = await destroyAttacker(sacrificedUnit);
-          if (defenderResult !== false && attackerResult !== false) {
-            gameState.logs.push(`${defendingUnit.fullName} 与 ${sacrificedUnit.fullName} 被破坏，${survivingUnit.fullName} 留在场上`);
+          if (defenderResult === undefined || attackerResult === undefined) return gameState;
+          if (defenderResult !== false) {
+            if (attackerResult !== false) {
+              gameState.logs.push(`${defendingUnit.fullName} 与 ${sacrificedUnit.fullName} 被破坏，${survivingUnit.fullName} 留在场上`);
+            } else {
+              gameState.logs.push(`${defendingUnit.fullName} 被破坏，${sacrificedUnit.fullName} 的战斗破坏被防止，${survivingUnit.fullName} 留在场上`);
+            }
             ServerGameService.applyAllianceAnnihilationDamage(
               gameState,
               defenderId,
               ServerGameService.getSurvivingAllianceAttackers(gameState, attackerId, gameState.battleState.attackers)
             );
           }
-          if (defenderResult === undefined || attackerResult === undefined) return gameState;
         } else if (!aHigher && !bHigher) {
           gameState.pendingQuery = {
             id: Math.random().toString(36).substring(7),
@@ -5376,15 +5400,19 @@ export const ServerGameService = {
           const survivingUnit = sacrificedUnit.gamecardId === attackerA.gamecardId ? attackerB : attackerA;
           const defenderResult = await destroyDefender();
           const attackerResult = await destroyAttacker(sacrificedUnit);
-          if (defenderResult !== false && attackerResult !== false) {
-            gameState.logs.push(`${defendingUnit.fullName} 与 ${sacrificedUnit.fullName} 被破坏，${survivingUnit.fullName} 留在场上`);
+          if (defenderResult === undefined || attackerResult === undefined) return gameState;
+          if (defenderResult !== false) {
+            if (attackerResult !== false) {
+              gameState.logs.push(`${defendingUnit.fullName} 与 ${sacrificedUnit.fullName} 被破坏，${survivingUnit.fullName} 留在场上`);
+            } else {
+              gameState.logs.push(`${defendingUnit.fullName} 被破坏，${sacrificedUnit.fullName} 的战斗破坏被防止，${survivingUnit.fullName} 留在场上`);
+            }
             ServerGameService.applyAllianceAnnihilationDamage(
               gameState,
               defenderId,
               ServerGameService.getSurvivingAllianceAttackers(gameState, attackerId, gameState.battleState.attackers)
             );
           }
-          if (defenderResult === undefined || attackerResult === undefined) return gameState;
         }
       }
     }

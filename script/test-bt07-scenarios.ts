@@ -72,6 +72,7 @@ import bt03R03 from '../src/scripts/102060192';
 import bt03R04 from '../src/scripts/102060193';
 import bt03R07 from '../src/scripts/102060196';
 import rafa from '../src/scripts/102060244';
+import annihilationAngels from '../src/scripts/101130104';
 import {
   addContinuousPower,
   awakenUnit,
@@ -402,6 +403,77 @@ async function testHeavyKnightPreventsFirstBattleDestroy(): Promise<ScenarioResu
   return condition
     ? pass(name, `first=${first}, second=${second}`)
     : fail(name, `first=${first}, second=${second}, grave=${state.players.BOT.grave.length}`);
+}
+
+async function testHeavyKnightRecruitedAngelsDealAnnihilationDamage(): Promise<ScenarioResult> {
+  const name = 'BT07-W04 Heavy Knight recruited Annihilation Angels deals annihilation damage';
+  const heavy = cloneScriptCard(bt07W04 as Card, 'UNIT', {
+    power: 1000,
+    basePower: 1000,
+    playedTurn: 1,
+  });
+  const angels = cloneScriptCard(annihilationAngels as Card, 'DECK', {
+    power: 2500,
+    basePower: 2500,
+    damage: 2,
+    baseDamage: 2,
+    isAnnihilation: false,
+    baseAnnihilation: false,
+    playedTurn: 1,
+  });
+  const defender = testCard({
+    id: 'HEAVY_ANGELS_DEFENDER',
+    fullName: 'Heavy Angels Defender',
+    cardlocation: 'UNIT',
+    power: 1500,
+    basePower: 1500,
+  });
+  const state = game({
+    deck: [angels, ...deckCards(3, 'HEAVY_ANGELS_FILL')],
+    grave: [testCard({ id: 'HEAVY_ANGELS_GRAVE', cardlocation: 'GRAVE' })],
+    unitZone: [heavy, null, null, null, null, null],
+  }, {
+    unitZone: [defender, null, null, null, null, null],
+  }, {
+    phase: 'BATTLE_DECLARATION',
+    battleState: {
+      attackers: [heavy.gamecardId],
+      defender: defender.gamecardId,
+      unitTargetId: defender.gamecardId,
+      isAlliance: false,
+      resolvedUnitIds: [],
+      battleId: 'heavy_recruited_angels_annihilation',
+    },
+  });
+
+  EventEngine.dispatchEvent(state, {
+    type: 'CARD_ATTACK_DECLARED',
+    playerUid: 'BOT',
+    sourceCard: heavy,
+    sourceCardId: heavy.gamecardId,
+    data: { attackerIds: [heavy.gamecardId], isAlliance: false },
+  });
+  await confirmTrigger(state, 'BOT');
+  if (state.pendingQuery?.context?.effectId !== '101130377_recruit_alliance_partner') {
+    return fail(name, `expected recruit query, got ${state.pendingQuery?.context?.effectId || state.pendingQuery?.callbackKey || 'none'}`);
+  }
+  await answerPendingQuery(state, 'BOT', [angels.gamecardId]);
+
+  const liveAngels = state.players.BOT.unitZone.find((card: Card | null) => card?.gamecardId === angels.gamecardId);
+  EventEngine.recalculateContinuousEffects(state);
+  const gainedAnnihilation = !!liveAngels?.isAnnihilation;
+  state.phase = 'DAMAGE_CALCULATION';
+  await ServerGameService.resolveDamage(state);
+
+  const defenderDestroyed = state.players.P1.grave.some((card: Card) => card.gamecardId === defender.gamecardId);
+  const heavySurvived = state.players.BOT.unitZone.some((card: Card | null) => card?.gamecardId === heavy.gamecardId);
+  const angelsSurvived = state.players.BOT.unitZone.some((card: Card | null) => card?.gamecardId === angels.gamecardId);
+  const annihilationDamage = state.players.P1.erosionFront.filter(Boolean).length === 2;
+  const angelsTriggerPending = state.pendingQuery?.context?.effectId === '101130104_damage_bottom';
+
+  return defenderDestroyed && heavySurvived && angelsSurvived && gainedAnnihilation && annihilationDamage && angelsTriggerPending
+    ? pass(name, `damage=${state.players.P1.erosionFront.filter(Boolean).length}, pending=${state.pendingQuery?.context?.effectId}`)
+    : fail(name, `destroyed=${defenderDestroyed}, heavy=${heavySurvived}, angels=${angelsSurvived}, annihilation=${gainedAnnihilation}, damage=${state.players.P1.erosionFront.filter(Boolean).length}, pending=${state.pendingQuery?.context?.effectId || state.pendingQuery?.callbackKey || 'none'}`);
 }
 
 async function testWhiteWingExilesGodmarkToPutItem(): Promise<ScenarioResult> {
@@ -2640,6 +2712,7 @@ const scenarios: ScenarioRun[] = [
   testNightMageRecoversAfterOpponentBounce,
   testHeavyKnightRecruitsAlliancePartner,
   testHeavyKnightPreventsFirstBattleDestroy,
+  testHeavyKnightRecruitedAngelsDealAnnihilationDamage,
   testWhiteWingExilesGodmarkToPutItem,
   testSnowGirlRecoversShingiOnEffectLeave,
   testSnowGirlFreezesAfterShingiEntry,

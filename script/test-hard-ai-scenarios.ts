@@ -320,17 +320,17 @@ function testElementInstructorAvoidsDestroyMode(): ScenarioResult {
     callbackKey: 'DECLARE_EFFECT_TARGET_MODE',
     minSelections: 1,
     maxSelections: 1,
-    context: { effectId: '105110112_activate', step: 'CHOOSE_MODE' },
+    context: { effectId: '105110112_activate' },
     options: [
-      { id: 'DRAW', label: 'DRAW' },
-      { id: 'DAMAGE', label: 'DAMAGE' },
-      { id: 'DESTROY', label: 'DESTROY' },
+      { id: '105110112_option_A', value: 'DRAW', label: 'DRAW' },
+      { id: '105110112_option_B', value: 'DAMAGE', label: 'DAMAGE' },
+      { id: '105110112_option_C', value: 'DESTROY', label: 'DESTROY' },
     ],
   };
   const selected = chooseQuerySelections(state, 'BOT', query as any, profile, 'hard');
   return assertScenario(
     'element instructor avoids destroy mode when only own weak unit exists',
-    selected[0] !== 'DESTROY',
+    selected[0] !== '105110112_option_C',
     `selected=${selected.join(',') || 'none'}`
   );
 }

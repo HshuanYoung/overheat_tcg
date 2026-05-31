@@ -193,10 +193,6 @@ async function testFlameBombDrawRevealMainStartDamage(): Promise<ScenarioResult>
   }
 
   await acceptOptionalTrigger(state, 'BOT');
-  if (state.pendingQuery?.context?.step !== 'DAMAGE') {
-    return fail(name, `expected damage target query, got ${state.pendingQuery?.callbackKey || 'none'}`);
-  }
-  await answerPendingQuery(state, 'BOT', ['PLAYER_OPPONENT']);
 
   const expectedDamage = 6;
   const damaged = state.players.P1.deck.length === 10 - expectedDamage &&

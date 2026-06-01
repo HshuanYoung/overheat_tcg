@@ -1454,6 +1454,19 @@ export class AtomicEffectExecutor {
 
     if (
       isEffect &&
+      toZone === 'UNIT' &&
+      card.type === 'UNIT' &&
+      !targetPlayer.unitZone.some(slot => slot === null)
+    ) {
+      gameState.logs.push(`[单位区已满] ${card.fullName} 因单位区已满改为送入墓地。`);
+      toZone = 'GRAVE';
+      card.displayState = 'FRONT_UPRIGHT';
+      card.isExhausted = false;
+      (card as any).data.lastMovedToZone = 'GRAVE';
+    }
+
+    if (
+      isEffect &&
       fromZone === 'DECK' &&
       toZone === 'UNIT' &&
       options?.effectSourceCardId

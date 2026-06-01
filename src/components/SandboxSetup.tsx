@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Hash, Loader2, LogIn, Play, Plus, Save, Search, Timer, Trash2, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Hash, Loader2, LogIn, Play, Plus, Save, Search, Timer, Trash2, Upload, Users, X, ArrowRightLeft, Radio, Network } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCardCatalog } from '../hooks/useCardCatalog';
 import { Card, CardType, GamePhase, GameState, PlayerState, SandboxCardSetup, SandboxEditableZone, SandboxFile, SandboxPlayerKey, SandboxPlayerSetup } from '../types/game';
@@ -89,7 +89,7 @@ type SelectedCardTarget = EditingTarget & {
   card: SandboxCardSetup;
 };
 
-type CenterPopover = 'turn' | 'timer' | 'phase' | 'bot' | null;
+type CenterPopover = 'turn' | 'timer' | 'phase' | 'bot' | 'export' | null;
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
@@ -409,6 +409,10 @@ export const SandboxSetup: React.FC = () => {
   };
 
   const importSandboxFile = async (file: File) => {
+    if (!file.name.endsWith('.sbx')) {
+      alert('只允许上传 .sbx 格式的沙盒文件');
+      return;
+    }
     const raw = await file.text();
     const parsed = JSON.parse(raw);
     setSandbox(normalizeImportedSandbox(parsed));
@@ -497,10 +501,10 @@ export const SandboxSetup: React.FC = () => {
 
   const sandboxCenterControls = (
     <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/10 bg-zinc-950/95 p-2 shadow-2xl backdrop-blur-xl">
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <div className="relative">
           <button title="设置回合数" onClick={() => setCenterPopover(centerPopover === 'turn' ? null : 'turn')} className={centerIconButton}>
-            <Hash className="h-4 w-4" />
+            <Hash className="h-4 w-4 text-blue-400" />
             <span className="ml-1.5 tabular-nums">{sandbox.turnCount}</span>
           </button>
           {centerPopover === 'turn' && (
@@ -524,13 +528,13 @@ export const SandboxSetup: React.FC = () => {
           onClick={() => setSandbox(prev => ({ ...prev, currentTurn: prev.currentTurn === 'player' ? 'opponent' : 'player' }))}
           className={centerIconButton}
         >
-          <Users className="h-4 w-4" />
+          <ArrowRightLeft className="h-4 w-4 text-purple-400" />
           <span className="ml-1.5">{sandbox.currentTurn === 'player' ? '我方' : '对手'}</span>
         </button>
 
         <div className="relative">
           <button title="设置时间" onClick={() => setCenterPopover(centerPopover === 'timer' ? null : 'timer')} className={centerIconButton}>
-            <Timer className="h-4 w-4" />
+            <Timer className="h-4 w-4 text-yellow-400" />
             <span className="ml-1.5 tabular-nums">{sandbox.turnTimerLimit || 300}s</span>
           </button>
           {centerPopover === 'timer' && (
@@ -551,7 +555,7 @@ export const SandboxSetup: React.FC = () => {
 
         <div className="relative">
           <button title="设置阶段" onClick={() => setCenterPopover(centerPopover === 'phase' ? null : 'phase')} className={centerIconButton}>
-            <Clock className="h-4 w-4" />
+            <Clock className="h-4 w-4 text-green-400" />
             <span className="ml-1.5">{getPhaseLabel(sandbox.phase)}</span>
             <ChevronDown className="ml-1 h-3.5 w-3.5 text-zinc-500" />
           </button>
@@ -578,7 +582,7 @@ export const SandboxSetup: React.FC = () => {
 
         <div className="relative">
           <button title="人机设置" onClick={() => setCenterPopover(centerPopover === 'bot' ? null : 'bot')} className={centerIconButton}>
-            <Bot className="h-4 w-4" />
+            <Bot className="h-4 w-4 text-orange-400" />
             <span className="ml-1.5">{botDifficulty === 'hard' ? '困难' : '简单'}</span>
             <ChevronDown className="ml-1 h-3.5 w-3.5 text-zinc-500" />
           </button>
@@ -611,8 +615,8 @@ export const SandboxSetup: React.FC = () => {
         </button>
       </div>
 
-      <div className="mt-2 flex items-center justify-center gap-2">
-        <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl border border-blue-500/25 bg-black/70 px-3">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+        <div className="flex h-11 min-w-0 flex-1 min-w-[140px] max-w-[200px] items-center rounded-xl border border-blue-500/25 bg-black/70 px-3">
           {createdRoomCode ? (
             <button
               title="进入已生成房间"
@@ -631,22 +635,51 @@ export const SandboxSetup: React.FC = () => {
           )}
         </div>
         <button title="生成房间码" onClick={createRoom} disabled={starting} className={centerIconButton}>
-          <Hash className="h-4 w-4" />
+          <Network className="h-4 w-4 text-cyan-400" />
         </button>
         <button title="加入房间" onClick={joinRoom} disabled={joining || roomCode.length !== 8} className={centerIconButton}>
-          {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+          {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4 text-teal-400" />}
         </button>
-        <button title="导出 .sbx" onClick={exportSandbox} className={centerIconButton}>
-          <Download className="h-4 w-4" />
-        </button>
+        <div className="relative">
+          <button title="导出 .sbx" onClick={() => setCenterPopover(centerPopover === 'export' ? null : 'export')} className={centerIconButton}>
+            <Download className="h-4 w-4 text-indigo-400" />
+          </button>
+          {centerPopover === 'export' && (
+            <div className={centerPopoverClass}>
+              <div className="mb-2 text-[10px] font-black tracking-widest text-zinc-500">导出沙盒</div>
+              <input
+                autoFocus
+                value={sandbox.name || ''}
+                onChange={event => setSandbox(prev => ({ ...prev, name: event.target.value }))}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    exportSandbox();
+                    setCenterPopover(null);
+                  }
+                }}
+                className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm font-black outline-none focus:border-red-500"
+                placeholder="输入沙盒名称"
+              />
+              <button
+                onClick={() => {
+                  exportSandbox();
+                  setCenterPopover(null);
+                }}
+                className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500"
+              >
+                确认导出
+              </button>
+            </div>
+          )}
+        </div>
         <button title="导入 .sbx" onClick={() => fileInputRef.current?.click()} className={centerIconButton}>
-          <Upload className="h-4 w-4" />
+          <Upload className="h-4 w-4 text-pink-400" />
         </button>
         <button title="保存到我的沙盒" onClick={saveSandbox} disabled={saving} className={centerIconButton}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 text-emerald-400" />}
         </button>
       </div>
-      <input ref={fileInputRef} type="file" accept=".sbx,application/json" className="hidden" onChange={event => {
+      <input ref={fileInputRef} type="file" accept=".sbx" className="hidden" onChange={event => {
         const file = event.target.files?.[0];
         if (file) importSandboxFile(file).catch(err => alert(err.message || '导入失败'));
         event.target.value = '';

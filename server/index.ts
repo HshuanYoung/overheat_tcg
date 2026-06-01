@@ -26,7 +26,7 @@ import {
     validateUsername
 } from './registration';
 import { ServerGameService } from './ServerGameService';
-import { PlayerState, Card, GAME_TIMEOUTS, GameState, BattleLogEntry } from '../src/types/game';
+import { PlayerState, Card, GAME_TIMEOUTS, GameState, BattleLogEntry, SandboxFile, SandboxPlayerKey, SandboxPlayerSetup, SandboxCardSetup, GamePhase } from '../src/types/game';
 import { EventEngine } from '../src/services/EventEngine';
 import { addBattleLog, battleLogText, normalizeBattleLogs } from '../src/lib/battleLog';
 import fs from 'fs';
@@ -253,6 +253,242 @@ function resolveAiOpponentDeck(profileId?: string): { valid: boolean; profileId?
         const message = err instanceof Error ? err.message : String(err);
         return { valid: false, error: `${profile.displayName} 分享码解析失败：${message}` };
     }
+}
+
+const SANDBOX_FILE_VERSION = 1;
+const SANDBOX_PHASES: GamePhase[] = ['START', 'DRAW', 'EROSION', 'MAIN', 'DECLARE_END', 'DISCARD', 'END'];
+
+function sanitizeSandboxFileName(name: unknown) {
+    const raw = String(name || '').trim();
+    const base = raw.replace(/\.sbx$/i, '').replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]/g, '_').slice(0, 80);
+    return `${base || `sandbox_${Date.now()}`}.sbx`;
+}
+
+function getSandboxDirForUser(user: any) {
+    const username = String(user?.username || user?.userId || 'user')
+        .trim()
+        .replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]/g, '_') || 'user';
+    return path.join(process.cwd(), username, 'sandbox');
+}
+
+function resolveSandboxFilePath(user: any, name: string) {
+    const dir = getSandboxDirForUser(user);
+    const safeName = sanitizeSandboxFileName(name);
+    const resolved = path.resolve(dir, safeName);
+    const resolvedDir = path.resolve(dir);
+    if (!resolved.startsWith(resolvedDir + path.sep) && resolved !== path.join(resolvedDir, safeName)) {
+        throw new Error('非法文件名');
+    }
+    return { dir, filePath: resolved, fileName: safeName };
+}
+
+function normalizeSandboxCardSetup(value: any): SandboxCardSetup {
+    const cardRef = typeof value?.cardRef === 'string'
+        ? value.cardRef
+        : typeof value?.uniqueId === 'string'
+            ? value.uniqueId
+            : typeof value?.id === 'string'
+                ? value.id
+                : '';
+    if (!cardRef) throw new Error('沙盒卡牌缺少 cardRef');
+    const displayState = ['FRONT_UPRIGHT', 'FRONT_HORIZONTAL', 'FRONT_FACEDOWN', 'BACK_UPRIGHT'].includes(value?.displayState)
+        ? value.displayState
+        : undefined;
+    return {
+        cardRef,
+        displayState,
+        isExhausted: !!value?.isExhausted
+    };
+}
+
+function normalizeSandboxCardList(value: any, max = 200): SandboxCardSetup[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter(Boolean).slice(0, max).map(normalizeSandboxCardSetup);
+}
+
+function normalizeSandboxSlotList(value: any, length: number): Array<SandboxCardSetup | null> {
+    const source = Array.isArray(value) ? value : [];
+    return Array.from({ length }, (_, index) => {
+        const entry = source[index];
+        return entry ? normalizeSandboxCardSetup(entry) : null;
+    });
+}
+
+function normalizeSandboxPlayerSetup(value: any, fallbackName: string): SandboxPlayerSetup {
+    return {
+        displayName: typeof value?.displayName === 'string' && value.displayName.trim()
+            ? value.displayName.trim().slice(0, 40)
+            : fallbackName,
+        deck: normalizeSandboxCardList(value?.deck, 200),
+        hand: normalizeSandboxCardList(value?.hand, 100),
+        grave: normalizeSandboxCardList(value?.grave, 200),
+        exile: normalizeSandboxCardList(value?.exile, 200),
+        itemZone: normalizeSandboxCardList(value?.itemZone, 60),
+        unitZone: normalizeSandboxSlotList(value?.unitZone, 6),
+        erosionFront: normalizeSandboxSlotList(value?.erosionFront, 10),
+        erosionBack: normalizeSandboxSlotList(value?.erosionBack, 10)
+    };
+}
+
+function normalizeSandboxFile(input: any, fallbackName?: string): SandboxFile {
+    if (!input || typeof input !== 'object') {
+        throw new Error('无效的沙盒文件');
+    }
+    const phase = SANDBOX_PHASES.includes(input.phase) ? input.phase : 'MAIN';
+    const currentTurn: SandboxPlayerKey = input.currentTurn === 'opponent' ? 'opponent' : 'player';
+    return {
+        version: SANDBOX_FILE_VERSION,
+        name: typeof input.name === 'string' ? input.name.slice(0, 80) : fallbackName,
+        createdAt: typeof input.createdAt === 'number' ? input.createdAt : Date.now(),
+        updatedAt: Date.now(),
+        turnCount: Math.max(1, Math.min(999, Number(input.turnCount) || 1)),
+        currentTurn,
+        phase,
+        turnTimerLimit: normalizeTurnTimerLimit(input.turnTimerLimit),
+        players: {
+            player: normalizeSandboxPlayerSetup(input.players?.player, '玩家'),
+            opponent: normalizeSandboxPlayerSetup(input.players?.opponent, '对手')
+        }
+    };
+}
+
+function resolveSandboxCard(ref: string) {
+    const card = SERVER_CARD_LIBRARY[ref] || SERVER_CARD_LIBRARY[String(ref).split(':')[0]];
+    if (!card) throw new Error(`未找到卡牌：${ref}`);
+    return card;
+}
+
+function createSandboxRuntimeCard(setup: SandboxCardSetup, location: Card['cardlocation'], index: number, ownerKey: SandboxPlayerKey): Card {
+    const source = resolveSandboxCard(setup.cardRef);
+    const uniqueSeed = `${ownerKey}_${location}_${index}_${Math.random().toString(36).slice(2, 8)}`;
+    const isFaceDown = location === 'DECK' || location === 'EROSION_BACK';
+    const displayState = setup.displayState || (isFaceDown ? 'BACK_UPRIGHT' : 'FRONT_UPRIGHT');
+    return {
+        ...source,
+        baseColorReq: source.baseColorReq ?? { ...(source.colorReq || {}) },
+        basePower: source.basePower ?? source.power,
+        baseDamage: source.baseDamage ?? source.damage,
+        baseIsrush: source.baseIsrush ?? source.isrush,
+        baseAnnihilation: source.baseAnnihilation ?? source.isAnnihilation,
+        baseShenyi: source.baseShenyi ?? source.isShenyi,
+        baseHeroic: source.baseHeroic ?? source.isHeroic,
+        baseCanAttack: source.baseCanAttack ?? source.canAttack ?? true,
+        baseGodMark: source.baseGodMark ?? source.godMark,
+        baseAcValue: source.baseAcValue ?? source.acValue,
+        baseCanActivateEffect: source.baseCanActivateEffect ?? source.canActivateEffect ?? true,
+        gamecardId: uniqueSeed,
+        runtimeFingerprint: `SBX_${uniqueSeed}_${Date.now()}`,
+        cardlocation: location,
+        displayState,
+        isExhausted: !!setup.isExhausted || displayState === 'FRONT_HORIZONTAL',
+        hasAttackedThisTurn: false,
+        usedShenyiThisTurn: false,
+        canAttack: source.canAttack ?? true,
+        canActivateEffect: source.canActivateEffect ?? true
+    };
+}
+
+function sandboxCardsToZone(cards: SandboxCardSetup[], location: Card['cardlocation'], ownerKey: SandboxPlayerKey) {
+    return cards.map((card, index) => createSandboxRuntimeCard(card, location, index, ownerKey));
+}
+
+function sandboxSlotsToZone(cards: Array<SandboxCardSetup | null>, location: Card['cardlocation'], ownerKey: SandboxPlayerKey, length: number) {
+    return Array.from({ length }, (_, index) => {
+        const card = cards[index];
+        return card ? createSandboxRuntimeCard(card, location, index, ownerKey) : null;
+    });
+}
+
+function createSandboxPlayerState(uid: string, setup: SandboxPlayerSetup, ownerKey: SandboxPlayerKey, isFirst: boolean, isTurn: boolean, turnTimerLimit?: number): PlayerState {
+    return {
+        uid,
+        displayName: setup.displayName || (ownerKey === 'player' ? '玩家' : '对手'),
+        deck: sandboxCardsToZone(setup.deck, 'DECK', ownerKey),
+        hand: sandboxCardsToZone(setup.hand, 'HAND', ownerKey),
+        grave: sandboxCardsToZone(setup.grave, 'GRAVE', ownerKey),
+        exile: sandboxCardsToZone(setup.exile, 'EXILE', ownerKey),
+        itemZone: sandboxCardsToZone(setup.itemZone, 'ITEM', ownerKey),
+        erosionFront: sandboxSlotsToZone(setup.erosionFront, 'EROSION_FRONT', ownerKey, 10),
+        erosionBack: sandboxSlotsToZone(setup.erosionBack, 'EROSION_BACK', ownerKey, 10),
+        unitZone: sandboxSlotsToZone(setup.unitZone, 'UNIT', ownerKey, 6),
+        playZone: [],
+        isTurn,
+        isFirst,
+        mulliganDone: true,
+        hasExhaustedThisTurn: [],
+        isGoddessMode: false,
+        isHandPublic: 0,
+        timeRemaining: turnTimerLimit ? turnTimerLimit * 1000 : GAME_TIMEOUTS.MAIN_PHASE_TOTAL,
+        confrontationStrategy: 'AUTO'
+    };
+}
+
+function createSandboxGameState(options: {
+    sandbox: SandboxFile;
+    gameId: string;
+    playerUid: string;
+    playerName: string;
+    opponentUid: string;
+    opponentName: string;
+    roomCode?: string;
+    hostUid?: string;
+    participantNames?: Record<string, string>;
+    botDifficulty?: 'simple' | 'hard';
+    botDeckProfileId?: string;
+}): GameState {
+    const firstKey = options.sandbox.currentTurn;
+    const playerIds: [string, string] = firstKey === 'player'
+        ? [options.playerUid, options.opponentUid]
+        : [options.opponentUid, options.playerUid];
+    const playerState = createSandboxPlayerState(
+        options.playerUid,
+        { ...options.sandbox.players.player, displayName: options.sandbox.players.player.displayName || options.playerName },
+        'player',
+        playerIds[0] === options.playerUid,
+        options.sandbox.currentTurn === 'player',
+        options.sandbox.turnTimerLimit
+    );
+    const opponentState = createSandboxPlayerState(
+        options.opponentUid,
+        { ...options.sandbox.players.opponent, displayName: options.sandbox.players.opponent.displayName || options.opponentName },
+        'opponent',
+        playerIds[0] === options.opponentUid,
+        options.sandbox.currentTurn === 'opponent',
+        options.sandbox.turnTimerLimit
+    );
+    opponentState.botDifficulty = options.opponentUid === 'BOT_PLAYER' ? options.botDifficulty : undefined;
+    opponentState.botDeckProfileId = options.opponentUid === 'BOT_PLAYER' ? options.botDeckProfileId : undefined;
+
+    return {
+        gameId: options.gameId,
+        phase: options.sandbox.phase,
+        currentTurnPlayer: playerIds[0] === (options.sandbox.currentTurn === 'player' ? options.playerUid : options.opponentUid) ? 0 : 1,
+        turnCount: options.sandbox.turnCount,
+        isCountering: 0,
+        counterStack: [],
+        passCount: 0,
+        playerIds,
+        gameStatus: 1,
+        logs: ['沙盒对局开始。'],
+        mode: 'sandbox',
+        status: 'ACTIVE',
+        roomCode: options.roomCode,
+        participantIds: options.hostUid ? [options.hostUid] : undefined,
+        spectatorIds: [],
+        hostUid: options.hostUid,
+        participantNames: options.participantNames,
+        players: {
+            [options.playerUid]: playerState,
+            [options.opponentUid]: opponentState
+        },
+        botDifficulty: options.botDifficulty,
+        botDeckProfiles: options.botDeckProfileId ? { BOT_PLAYER: options.botDeckProfileId } : undefined,
+        phaseTimerStart: Date.now(),
+        turnTimerLimit: options.sandbox.turnTimerLimit,
+        triggeredEffectsQueue: [],
+        pendingResolutions: [],
+        effectUsage: {}
+    };
 }
 
 async function handleBotMove(gameState: any, gameId: string) {
@@ -1111,7 +1347,7 @@ setInterval(async () => {
     try {
         await ensureBugCupSchedule();
         const activeRoomIds = Array.from(io.sockets.adapter.rooms.keys())
-            .filter(roomId => /^(match|practice|friend|bugcup)_/.test(roomId));
+            .filter(roomId => /^(match|practice|friend|bugcup|sandbox)_/.test(roomId));
         const activeRoomParams = activeRoomIds.length > 0
             ? ` OR id IN (${activeRoomIds.map(() => '?').join(',')})`
             : '';
@@ -1129,6 +1365,7 @@ setInterval(async () => {
                 const gameState = typeof stateRows[0].state === 'string' ? JSON.parse(stateRows[0].state) : stateRows[0].state;
                 if (!gameState || gameState.gameStatus === 2) return;
                 if (gameState.mode === 'friend' && !isFriendGameStarted(gameState)) return;
+                if (gameState.mode === 'sandbox' && gameState.status === 'WAITING') return;
                 ServerGameService.hydrateGameState(gameState);
 
                 const now = Date.now();
@@ -1618,6 +1855,179 @@ app.post('/api/games/practice', async (req, res): Promise<void> => {
     } catch (err) {
         console.error('Create practice game error:', err);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/api/sandbox/files', async (req, res): Promise<void> => {
+    const user = await getAuthenticatedUserFromHeader(req, res);
+    if (!user) { return; }
+
+    try {
+        const dir = getSandboxDirForUser(user);
+        if (!fs.existsSync(dir)) {
+            res.json({ files: [] });
+            return;
+        }
+        const files = fs.readdirSync(dir, { withFileTypes: true })
+            .filter(entry => entry.isFile() && entry.name.endsWith('.sbx'))
+            .map(entry => {
+                const stat = fs.statSync(path.join(dir, entry.name));
+                return { name: entry.name, size: stat.size, updatedAt: stat.mtimeMs };
+            })
+            .sort((a, b) => b.updatedAt - a.updatedAt);
+        res.json({ files });
+    } catch (err) {
+        console.error('List sandbox files error:', err);
+        res.status(500).json({ error: '读取沙盒文件失败' });
+    }
+});
+
+app.get('/api/sandbox/files/:name', async (req, res): Promise<void> => {
+    const user = await getAuthenticatedUserFromHeader(req, res);
+    if (!user) { return; }
+
+    try {
+        const { filePath } = resolveSandboxFilePath(user, req.params.name);
+        if (!fs.existsSync(filePath)) {
+            res.status(404).json({ error: '未找到沙盒文件' });
+            return;
+        }
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const sandbox = normalizeSandboxFile(JSON.parse(raw), req.params.name);
+        res.json({ sandbox });
+    } catch (err: any) {
+        console.error('Read sandbox file error:', err);
+        res.status(400).json({ error: err.message || '读取沙盒文件失败' });
+    }
+});
+
+app.post('/api/sandbox/files', async (req, res): Promise<void> => {
+    const user = await getAuthenticatedUserFromHeader(req, res);
+    if (!user) { return; }
+
+    try {
+        const sandbox = normalizeSandboxFile(req.body?.sandbox, req.body?.name);
+        const { dir, filePath, fileName } = resolveSandboxFilePath(user, req.body?.name || sandbox.name || 'sandbox');
+        fs.mkdirSync(dir, { recursive: true });
+        sandbox.name = fileName.replace(/\.sbx$/i, '');
+        sandbox.updatedAt = Date.now();
+        fs.writeFileSync(filePath, JSON.stringify(sandbox, null, 2), 'utf8');
+        res.json({ ok: true, name: fileName, sandbox });
+    } catch (err: any) {
+        console.error('Save sandbox file error:', err);
+        res.status(400).json({ error: err.message || '保存沙盒文件失败' });
+    }
+});
+
+app.post('/api/games/sandbox/bot', async (req, res): Promise<void> => {
+    const user = await getAuthenticatedUserFromHeader(req, res);
+    if (!user) { return; }
+
+    try {
+        const sandbox = normalizeSandboxFile(req.body?.sandbox);
+        const botDifficulty = req.body?.botDifficulty === 'hard' ? 'hard' : 'simple';
+        const requestedBotDeckProfileId = typeof req.body?.botDeckProfileId === 'string' ? req.body.botDeckProfileId : undefined;
+        const botProfile = botDifficulty === 'hard'
+            ? (AI_DECK_PROFILES.find(candidate => candidate.id === requestedBotDeckProfileId) || AI_DECK_PROFILES[0])
+            : undefined;
+        const gameId = 'sandbox_' + Math.random().toString(36).substring(2, 9);
+        const gameState = createSandboxGameState({
+            sandbox,
+            gameId,
+            playerUid: user.userId.toString(),
+            playerName: user.displayName || user.username || '玩家',
+            opponentUid: 'BOT_PLAYER',
+            opponentName: botProfile ? `${botProfile.displayName} AI` : '神蚀 AI',
+            botDifficulty,
+            botDeckProfileId: botProfile?.id
+        });
+        await insertGame(gameId, gameState);
+        res.json({ gameId, botDeckProfileId: botProfile?.id, botDeckName: botProfile?.displayName });
+    } catch (err: any) {
+        console.error('Create sandbox bot game error:', err);
+        res.status(400).json({ error: err.message || '创建沙盒人机对局失败' });
+    }
+});
+
+app.post('/api/games/sandbox/room', async (req, res): Promise<void> => {
+    const user = await getAuthenticatedUserFromHeader(req, res);
+    if (!user) { return; }
+
+    try {
+        const sandbox = normalizeSandboxFile(req.body?.sandbox);
+        const roomCode = Math.random().toString(10).substring(2, 10).padEnd(8, '0');
+        const gameId = 'sandbox_' + roomCode;
+        const hostUid = user.userId.toString();
+        const gameState = createSandboxGameState({
+            sandbox,
+            gameId,
+            playerUid: hostUid,
+            playerName: user.displayName || user.username || '玩家',
+            opponentUid: 'SANDBOX_GUEST',
+            opponentName: sandbox.players.opponent.displayName || '对手',
+            roomCode,
+            hostUid,
+            participantNames: { [hostUid]: getUserUsernameLabel(user), SANDBOX_GUEST: sandbox.players.opponent.displayName || '等待加入' }
+        });
+        gameState.status = 'WAITING';
+        gameState.participantIds = [hostUid];
+        await insertGame(gameId, gameState);
+        res.json({ gameId, roomCode });
+    } catch (err: any) {
+        console.error('Create sandbox room error:', err);
+        res.status(400).json({ error: err.message || '创建沙盒房间失败' });
+    }
+});
+
+app.post('/api/games/sandbox/join', async (req, res): Promise<void> => {
+    const user = await getAuthenticatedUserFromHeader(req, res);
+    if (!user) { return; }
+
+    const roomCode = String(req.body?.roomCode || '').replace(/\D/g, '');
+    if (roomCode.length !== 8) {
+        res.status(400).json({ error: '请输入 8 位房间码' });
+        return;
+    }
+
+    try {
+        const gameId = 'sandbox_' + roomCode;
+        await withGameLock(gameId, async () => {
+            const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
+            if (rows.length === 0) { res.status(404).json({ error: '未找到该房间' }); return; }
+            const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
+            if (gameState.mode !== 'sandbox' || gameState.roomCode !== roomCode) {
+                res.status(404).json({ error: '未找到该沙盒房间' });
+                return;
+            }
+            const userIdStr = user.userId.toString();
+            if (gameState.hostUid?.toString() === userIdStr) {
+                res.json({ gameId, roomCode, seat: 'player' });
+                return;
+            }
+            const guestIndex = gameState.playerIds.findIndex((uid: string) => uid === 'SANDBOX_GUEST');
+            if (guestIndex === -1 && !gameState.playerIds.includes(userIdStr)) {
+                res.status(400).json({ error: '该沙盒房间已有玩家加入' });
+                return;
+            }
+            if (guestIndex !== -1) {
+                gameState.playerIds[guestIndex] = userIdStr;
+                gameState.players[userIdStr] = { ...gameState.players.SANDBOX_GUEST, uid: userIdStr, displayName: user.displayName || user.username || '玩家' };
+                delete gameState.players.SANDBOX_GUEST;
+            }
+            gameState.participantIds = Array.from(new Set([...(gameState.participantIds || []), userIdStr]));
+            gameState.participantNames = {
+                ...(gameState.participantNames || {}),
+                [userIdStr]: getUserUsernameLabel(user)
+            };
+            delete gameState.participantNames.SANDBOX_GUEST;
+            gameState.status = 'ACTIVE';
+            gameState.phaseTimerStart = Date.now();
+            await syncAndSaveState(gameId, gameState);
+            res.json({ gameId, roomCode, seat: 'player' });
+        });
+    } catch (err: any) {
+        console.error('Join sandbox room error:', err);
+        res.status(400).json({ error: err.message || '加入沙盒房间失败' });
     }
 });
 
@@ -3915,9 +4325,10 @@ io.on('connection', (socket) => {
                 ServerGameService.hydrateGameState(gameState);
                 if (!gameState.players) gameState.players = {};
                 const isFriendGame = gameState.mode === 'friend';
+                const isSandboxGame = gameState.mode === 'sandbox';
                 const isBugCupGame = gameState.mode === 'bugCup';
                 if (isFriendGame) normalizeFriendRoomState(gameState);
-                let seat: FriendSeatTarget = (isFriendGame || isBugCupGame) ? requestedSeat : 'player';
+                let seat: FriendSeatTarget = (isFriendGame || isBugCupGame || isSandboxGame) ? requestedSeat : 'player';
                 if (isFriendGame && (gameState.playerIds || []).includes(userIdStr)) seat = 'player';
                 if (isBugCupGame && (gameState.playerIds || []).map((uid: any) => uid?.toString()).includes(userIdStr)) seat = 'player';
 
@@ -3944,7 +4355,12 @@ io.on('connection', (socket) => {
                 // console.log(`[Socket] joinGame for ${userIdStr} in ${gameId}. Current players: ${initializedPlayers.join(',')}`);
 
                 // Initialize human player if they haven't been initialized yet
-                if (seat === 'player' && !gameState.players[userIdStr]) {
+                if (seat === 'player' && isSandboxGame && !gameState.playerIds.map((id: any) => id?.toString()).includes(userIdStr)) {
+                    socket.emit('error', '你不在该沙盒对局中');
+                    return;
+                }
+
+                if (seat === 'player' && !isSandboxGame && !gameState.players[userIdStr]) {
                     const effectiveDeckId = isFriendGame ? getFriendPlayerDeckId(gameState, userIdStr) : deckId;
                     if (effectiveDeckId) {
                         // console.log(`[Socket] Initializing player ${userIdStr} in game ${gameId}`);
@@ -3998,7 +4414,8 @@ io.on('connection', (socket) => {
                 const isInitial = gameState.phase === 'INIT' || gameState.phase === 'RPS' || gameState.phase === 'FIRST_PLAYER_CHOICE' || gameState.phase === 'MULLIGAN';
                 const initializedRealPlayerCount = gameState.playerIds.filter((uid: string) => !!gameState.players[uid]).length;
                 const canStartFriendGame = !isFriendGame || gameState.status === 'STARTING' || gameState.status === 'ACTIVE';
-                if (canStartFriendGame && isInitial && initializedRealPlayerCount >= 2 && (gameState.phase === 'INIT' || !gameState.phaseTimerStart || gameState.phaseTimerStart === 0)) {
+                const canStartSandboxGame = !isSandboxGame || gameState.status === 'ACTIVE';
+                if (canStartFriendGame && canStartSandboxGame && isInitial && initializedRealPlayerCount >= 2 && (gameState.phase === 'INIT' || !gameState.phaseTimerStart || gameState.phaseTimerStart === 0)) {
                     if (gameState.phase === 'INIT') {
                         if (gameState.mode === 'practice') {
                             const humanUid = gameState.playerIds.find((uid: string) => uid !== 'BOT_PLAYER') || userIdStr;

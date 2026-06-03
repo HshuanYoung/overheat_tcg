@@ -91,6 +91,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
   const previousResolvingStackRef = useRef(false);
   const previousCardLocationsRef = useRef<Record<string, { zone: string; ownerUid: string; card: Card; slotIndex?: number }>>({});
   const seenAnimationHintsRef = useRef<Set<string>>(new Set());
+  const hintedDrawCardsRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
   const maxChainLengthRef = useRef(0);
 
@@ -121,6 +122,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       previousResolvingStackRef.current = false;
       previousCardLocationsRef.current = {};
       seenAnimationHintsRef.current.clear();
+      hintedDrawCardsRef.current.clear();
       initializedRef.current = false;
       maxChainLengthRef.current = 0;
       return;
@@ -146,6 +148,9 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       maxChainLengthRef.current = game.counterStack?.length || 0;
       if (game.animationHint?.id) {
         seenAnimationHintsRef.current.add(game.animationHint.id);
+        if (game.animationHint.type === 'DRAW_CARD') {
+          hintedDrawCardsRef.current.add(`${game.animationHint.playerUid}:${game.animationHint.cardId}`);
+        }
       }
       return;
     }
@@ -154,6 +159,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
     if (game.animationHint?.type === 'DRAW_CARD' && !seenAnimationHintsRef.current.has(game.animationHint.id)) {
       seenAnimationHintsRef.current.add(game.animationHint.id);
       const ownerUid = game.animationHint.playerUid;
+      hintedDrawCardsRef.current.add(`${ownerUid}:${game.animationHint.cardId}`);
       const isNormalDrawPhase = game.phase === 'DRAW' && ownerUid === game.playerIds[game.currentTurnPlayer];
       const revealTo = isNormalDrawPhase
         ? (!isSpectator && perspectiveUid && ownerUid === perspectiveUid ? 'owner' : 'hidden')
@@ -281,6 +287,11 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
         // Bug 5: Card Draw
         else if (isFromDeck && targetZone === 'HAND') {
           if (game.phase === 'MULLIGAN') return;
+          const hintedDrawKey = `${currentLoc.ownerUid}:${gamecardId}`;
+          if (hintedDrawCardsRef.current.has(hintedDrawKey)) {
+            hintedDrawCardsRef.current.delete(hintedDrawKey);
+            return;
+          }
           if (game.animationHint?.type === 'DRAW_CARD' && game.animationHint.cardId === gamecardId) return;
           const isNormalDrawPhase = game.phase === 'DRAW' && currentLoc.ownerUid === game.playerIds[game.currentTurnPlayer];
             const revealTo = isNormalDrawPhase

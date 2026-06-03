@@ -18,6 +18,7 @@ import {
   Box,
   Flame,
   Layers,
+  ChevronDown,
   LucideIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -178,6 +179,7 @@ const getChoiceIcon = (option: PopupOption): LucideIcon => {
   if (value.includes('STORY') || value.includes('故事')) return FileText;
   if (value.includes('ITEM') || value.includes('道具')) return Box;
   if (value.includes('MILL') || value.includes('墓地')) return Layers;
+  if (value.includes('NO_CARD') || value.includes('DECLINE') || value.includes('不加入')) return X;
   if (value.includes('YES') || value.includes('发动') || value.includes('使用')) return Zap;
   return Hand;
 };
@@ -482,15 +484,16 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
               <button 
                 onClick={onHide}
                 className={cn(
-                  "absolute p-2 px-3 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all flex items-center gap-2 group border border-white/5",
-                  isDuelBottom ? "right-3 top-2 rounded-md md:right-5 md:top-3" : "left-6 top-6 rounded-xl"
+                  "absolute bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all flex items-center justify-center group border border-white/5",
+                  isDuelBottom ? "right-3 top-2 h-9 w-9 rounded-md md:right-5 md:top-3" : "left-6 top-6 rounded-xl p-2 px-3 gap-2"
                 )}
                 title="隐藏窗口以查看战场"
+                aria-label="隐藏窗口以查看战场"
               >
                 <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                  <Zap className="w-4 h-4" />
+                  {isDuelBottom ? <ChevronDown className="w-5 h-5" /> : <Zap className="w-4 h-4" />}
                 </motion.div>
-                <span className="text-[10px] font-black tracking-widest uppercase">隐藏</span>
+                {!isDuelBottom && <span className="text-[10px] font-black tracking-widest uppercase">隐藏</span>}
               </button>
             )}
 
@@ -530,25 +533,20 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
             {/* Selection Status */}
             {(mode === 'card_selection' || mode === 'player_selection' || mode === 'choice_selection') && maxSelections > 0 && (
               <div className={cn(
-                "px-4 py-1.5 bg-white/5 border border-white/10 text-[10px] md:text-xs font-black text-zinc-500 uppercase tracking-widest",
-                isDuelBottom ? "absolute bottom-2 right-3 rounded-md md:right-5 md:bottom-3" : "mt-4 rounded-full"
+                "px-4 py-1.5 bg-white/5 border border-white/10 text-[10px] md:text-xs font-black text-zinc-400 uppercase tracking-widest",
+                isDuelBottom ? "absolute bottom-2 left-1/2 -translate-x-1/2 rounded-md md:bottom-3" : "mt-4 rounded-full"
               )}>
-                选择进度: {selectedIds.length} / {maxSelections} (至少 {minSelections})
+                {selectedIds.length}/{maxSelections}
               </div>
             )}
 
             {/* Payment Status */}
             {mode === 'payment_selection' && paymentCost !== undefined && (
-              <div className={cn("flex items-center gap-6", isDuelBottom ? "absolute bottom-2 right-3 md:right-5 md:bottom-3" : "mt-4 justify-center")}>
-                <div className="flex items-center gap-2">
-                  <span className="text-zinc-500 text-[10px] font-bold tracking-widest">需求</span>
-                  <span className={cn("font-black text-red-500", isDuelBottom ? "text-xl md:text-2xl" : "text-2xl md:text-3xl")}>{paymentCost}</span>
-                </div>
-                <div className="h-8 w-px bg-white/10" />
-                <div className="flex items-center gap-2">
-                  <span className="text-zinc-500 text-[10px] font-bold tracking-widest">已选</span>
-                  <span className={cn("font-black text-white", isDuelBottom ? "text-xl md:text-2xl" : "text-2xl md:text-3xl")}>{paymentCurrent}</span>
-                </div>
+              <div className={cn(
+                "rounded-md border border-white/10 bg-white/5 px-4 py-1.5 text-center font-black text-zinc-100 tabular-nums",
+                isDuelBottom ? "absolute bottom-2 left-1/2 -translate-x-1/2 text-xl md:bottom-3 md:text-2xl" : "mt-4 text-2xl md:text-3xl"
+              )}>
+                {paymentCurrent ?? 0}/{paymentCost}
               </div>
             )}
           </div>
@@ -688,7 +686,7 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                   onClick={onCancel}
                   className={cn(
                     "border border-white/10 bg-zinc-800 text-white font-black italic uppercase tracking-[0.18em] transition-all hover:bg-zinc-700 active:scale-95",
-                    isDuelBottom ? "rounded-md px-6 py-3 text-xs md:px-10" : "rounded-xl px-10 py-4"
+                    isDuelBottom ? "h-11 w-full rounded-md px-6 text-xs md:w-40" : "rounded-xl px-10 py-4"
                   )}
                 >
                   {cancelText}
@@ -699,7 +697,9 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                 disabled={(mode === 'card_selection' || mode === 'player_selection' || mode === 'choice_selection') && selectedIds.length < minSelections}
                 className={cn(
                   "bg-[#d7b45a] text-black font-black italic uppercase tracking-[0.2em] hover:bg-[#e7c76b] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-xl shadow-[#d7b45a]/20 hover:scale-[1.02] active:scale-95",
-                  isDuelBottom ? "ml-auto w-full rounded-md px-8 py-3 md:w-auto md:px-14" : "px-12 py-4 rounded-xl"
+                  isDuelBottom
+                    ? cn("h-11 rounded-md px-6 text-xs", mode === 'payment_selection' ? "w-full md:w-40" : "ml-auto w-full md:w-auto md:px-14")
+                    : "px-12 py-4 rounded-xl"
                 )}
               >
                 {mode === 'payment_selection' ? '确认支付' : confirmText}

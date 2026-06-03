@@ -29,6 +29,8 @@ const EFFECT_TYPE_LABELS: Record<string, string> = {
   CONTINUOUS: '永续'
 };
 
+const EROSION_NO_CARD_ID = '__NO_EROSION_CARD__';
+
 const getEffectTypeLabel = (type?: string | null) => {
   if (!type) return '效果';
   return EFFECT_TYPE_LABELS[type] || type;
@@ -176,7 +178,6 @@ export const BattleField: React.FC = () => {
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [showAttackModal, setShowAttackModal] = useState(false);
   const [selectedErosionCardId, setSelectedErosionCardId] = useState<string | null>(null);
-  const [erosionChoice, setErosionChoice] = useState<'A' | 'C' | null>(null);
   const [selectedQueryIds, setSelectedQueryIds] = useState<string[]>([]);
   const [favoriteBackId, setFavoriteBackId] = useState<string>('default');
   const [showLogSidebar, setShowLogSidebar] = useState(true);
@@ -1781,15 +1782,12 @@ export const BattleField: React.FC = () => {
 
 
   const handleConfirmErosion = async () => {
-    if (!gameId || !erosionChoice) return;
-    if (erosionChoice === 'C' && !selectedErosionCardId) {
-      setLastError('请选择一张侵蚀区正面卡');
-      return;
-    }
+    if (!gameId) return;
+    const choice = !selectedErosionCardId || selectedErosionCardId === EROSION_NO_CARD_ID ? 'A' : 'C';
+    const selectedCardId = choice === 'C' ? selectedErosionCardId : undefined;
     setIsPopupHidden(true);
     try {
-      await GameService.handleErosionChoice(gameId, myUid, erosionChoice, selectedErosionCardId || undefined);
-      setErosionChoice(null);
+      await GameService.handleErosionChoice(gameId, myUid, choice, selectedCardId);
       setSelectedErosionCardId(null);
     } catch (error: any) {
       setLastError(error.message);
@@ -1992,9 +1990,6 @@ export const BattleField: React.FC = () => {
             </div>
           )}
         </div>
-        <p className="px-1 text-center text-[10px] font-bold tracking-wide text-zinc-500 md:text-xs">
-          提示：正费用的剩余部分将以侵蚀伤害从牌库扣除；负费用请选择正面侵蚀卡支付。
-        </p>
       </div>
     );
   };
@@ -2403,17 +2398,32 @@ export const BattleField: React.FC = () => {
       {!isSpectator && <StandardPopup
         isOpen={!isSpectator && game.phase === 'EROSION' && me.isTurn && me.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT')}
         title="侵蚀阶段"
-        description="选择如何处理正面朝上的侵蚀卡"
-        mode={erosionChoice === 'C' ? 'card_selection' : 'double_selection'}
+        description="选择一张加入手牌，或不加入手牌"
+        mode="card_selection"
         presentation="duel-bottom"
         optionLayout="row"
-        confirmText="确认选择"
+        confirmText="确认"
         onConfirm={handleConfirmErosion}
         onSelectionComplete={handleConfirmErosion}
-        cards={me.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT').map(c => c!)}
-        selectedIds={selectedErosionCardId ? [selectedErosionCardId] : []}
+        options={[
+          {
+            id: EROSION_NO_CARD_ID,
+            value: 'NO_CARD',
+            label: '不加入手牌',
+            icon: 'grave',
+            detail: '将正面侵蚀卡送入墓地'
+          },
+          ...me.erosionFront
+            .filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT')
+            .map(c => ({
+              id: c!.gamecardId,
+              card: c!,
+              zoneLabel: '侵蚀区正面'
+            }))
+        ]}
+        selectedIds={[selectedErosionCardId || EROSION_NO_CARD_ID]}
         maxSelections={1}
-        minSelections={erosionChoice === 'C' ? 1 : 0}
+        minSelections={1}
         onCardClick={(card) => setSelectedErosionCardId(card.gamecardId)}
         onCardHover={setHoverPreviewCard}
         cardBackUrl={cardBackUrl}
@@ -2422,40 +2432,13 @@ export const BattleField: React.FC = () => {
           setIsPopupHidden(true);
         }}
         isHidden={isPopupHidden}
-      >
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 w-full mb-3">
-          <button
-            onClick={() => { setErosionChoice('A'); setSelectedErosionCardId(null); }}
-            className={cn(
-              "p-3 md:p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-1 md:gap-2 text-center",
-              erosionChoice === 'A' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
-            )}
-          >
-            <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">A</div>
-            <div className="font-bold text-white text-sm md:text-base">全部送入墓地</div>
-            <div className="text-[10px] md:text-xs text-zinc-500">将侵蚀区所有正面卡送入墓地</div>
-          </button>
-
-          <button
-            onClick={() => setErosionChoice('C')}
-            className={cn(
-              "p-3 md:p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-1 md:gap-2 text-center",
-              erosionChoice === 'C' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
-            )}
-          >
-            <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">B</div>
-            <div className="font-bold text-white text-sm md:text-base">加入手牌</div>
-            <div className="text-[10px] md:text-xs text-zinc-500">选择一张加入手牌，其余送墓，并从牌库放置一张到侵蚀区背面</div>
-          </button>
-        </div>
-      </StandardPopup>}
+      />}
 
       {/* Payment Selection Tray */}
       <StandardPopup
         isOpen={!!pendingPlayCard}
         title="支付费用"
-        description={pendingPlayCard ? `${pendingPlayCard.fullName} / ${getCardTypeLabel(pendingPlayCard.type)} / ${getCardColorLabel(pendingPlayCard.color)}` : ''}
+        description=""
         mode="payment_selection"
         presentation="duel-bottom"
         paymentCost={pendingPlayCard ? getEffectiveCardCost(pendingPlayCard) : undefined}
@@ -3256,7 +3239,11 @@ export const BattleField: React.FC = () => {
         key={`${displayedPendingQuery?.id || 'no-query'}-${pendingQueryPopupMode}`}
         isOpen={!!(!isSpectator && displayedPendingQuery && displayedPendingQuery.playerUid === myUid)}
         title={isQueryHandoffWaiting ? '处理中...' : (displayedPendingQuery?.title || '')}
-        description={isQueryHandoffWaiting ? '正在连续处理下一段效果选择' : (displayedPendingQuery?.description || '')}
+        description={
+          isQueryHandoffWaiting
+            ? '正在连续处理下一段效果选择'
+            : (normalizedPendingQueryType === 'SELECT_PAYMENT' ? '' : (displayedPendingQuery?.description || ''))
+        }
         mode={pendingQueryPopupMode}
         presentation="duel-bottom"
         optionLayout="row"

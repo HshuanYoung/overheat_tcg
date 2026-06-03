@@ -650,3 +650,51 @@ export interface Deck {
   isFavorite: boolean;
   createdAt: number;
 }
+
+export type SandboxPlayerKey = 'player' | 'opponent';
+
+export type SandboxEditableZone =
+  | 'deck'
+  | 'hand'
+  | 'grave'
+  | 'exile'
+  | 'itemZone'
+  | 'unitZone'
+  | 'erosionFront'
+  | 'erosionBack';
+
+export interface SandboxCardSetup {
+  cardRef: string;
+  displayState?: Card['displayState'];
+  isExhausted?: boolean;
+}
+
+export interface SandboxPlayerSetup {
+  displayName?: string;
+  deck: SandboxCardSetup[];
+  hand: SandboxCardSetup[];
+  grave: SandboxCardSetup[];
+  exile: SandboxCardSetup[];
+  itemZone: SandboxCardSetup[];
+  unitZone: Array<SandboxCardSetup | null>;
+  erosionFront: Array<SandboxCardSetup | null>;
+  erosionBack: Array<SandboxCardSetup | null>;
+}
+
+export interface SandboxFile {
+  version: 1;
+  name?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  turnCount: number;
+  currentTurn: SandboxPlayerKey;
+  phase: GamePhase;
+  turnTimerLimit?: number;
+  players: Record<SandboxPlayerKey, SandboxPlayerSetup>;
+}
+
+export interface SandboxFileSummary {
+  name: string;
+  size: number;
+  updatedAt: number;
+}

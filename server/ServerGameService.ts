@@ -1836,15 +1836,6 @@ export const ServerGameService = {
       gameState.logs.push(`[${(sourcePlayer as any).replaceOwnGraveToDeckWithExileSourceName || '墓地回卡组替换'}] 将 [${card.fullName}] 放置到卡组改为放逐。`);
     }
 
-    if (
-      options?.isEffect &&
-      sourceZone === 'GRAVE' &&
-      targetZone === 'UNIT' &&
-      card.type === 'UNIT'
-    ) {
-      targetPlayer.unitFromGraveToFieldTurn = gameState.turnCount;
-    }
-
     if (options?.isEffect && sourceZone === 'DECK' && targetZone === 'HAND') {
       const replacement = Object.values(gameState.players)
         .flatMap(owner => [...owner.unitZone, ...owner.itemZone].filter((source): source is Card => !!source))
@@ -1928,10 +1919,33 @@ export const ServerGameService = {
       }
     }
 
+    if (
+      options?.isEffect &&
+      targetZone === 'UNIT' &&
+      card.type === 'UNIT' &&
+      !targetPlayer.unitZone.some(slot => slot === null)
+    ) {
+      gameState.logs.push(`[单位区已满] ${card.fullName} 因单位区已满改为送入墓地。`);
+      targetZone = 'GRAVE';
+      card.cardlocation = 'GRAVE';
+      card.displayState = 'FRONT_UPRIGHT';
+      card.isExhausted = false;
+      (card as any).data.lastMovedToZone = 'GRAVE';
+    }
+
     if (targetZone === 'UNIT' || targetZone === 'ITEM') {
       ServerGameService.readyCard(card);
       // Mark as played this turn to handle summon sickness/triggers correctly
       card.playedTurn = gameState.turnCount;
+    }
+
+    if (
+      options?.isEffect &&
+      sourceZone === 'GRAVE' &&
+      targetZone === 'UNIT' &&
+      card.type === 'UNIT'
+    ) {
+      targetPlayer.unitFromGraveToFieldTurn = gameState.turnCount;
     }
 
     if (
@@ -2260,10 +2274,23 @@ export const ServerGameService = {
 
   playerHasAvailableConfrontationAction(gameState: GameState, playerId: string): boolean {
     const player = gameState.players[playerId];
-    if (!player || gameState.phase !== 'COUNTERING' || gameState.priorityPlayerId !== playerId) return false;
+    if (!player) return false;
+
+    const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+    const isCounteringTurn = gameState.phase === 'COUNTERING' && gameState.priorityPlayerId === playerId;
+    const isBattleFreeTurnPlayer = gameState.phase === 'BATTLE_FREE' && turnPlayerId === playerId;
+    const isBattleFreeAskedPlayer =
+      gameState.phase === 'BATTLE_FREE' &&
+      !!gameState.battleState?.askConfront &&
+      (
+        (gameState.battleState.askConfront === 'ASKING_OPPONENT' && turnPlayerId !== playerId) ||
+        (gameState.battleState.askConfront === 'ASKING_TURN_PLAYER' && turnPlayerId === playerId)
+      );
+    if (!isCounteringTurn && !isBattleFreeTurnPlayer && !isBattleFreeAskedPlayer) return false;
 
     const hasPlayableStory = player.hand.some(card =>
       card.type === 'STORY' &&
+      (isCounteringTurn || isBattleFreeTurnPlayer) &&
       ServerGameService.canPlayCard(gameState, player, card).canPlay
     );
     if (hasPlayableStory) return true;
@@ -2290,6 +2317,56 @@ export const ServerGameService = {
   },
 
   async applyConfrontationStrategy(gameState: GameState, onUpdate?: (state: GameState) => Promise<void>) {
+    if (
+      gameState.phase === 'BATTLE_FREE' &&
+      gameState.battleState &&
+      !gameState.battleState.askConfront &&
+      !gameState.pendingQuery &&
+      !gameState.isResolvingStack &&
+      !gameState.currentProcessingItem
+    ) {
+      const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      const player = gameState.players[turnPlayerId];
+      if (!player) return gameState;
+
+      const strategy = player.confrontationStrategy || 'AUTO';
+      if (strategy === 'ON') return gameState;
+
+      const hasAction = strategy === 'AUTO'
+        ? ServerGameService.playerHasAvailableConfrontationAction(gameState, player.uid)
+        : false;
+      if (strategy === 'AUTO' && hasAction) return gameState;
+
+      await ServerGameService.advancePhase(gameState, 'PROPOSE_DAMAGE_CALCULATION', player.uid, onUpdate);
+      return ServerGameService.applyConfrontationStrategy(gameState, onUpdate);
+    }
+
+    if (
+      gameState.phase === 'BATTLE_FREE' &&
+      gameState.battleState?.askConfront &&
+      !gameState.pendingQuery &&
+      !gameState.isResolvingStack &&
+      !gameState.currentProcessingItem
+    ) {
+      const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      const askedPlayerId = gameState.battleState.askConfront === 'ASKING_OPPONENT'
+        ? gameState.playerIds.find(uid => uid !== turnPlayerId)
+        : turnPlayerId;
+      const player = askedPlayerId ? gameState.players[askedPlayerId] : undefined;
+      if (!player) return gameState;
+
+      const strategy = player.confrontationStrategy || 'AUTO';
+      if (strategy === 'ON') return gameState;
+
+      const hasAction = strategy === 'AUTO'
+        ? ServerGameService.playerHasAvailableConfrontationAction(gameState, player.uid)
+        : false;
+      if (strategy === 'AUTO' && hasAction) return gameState;
+
+      await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', player.uid, onUpdate);
+      return ServerGameService.applyConfrontationStrategy(gameState, onUpdate);
+    }
+
     if (
       gameState.phase !== 'COUNTERING' ||
       !gameState.priorityPlayerId ||
@@ -7161,6 +7238,30 @@ export const ServerGameService = {
               nextPhase: 'DAMAGE_CALCULATION',
               timestamp: Date.now()
             });
+          }
+        } else if (action === 'DECLINE_CONFRONTATION') {
+          if (!gameState.battleState.askConfront) return gameState;
+          const turnPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+          const opponentId = gameState.playerIds.find(uid => uid !== turnPlayerId);
+          const expectedPlayerId = gameState.battleState.askConfront === 'ASKING_OPPONENT'
+            ? opponentId
+            : turnPlayerId;
+          if (expectedPlayerId && actingPlayerId !== expectedPlayerId) return gameState;
+
+          if (gameState.battleState.askConfront === 'ASKING_OPPONENT') {
+            gameState.logs.push(`${actingPlayer.displayName} 选择不进行战斗自由对抗。`);
+            gameState.battleState.askConfront = 'ASKING_TURN_PLAYER';
+          } else {
+            gameState.logs.push(`${actingPlayer.displayName} 选择不继续战斗自由对抗。`);
+            delete gameState.battleState.askConfront;
+            if (ServerGameService.checkBattleInterruption(gameState)) {
+              await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+              return gameState;
+            }
+            gameState.phase = 'DAMAGE_CALCULATION';
+            gameState.phaseTimerStart = Date.now();
+            gameState.logs.push(`[阶段切换] 双方均不进行对抗，进入伤害计算阶段`);
+            await ServerGameService.resolveDamage(gameState);
           }
         } else if (action === 'RETURN_MAIN') {
           gameState.phase = 'MAIN';

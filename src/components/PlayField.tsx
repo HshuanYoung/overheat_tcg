@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Card, PlayerOngoingEffect, PlayerState, StackItem, GameState } from '../types/game';
+import { Card, PlayerOngoingEffect, PlayerState, StackItem, GameState, SandboxEditableZone, SandboxPlayerKey } from '../types/game';
 import { CardComponent } from './Card';
 import { StandardPopup } from './StandardPopup';
 import { KeywordBadges } from './KeywordBadges';
@@ -48,6 +48,9 @@ interface PlayFieldProps {
   onHidePopup?: () => void;
   onExpand?: () => void;
   isSpectator?: boolean;
+  sandboxEditMode?: boolean;
+  onSandboxZoneClick?: (target: { playerKey: SandboxPlayerKey; zone: SandboxEditableZone; index?: number; card?: Card | null }) => void;
+  sandboxCenterControls?: React.ReactNode;
 }
 
 const CardSlot: React.FC<{
@@ -407,8 +410,16 @@ const PlayerHalf: React.FC<{
   setViewingZone?: (zone: { title: string, type: string, isOpponentZone?: boolean } | null) => void;
   highlightedCardIds?: Set<string>;
   isSpectator?: boolean;
-}> = ({ player, isOpponent, wealthValue = 0, ongoingEffects = [], onOpenOngoingEffects, onCardClick, onPreviewCard, onHoverCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone, highlightedCardIds, isSpectator }) => {
+  sandboxEditMode?: boolean;
+  onSandboxZoneClick?: (target: { playerKey: SandboxPlayerKey; zone: SandboxEditableZone; index?: number; card?: Card | null }) => void;
+}> = ({ player, isOpponent, wealthValue = 0, ongoingEffects = [], onOpenOngoingEffects, onCardClick, onPreviewCard, onHoverCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone, highlightedCardIds, isSpectator, sandboxEditMode, onSandboxZoneClick }) => {
   if (!player) return null;
+  const sandboxPlayerKey: SandboxPlayerKey = isOpponent ? 'opponent' : 'player';
+  const clickSandboxZone = (zone: SandboxEditableZone, index?: number, card?: Card | null) => {
+    if (!sandboxEditMode) return false;
+    onSandboxZoneClick?.({ playerKey: sandboxPlayerKey, zone, index, card });
+    return true;
+  };
   const getCardCostDisplay = (card: Card) => withEffectiveCostInfluence(game, player, card);
   const ongoingEffectCount = ongoingEffects.filter(effect => effect.category !== 'WEALTH').length;
   const unitZoneOffsetClass = ""; // Removed horizontal offset to prevent blocking exile area
@@ -423,6 +434,7 @@ const PlayerHalf: React.FC<{
   const canViewHand = isSpectator || !isOpponent || !!player.isHandPublic;
   const shouldRenderHandSlot = shouldUseHandSlot || (!isSpectator && !!player.isHandPublic);
   const openHandZone = () => {
+    if (clickSandboxZone('hand')) return;
     if (!canViewHand) return;
     setViewingZone?.({
       title: isSpectator ? `${isOpponent ? '玩家2' : '玩家1'}手牌` : isOpponent ? (player.isHandPublic ? '敌方公开手牌' : '敌方手牌') : '手牌',
@@ -446,12 +458,13 @@ const PlayerHalf: React.FC<{
             <CardSlot
               card={null} isDeck label="牌库" count={player.deck?.length || 0}
               className="border-white/20 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
+              onClick={() => clickSandboxZone('deck')}
             />
             <CardSlot
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="墓地" count={player.grave?.length || 0}
               className="border-red-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone?.({ title: '墓地', type: 'grave', isOpponentZone: !!isOpponent })}
+              onClick={() => clickSandboxZone('grave', Math.max(0, (player.grave?.length || 1) - 1), player.grave?.[player.grave.length - 1] || null) || setViewingZone?.({ title: '墓地', type: 'grave', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item"
             />
@@ -459,7 +472,7 @@ const PlayerHalf: React.FC<{
               card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="放逐" count={player.exile?.length || 0}
               className="border-purple-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone?.({ title: '放逐区', type: 'exile', isOpponentZone: !!isOpponent })}
+              onClick={() => clickSandboxZone('exile', Math.max(0, (player.exile?.length || 1) - 1), player.exile?.[player.exile.length - 1] || null) || setViewingZone?.({ title: '放逐区', type: 'exile', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={player.exile?.length > 0 ? player.exile[player.exile.length - 1]?.displayState !== 'FRONT_FACEDOWN' : true}
               isOpponent={isOpponent}
@@ -473,7 +486,7 @@ const PlayerHalf: React.FC<{
               card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}
               label="道具区" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone?.({ title: '道具区', type: 'item', isOpponentZone: !!isOpponent })}
+              onClick={() => clickSandboxZone('itemZone', Math.max(0, (player.itemZone?.filter(Boolean).length || 1) - 1), (player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined) || null) || setViewingZone?.({ title: '道具区', type: 'item', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={true}
               isExhausted={!!(player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined)?.isExhausted}
@@ -493,6 +506,7 @@ const PlayerHalf: React.FC<{
               count={getMobileErosionCount(player)}
               className="border-red-500/30 scale-[0.8] md:scale-100 md:hidden" cardBackUrl={cardBackUrl}
               onClick={() => {
+                if (clickSandboxZone('erosionFront')) return;
                 setViewingZone?.({
                   title: '侵蚀区',
                   type: 'erosion',
@@ -521,13 +535,19 @@ const PlayerHalf: React.FC<{
           <>
             {/* Opponent Hand Area */}
             <div className="flex items-center justify-center px-1 md:px-0 mb-1 md:mb-2">
-              <div className="flex-1 h-14 md:h-20 flex items-center justify-center gap-1 overflow-x-auto bg-black/20 rounded-lg border border-white/5 custom-scrollbar">
+              <div
+                className={cn(
+                  "flex-1 h-14 md:h-20 flex items-center justify-center gap-1 overflow-x-auto bg-black/20 rounded-lg border border-white/5 custom-scrollbar",
+                  sandboxEditMode && (player.hand?.length || 0) === 0 && "cursor-pointer hover:border-red-500/40"
+                )}
+                onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
+              >
                 {shouldRenderHandSlot ? (
                   <HandZoneSlot
                     count={player.hand?.length || 0}
                     isOpponent={isOpponent}
                     isPublic={!!player.isHandPublic || !!isSpectator}
-                    onClick={canViewHand ? openHandZone : undefined}
+                    onClick={sandboxEditMode || canViewHand ? openHandZone : undefined}
                   />
                 ) : isSpectator ? (
                   player.hand?.map((card, i) => {
@@ -536,7 +556,7 @@ const PlayerHalf: React.FC<{
                       <div
                         key={card.gamecardId || i}
                         className="w-10 md:w-[76.8px] shrink-0 cursor-pointer shadow-lg drop-shadow-md transition-all hover:-translate-y-1"
-                        onClick={(e) => onCardClick?.(costDisplay.card, 'hand', i, e)}
+                        onClick={(e) => clickSandboxZone('hand', i, costDisplay.card) || onCardClick?.(costDisplay.card, 'hand', i, e)}
                         onMouseEnter={() => onHoverCard?.(costDisplay.card)}
                         onMouseLeave={() => onHoverCard?.(null)}
                       >
@@ -580,7 +600,7 @@ const PlayerHalf: React.FC<{
                           <CardSlot
                             card={displayCard} isFaceUp={displayCard.isFaceUp} onPreview={displayCard.isFaceUp ? onPreviewCard : undefined}
                             onHover={onHoverCard}
-                            onClick={(e) => onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
+                            onClick={(e) => clickSandboxZone(displayCard.isFaceUp ? 'erosionFront' : 'erosionBack', i, displayCard) || onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
                             isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             isHighlighted={displayCard.isFaceUp && highlightedCardIds?.has(displayCard.gamecardId)}
@@ -588,7 +608,7 @@ const PlayerHalf: React.FC<{
                           />
                         ) : (
                           <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
-                            <span className="text-[8px] opacity-20">{num}</span>
+                            <button type="button" onClick={() => clickSandboxZone('erosionBack', i)} className="h-full w-full text-[8px] opacity-20">{num}</button>
                           </div>
                         )}
                       </div>
@@ -605,7 +625,7 @@ const PlayerHalf: React.FC<{
                 return (
                   <CardSlot
                     key={i} card={unit || null} label={`${6 - i}`}
-                    onPreview={onPreviewCard} onClick={(e) => unit && onCardClick?.(unit, 'unit', i, e)}
+                    onPreview={onPreviewCard} onClick={(e) => clickSandboxZone('unitZone', i, unit || null) || (unit && onCardClick?.(unit, 'unit', i, e))}
                     onHover={onHoverCard}
                     className="scale-[0.9] origin-center md:scale-100"
                     isExhausted={unit ? unit.isExhausted : false}
@@ -628,7 +648,7 @@ const PlayerHalf: React.FC<{
                 return (
                   <CardSlot
                     key={i} card={unit || null} label={`${i + 1}`}
-                    onPreview={onPreviewCard} onClick={(e) => unit && onCardClick?.(unit, 'unit', i, e)}
+                    onPreview={onPreviewCard} onClick={(e) => clickSandboxZone('unitZone', i, unit || null) || (unit && onCardClick?.(unit, 'unit', i, e))}
                     onHover={onHoverCard}
                     className="scale-[0.9] origin-center md:scale-100"
                     isExhausted={unit ? unit.isExhausted : false}
@@ -664,7 +684,7 @@ const PlayerHalf: React.FC<{
                             isFaceUp={displayCard.isFaceUp}
                             onPreview={onPreviewCard}
                             onHover={onHoverCard}
-                            onClick={(e) => onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
+                            onClick={(e) => clickSandboxZone(displayCard.isFaceUp ? 'erosionFront' : 'erosionBack', i, displayCard) || onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
                             isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
                             className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
                             isHighlighted={displayCard.isFaceUp && highlightedCardIds?.has(displayCard.gamecardId)}
@@ -675,7 +695,7 @@ const PlayerHalf: React.FC<{
                           />
                         ) : (
                           <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
-                            <span className="text-[8px] opacity-20">{num}</span>
+                            <button type="button" onClick={() => clickSandboxZone('erosionBack', i)} className="h-full w-full text-[8px] opacity-20">{num}</button>
                           </div>
                         )}
                       </div>
@@ -687,7 +707,13 @@ const PlayerHalf: React.FC<{
             </div>
 
             <div className="flex items-center justify-center px-1 md:px-0 mt-0 -translate-y-2 md:mt-2 md:translate-y-0">
-              <div className="flex-1 h-16 md:h-36 flex items-center justify-center gap-0.5 overflow-visible bg-black/20 rounded-lg border border-white/5 relative">
+              <div
+                className={cn(
+                  "flex-1 h-16 md:h-36 flex items-center justify-center gap-0.5 overflow-visible bg-black/20 rounded-lg border border-white/5 relative",
+                  sandboxEditMode && (player.hand?.length || 0) === 0 && "cursor-pointer hover:border-red-500/40"
+                )}
+                onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
+              >
                 {shouldUseHandSlot ? (
                   <HandZoneSlot count={player.hand?.length || 0} onClick={openHandZone} />
                 ) : player.hand?.map((card, i) => {
@@ -707,7 +733,7 @@ const PlayerHalf: React.FC<{
                         zIndex: isFeijingSelected ? 100 : i,
                         bottom: window.innerWidth < 768 ? '10px' : '0px'
                       }}
-                      onClick={(e) => onCardClick?.(costDisplay.card, 'hand', i, e)}
+                        onClick={(e) => clickSandboxZone('hand', i, costDisplay.card) || onCardClick?.(costDisplay.card, 'hand', i, e)}
                       onMouseEnter={() => onHoverCard?.(costDisplay.card)}
                       onMouseLeave={() => onHoverCard?.(null)}
                     >
@@ -747,6 +773,7 @@ const PlayerHalf: React.FC<{
               count={getMobileErosionCount(player)}
               className="border-red-500/30 scale-[0.8] md:scale-100 md:hidden" cardBackUrl={cardBackUrl}
               onClick={() => {
+                if (clickSandboxZone('erosionFront')) return;
                 setViewingZone?.({
                   title: isOpponent ? '敌方侵蚀区' : '侵蚀区',
                   type: 'erosion',
@@ -761,7 +788,7 @@ const PlayerHalf: React.FC<{
               card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}
               label="道具区" count={player.itemZone?.filter(Boolean).length || 0}
               className="border-blue-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone?.({ title: '敌方道具区', type: 'item', isOpponentZone: !!isOpponent })}
+              onClick={() => clickSandboxZone('itemZone', Math.max(0, (player.itemZone?.filter(Boolean).length || 1) - 1), (player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined) || null) || setViewingZone?.({ title: '敌方道具区', type: 'item', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={true}
               isExhausted={!!(player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined)?.isExhausted}
@@ -785,7 +812,7 @@ const PlayerHalf: React.FC<{
               card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
               label="放逐" count={player.exile?.length || 0}
               className="border-purple-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone?.({ title: '放逐区', type: 'exile', isOpponentZone: !!isOpponent })}
+              onClick={() => clickSandboxZone('exile', Math.max(0, (player.exile?.length || 1) - 1), player.exile?.[player.exile.length - 1] || null) || setViewingZone?.({ title: '放逐区', type: 'exile', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={player.exile?.length > 0 ? player.exile[player.exile.length - 1]?.displayState !== 'FRONT_FACEDOWN' : true}
               displayMode="erosion_item"
@@ -794,13 +821,14 @@ const PlayerHalf: React.FC<{
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="墓地" count={player.grave?.length || 0}
               className="border-red-900/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
-              onClick={() => setViewingZone?.({ title: '墓地', type: 'grave', isOpponentZone: !!isOpponent })}
+              onClick={() => clickSandboxZone('grave', Math.max(0, (player.grave?.length || 1) - 1), player.grave?.[player.grave.length - 1] || null) || setViewingZone?.({ title: '墓地', type: 'grave', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={true} displayMode="erosion_item"
             />
             <CardSlot
               card={null} isDeck label="牌库" count={player.deck?.length || 0}
               className="border-white/20 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
+              onClick={() => clickSandboxZone('deck')}
             />
           </>
         )}
@@ -816,7 +844,8 @@ export const PlayField: React.FC<PlayFieldProps> = ({
   setViewingZone, highlightedCardIds, onShowLogs, onOpenRulebook,
   onSurrender, onPhaseClick, confrontationStrategy, onUpdateStrategy,
   canConfront, isConfrontPromptActive, isCounteringPromptActive, isDefensePromptActive, onStartConfront, onDeclineConfront, onDeclineDefense,
-  showPhaseMenu, isAnyPopupOpen, isPopupHidden, onHidePopup, onExpand, isSpectator
+  showPhaseMenu, isAnyPopupOpen, isPopupHidden, onHidePopup, onExpand, isSpectator,
+  sandboxEditMode, onSandboxZoneClick, sandboxCenterControls
 }) => {
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [isDesktop, setIsDesktop] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
@@ -1016,6 +1045,8 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           setViewingZone={setViewingZone}
           highlightedCardIds={highlightedCardIds}
           isSpectator={isSpectator}
+          sandboxEditMode={sandboxEditMode}
+          onSandboxZoneClick={onSandboxZoneClick}
         />
       </div>
 
@@ -1026,6 +1057,11 @@ export const PlayField: React.FC<PlayFieldProps> = ({
       )}>
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#f27d26]/10 to-transparent border-y border-white/5" />
 
+        {sandboxEditMode && sandboxCenterControls ? (
+          <div className="relative z-10 w-full max-w-5xl px-3">
+            {sandboxCenterControls}
+          </div>
+        ) : (
         <div className="mx-auto flex w-fit max-w-[calc(100%-0.75rem)] flex-col items-center gap-1 rounded-2xl border border-white/10 bg-zinc-950/80 px-2 py-1 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl md:w-auto md:max-w-full md:flex-row md:gap-4 md:rounded-[2rem] md:px-4 md:py-2 scale-[0.85] md:scale-100 origin-center">
           <div className="flex w-fit max-w-full flex-wrap items-center justify-center gap-2 md:w-auto md:flex-nowrap md:gap-4">
             {/* Round & Surrender */}
@@ -1174,6 +1210,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Player Half */}
@@ -1197,6 +1234,8 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           setViewingZone={setViewingZone}
           highlightedCardIds={highlightedCardIds}
           isSpectator={isSpectator}
+          sandboxEditMode={sandboxEditMode}
+          onSandboxZoneClick={onSandboxZoneClick}
         />
       </div>
 

@@ -68,6 +68,9 @@ import prayer from '../src/scripts/201000102';
 import annihilationAngels from '../src/scripts/101130104';
 import tya from '../src/scripts/101130204';
 import silverCrossArmor from '../src/scripts/301130025';
+import churchInvestigationTeam from '../src/scripts/101140100';
+import phantomAppears from '../src/scripts/205000135';
+import moonchaserMagician from '../src/scripts/105000229';
 
 type ScenarioResult = {
   name: string;
@@ -3013,6 +3016,352 @@ async function testSerializedVirtualEndTriggersResolve(): Promise<ScenarioResult
     : fail(name, `asked=${askedOrder}, forbidden=${forbiddenResolved}/${exiledForbidden?.displayState || 'none'}, loss=${lossResolved}, source=${rehydratedAgain.winSourceCardName || 'none'}, pending=${rehydratedAgain.pendingQuery?.callbackKey || 'none'}`);
 }
 
+async function testEffectUnitReturnOverflowGoesToGrave(): Promise<ScenarioResult> {
+  const name = 'Effect unit return to full unit zone goes to grave';
+  const filler = Array.from({ length: 6 }, (_, index) =>
+    testCard({ id: `FULL_FIELD_${index}`, fullName: `Full Field ${index}`, cardlocation: 'UNIT' })
+  );
+  const returning = testCard({
+    id: 'OVERFLOW_RETURNING_UNIT',
+    fullName: 'Overflow Returning Unit',
+    cardlocation: 'EXILE',
+    type: 'UNIT',
+    displayState: 'FRONT_HORIZONTAL',
+    isExhausted: true,
+  });
+  const source = cloneScriptCard(escort as Card, 'UNIT');
+  const state = game({
+    unitZone: filler,
+    exile: [returning],
+  }, {
+    unitZone: [source, null, null, null, null, null],
+  });
+
+  const moved = ServerGameService.moveCard(state, 'BOT', 'EXILE', 'BOT', 'UNIT', returning.gamecardId, {
+    isEffect: true,
+    effectSourcePlayerUid: 'P1',
+    effectSourceCardId: source.gamecardId,
+  });
+  const inGrave = state.players.BOT.grave.some((card: Card) => card.gamecardId === returning.gamecardId);
+  const graveCard = state.players.BOT.grave.find((card: Card) => card.gamecardId === returning.gamecardId);
+  const resetUpright = graveCard?.displayState === 'FRONT_UPRIGHT' && graveCard?.isExhausted === false;
+  const unitCount = state.players.BOT.unitZone.filter(Boolean).length;
+  const noExtraSlot = state.players.BOT.unitZone.length === 6;
+
+  return moved && inGrave && resetUpright && unitCount === 6 && noExtraSlot
+    ? pass(name, `grave=${inGrave}, upright=${resetUpright}, unitCount=${unitCount}, slots=${state.players.BOT.unitZone.length}`)
+    : fail(name, `moved=${moved}, grave=${inGrave}, upright=${resetUpright}/${graveCard?.displayState || 'none'}/${graveCard?.isExhausted}, unitCount=${unitCount}, slots=${state.players.BOT.unitZone.length}`);
+}
+
+async function testEscortReturnOverflowGoesToGraveUpright(): Promise<ScenarioResult> {
+  const name = 'Escort full-field return goes to grave upright';
+  const escortCard = cloneScriptCard(escort as Card, 'UNIT');
+  const returning = testCard({
+    id: 'ESCORT_OVERFLOW_RETURNING_UNIT',
+    fullName: 'Escort Overflow Returning Unit',
+    cardlocation: 'EXILE',
+    type: 'UNIT',
+    displayState: 'FRONT_HORIZONTAL',
+    isExhausted: true,
+  });
+  const filler = Array.from({ length: 6 }, (_, index) =>
+    testCard({ id: `ESCORT_FULL_${index}`, fullName: `Escort Full ${index}`, cardlocation: 'UNIT' })
+  );
+  const state = game({
+    unitZone: filler,
+    exile: [returning],
+  }, {
+    unitZone: [escortCard, null, null, null, null, null],
+    escortReturns: [{
+      cardId: returning.gamecardId,
+      ownerUid: 'BOT',
+      zone: 'UNIT',
+      slotIndex: 0,
+      sourceCardId: escortCard.gamecardId,
+      returnTurn: 6,
+    }],
+  }, { phase: 'END', turnCount: 6, mode: 'sandbox' });
+
+  EventEngine.dispatchEvent(state, { type: 'TURN_END' as any, playerUid: 'BOT' });
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const graveCard = state.players.BOT.grave.find((card: Card) => card.gamecardId === returning.gamecardId);
+  const inGrave = !!graveCard;
+  const resetUpright = graveCard?.displayState === 'FRONT_UPRIGHT' && graveCard?.isExhausted === false;
+  const unitCount = state.players.BOT.unitZone.filter(Boolean).length;
+
+  return inGrave && resetUpright && unitCount === 6
+    ? pass(name, `grave=${inGrave}, upright=${resetUpright}, unitCount=${unitCount}`)
+    : fail(name, `grave=${inGrave}, upright=${resetUpright}/${graveCard?.displayState || 'none'}/${graveCard?.isExhausted}, unitCount=${unitCount}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testChurchInvestigationReturnOverflowGoesToGrave(): Promise<ScenarioResult> {
+  const name = 'Church Investigation Team full-field blink return goes to grave';
+  const investigation = cloneScriptCard(churchInvestigationTeam as Card, 'UNIT');
+  const returning = testCard({
+    id: 'INVESTIGATION_RETURNING_UNIT',
+    fullName: 'Investigation Returning Unit',
+    cardlocation: 'EXILE',
+    type: 'UNIT',
+    displayState: 'FRONT_HORIZONTAL',
+    isExhausted: true,
+  });
+  const filler = Array.from({ length: 6 }, (_, index) =>
+    testCard({ id: `INVESTIGATION_FULL_${index}`, fullName: `Investigation Full ${index}`, cardlocation: 'UNIT' })
+  );
+  const state = game({
+    unitZone: [investigation, null, null, null, null, null],
+    blinkReturns: [{
+      cardId: returning.gamecardId,
+      ownerUid: 'P1',
+      zone: 'UNIT',
+      slotIndex: 0,
+      sourceCardId: investigation.gamecardId,
+      afterTurn: 6,
+      sourceName: investigation.fullName,
+    }],
+  }, {
+    unitZone: filler,
+    exile: [returning],
+  }, { phase: 'END', turnCount: 6 });
+
+  EventEngine.dispatchEvent(state, { type: 'TURN_END' as any, playerUid: 'BOT' });
+  await ServerGameService.checkTriggeredEffects(state);
+
+  const inGrave = state.players.P1.grave.some((card: Card) => card.gamecardId === returning.gamecardId);
+  const graveCard = state.players.P1.grave.find((card: Card) => card.gamecardId === returning.gamecardId);
+  const resetUpright = graveCard?.displayState === 'FRONT_UPRIGHT' && graveCard?.isExhausted === false;
+  const unitCount = state.players.P1.unitZone.filter(Boolean).length;
+  const slots = state.players.P1.unitZone.length;
+
+  return inGrave && resetUpright && unitCount === 6 && slots === 6
+    ? pass(name, `grave=${inGrave}, upright=${resetUpright}, unitCount=${unitCount}, slots=${slots}`)
+    : fail(name, `grave=${inGrave}, upright=${resetUpright}/${graveCard?.displayState || 'none'}/${graveCard?.isExhausted}, unitCount=${unitCount}, slots=${slots}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
+}
+
+async function testEnterTriggerWaitsForConfrontationChainEnd(): Promise<ScenarioResult> {
+  const name = 'Enter trigger waits until confrontation chain ends';
+  const oldMoon = cloneScriptCard(moonchaserMagician as Card, 'UNIT', { fullName: '偷天的大怪盗「追月」' });
+  const newMoon = cloneScriptCard(moonchaserMagician as Card, 'DECK');
+  const yellowItem = testCard({
+    id: 'MOONCHASE_YELLOW_ITEM',
+    fullName: 'Moonchase Yellow Item',
+    type: 'ITEM',
+    color: 'YELLOW',
+    acValue: 1,
+    cardlocation: 'DECK',
+  });
+  const story = cloneScriptCard(phantomAppears as Card, 'HAND');
+  const state = game({
+    hand: [story],
+    deck: [yellowItem, newMoon, ...deckCards(4, 'MOONCHASE_FILL', 'YELLOW')],
+    unitZone: [oldMoon, null, null, null, null, null],
+  }, {});
+
+  await ServerGameService.playCard(state, 'BOT', story.gamecardId, {});
+  if (
+    state.pendingQuery?.callbackKey === 'DECLARE_TARGET' ||
+    state.pendingQuery?.callbackKey === 'DECLARE_EFFECT_TARGETS'
+  ) {
+    await answerPendingQuery(state, 'BOT', [oldMoon.gamecardId]);
+  }
+  if (state.phase !== 'COUNTERING') {
+    return fail(name, `expected COUNTERING after play target, got ${state.phase}/${state.pendingQuery?.callbackKey || 'none'}`);
+  }
+
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  const askedStorySelection = state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
+    state.pendingQuery.context?.effectId === '205000135_activate' &&
+    state.pendingQuery.context?.step === 'PUT_UNIT';
+  const triggerQueuedBeforeStorySelection = (state.triggeredEffectsQueue || []).length;
+  const triggerDeferredDuringStorySelection = !state.pendingQuery?.context?.effectId?.startsWith('105000229') &&
+    state.isResolvingStack === true &&
+    (state as any).deferTriggeredEffectsUntilCounterStackEnds === true;
+  if (!askedStorySelection) {
+    return fail(name, `expected story PUT_UNIT query, got ${state.pendingQuery?.callbackKey || 'none'}/${state.pendingQuery?.context?.step || 'none'}`);
+  }
+
+  await answerPendingQuery(state, 'BOT', [newMoon.gamecardId]);
+  const resolvingMoonTrigger = (
+    state.pendingQuery?.callbackKey === 'EFFECT_RESOLVE' &&
+    state.pendingQuery.context?.effectId === '105000229_enter_leave_item'
+  ) || (
+    state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE' &&
+    (state.triggeredEffectsQueue || []).some((record: any) => record.effect?.id === '105000229_enter_leave_item')
+  );
+  const stackFinished = state.phase !== 'COUNTERING' && state.isCountering === 0 && !state.isResolvingStack;
+
+  return triggerQueuedBeforeStorySelection > 0 && triggerDeferredDuringStorySelection && resolvingMoonTrigger && stackFinished
+    ? pass(name, `queuedBefore=${triggerQueuedBeforeStorySelection}, phase=${state.phase}, trigger=${state.pendingQuery?.context?.effectId}`)
+    : fail(name, `queuedBefore=${triggerQueuedBeforeStorySelection}, deferred=${triggerDeferredDuringStorySelection}, resolvingTrigger=${resolvingMoonTrigger}, phase=${state.phase}, pending=${state.pendingQuery?.callbackKey || 'none'}/${state.pendingQuery?.context?.effectId || 'none'}, isCountering=${state.isCountering}, resolving=${!!state.isResolvingStack}`);
+}
+
+async function testConfrontationChainTriggersStayQueuedAndOrderedByBucket(): Promise<ScenarioResult> {
+  const name = 'Confrontation chain triggers stay queued and use bucket order';
+  const resolved: string[] = [];
+  const source = testCard({
+    id: 'CHAIN_TRIGGER_SOURCE',
+    fullName: 'Chain Trigger Source',
+    cardlocation: 'UNIT',
+    effects: [{
+      id: 'chain_make_triggers',
+      type: 'ACTIVATE',
+      triggerLocation: ['UNIT'],
+      description: '对抗链中产生多个诱发',
+      execute: async (_instance: Card, gameState: any) => {
+        const turnMandatoryA = gameState.players.BOT.unitZone.find((card: Card | null) => card?.id === 'TURN_MAND_A');
+        const turnMandatoryB = gameState.players.BOT.unitZone.find((card: Card | null) => card?.id === 'TURN_MAND_B');
+        const opponentMandatory = gameState.players.P1.unitZone.find((card: Card | null) => card?.id === 'OPP_MAND');
+        const turnOptional = gameState.players.BOT.unitZone.find((card: Card | null) => card?.id === 'TURN_OPT');
+        const opponentOptional = gameState.players.P1.unitZone.find((card: Card | null) => card?.id === 'OPP_OPT');
+        [
+          { card: turnOptional, playerUid: 'BOT', effectId: 'turn_optional_chain', mandatory: false },
+          { card: opponentOptional, playerUid: 'P1', effectId: 'opponent_optional_chain', mandatory: false },
+          { card: opponentMandatory, playerUid: 'P1', effectId: 'opponent_mandatory_chain', mandatory: true },
+          { card: turnMandatoryA, playerUid: 'BOT', effectId: 'turn_mandatory_a_chain', mandatory: true },
+          { card: turnMandatoryB, playerUid: 'BOT', effectId: 'turn_mandatory_b_chain', mandatory: true },
+        ].forEach(entry => {
+          EventEngine.dispatchEvent(gameState, {
+            type: 'CARD_ENTERED_ZONE',
+            sourceCard: entry.card,
+            sourceCardId: entry.card?.gamecardId,
+            playerUid: entry.playerUid,
+            data: { zone: 'UNIT', sourceZone: 'TEST' }
+          } as any);
+        });
+      }
+    } as any],
+  });
+  const makeTriggerCard = (id: string, effectId: string, mandatory: boolean) => testCard({
+    id,
+    fullName: id,
+    cardlocation: 'UNIT',
+    effects: [{
+      id: effectId,
+      type: 'TRIGGER',
+      triggerLocation: ['UNIT'],
+      triggerEvent: 'CARD_ENTERED_ZONE',
+      isMandatory: mandatory,
+      description: effectId,
+      condition: (_gameState: any, _player: any, card: Card, event?: any) =>
+        event?.sourceCardId === card.gamecardId,
+      execute: async () => { resolved.push(effectId); }
+    } as any]
+  });
+  const turnMandatoryA = makeTriggerCard('TURN_MAND_A', 'turn_mandatory_a_chain', true);
+  const turnMandatoryB = makeTriggerCard('TURN_MAND_B', 'turn_mandatory_b_chain', true);
+  const turnOptional = makeTriggerCard('TURN_OPT', 'turn_optional_chain', false);
+  const opponentMandatory = makeTriggerCard('OPP_MAND', 'opponent_mandatory_chain', true);
+  const opponentOptional = makeTriggerCard('OPP_OPT', 'opponent_optional_chain', false);
+  const state = game({
+    unitZone: [source, turnMandatoryA, turnMandatoryB, turnOptional, null, null],
+  }, {
+    unitZone: [opponentMandatory, opponentOptional, null, null, null, null],
+  });
+
+  await ServerGameService.activateEffect(state, 'BOT', source.gamecardId, 0);
+  await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+
+  const noTriggerPromptDuringChain =
+    state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE' &&
+    state.phase === 'MAIN' &&
+    state.isCountering === 0 &&
+    !state.isResolvingStack;
+  const firstOrder = state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.options?.length === 2;
+  await answerPendingQuery(state, 'BOT', [turnMandatoryB.gamecardId]);
+  const opponentMandatoryResolved = resolved.includes('opponent_mandatory_chain');
+  const turnOptionalAsked = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.playerUid === 'BOT' &&
+    state.pendingQuery.context?.effectId === 'turn_optional_chain';
+  await answerPendingQuery(state, 'BOT', ['YES']);
+  const opponentOptionalAsked = state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE' &&
+    state.pendingQuery.playerUid === 'P1' &&
+    state.pendingQuery.context?.effectId === 'opponent_optional_chain';
+  await answerPendingQuery(state, 'P1', ['YES']);
+
+  const ordered = resolved.join(',') === 'turn_mandatory_b_chain,turn_mandatory_a_chain,opponent_mandatory_chain,turn_optional_chain,opponent_optional_chain';
+  return noTriggerPromptDuringChain && firstOrder && opponentMandatoryResolved && turnOptionalAsked && opponentOptionalAsked && ordered
+    ? pass(name, resolved.join(','))
+    : fail(name, `noPrompt=${noTriggerPromptDuringChain}, first=${firstOrder}, oppMand=${opponentMandatoryResolved}, turnOpt=${turnOptionalAsked}, oppOpt=${opponentOptionalAsked}, resolved=${resolved.join(',')}, pending=${state.pendingQuery?.callbackKey || 'none'}/${state.pendingQuery?.context?.effectId || 'none'}`);
+}
+
+async function testBattleFreeAutoStrategyDeclinesAndAdvances(): Promise<ScenarioResult> {
+  const name = 'Battle free AUTO/OFF strategy declines and advances to damage';
+  const attacker = testCard({
+    id: 'AUTO_ATTACKER',
+    fullName: 'Auto Attacker',
+    cardlocation: 'UNIT',
+    playedTurn: 1,
+    damage: 1,
+    baseDamage: 1,
+  });
+  const state = game({
+    unitZone: [attacker, null, null, null, null, null],
+    confrontationStrategy: 'AUTO',
+  }, {
+    confrontationStrategy: 'OFF',
+  }, {
+    phase: 'BATTLE_FREE',
+    battleState: {
+      attackers: [attacker.gamecardId],
+      isAlliance: false,
+      askConfront: 'ASKING_OPPONENT',
+      battleId: 'AUTO_BATTLE_FREE',
+    },
+  });
+
+  await ServerGameService.applyConfrontationStrategy(state);
+  const askedTurnPlayer = state.logs.some((line: any) =>
+    String(line?.text || line).includes('选择不进行战斗自由对抗')
+  );
+  const advanced = state.phase === 'MAIN' && !state.battleState;
+  const damageApplied = state.players.P1.erosionBack.length + state.players.P1.erosionFront.length > 0;
+
+  return askedTurnPlayer && advanced && damageApplied
+    ? pass(name, `askedTurnPlayer=${askedTurnPlayer}, phase=${state.phase}, damage=${damageApplied}`)
+    : fail(name, `askedTurnPlayer=${askedTurnPlayer}, phase=${state.phase}, battle=${!!state.battleState}, damage=${damageApplied}`);
+}
+
+async function testSandboxBattleFreeOffStrategyEndsCurrentPlayerFreeStep(): Promise<ScenarioResult> {
+  const name = 'Sandbox battle free OFF strategy ends current player free step';
+  const attacker = testCard({
+    id: 'SANDBOX_OFF_ATTACKER',
+    fullName: 'Sandbox Off Attacker',
+    cardlocation: 'UNIT',
+    playedTurn: 1,
+    damage: 1,
+    baseDamage: 1,
+  });
+  const state = game({
+    unitZone: [attacker, null, null, null, null, null],
+    confrontationStrategy: 'OFF',
+  }, {
+    confrontationStrategy: 'OFF',
+  }, {
+    mode: 'sandbox',
+    phase: 'BATTLE_FREE',
+    battleState: {
+      attackers: [attacker.gamecardId],
+      isAlliance: false,
+      battleId: 'SANDBOX_OFF_BATTLE_FREE',
+    },
+  });
+
+  await ServerGameService.applyConfrontationStrategy(state);
+  const proposedEnd = state.logs.some((line: any) =>
+    String(line?.text || line).includes('请求进入伤害计算') ||
+    String(line?.text || line).includes('进入伤害计算')
+  );
+  const advanced = state.phase === 'MAIN' && !state.battleState;
+  const damageApplied = state.players.P1.erosionBack.length + state.players.P1.erosionFront.length > 0;
+
+  return proposedEnd && advanced && damageApplied
+    ? pass(name, `proposed=${proposedEnd}, phase=${state.phase}, damage=${damageApplied}`)
+    : fail(name, `proposed=${proposedEnd}, phase=${state.phase}, battle=${!!state.battleState}, damage=${damageApplied}`);
+}
+
 const scenarios: ScenarioRun[] = [
   testCorielEndSearch,
   testCorielStoryCheatUnit,
@@ -3064,6 +3413,13 @@ const scenarios: ScenarioRun[] = [
   testMandatoryEndTurnOrderWithValkyrieAndGreatAlchemist,
   testTriggerOrderAcceptsDisplayedCardIds,
   testSerializedVirtualEndTriggersResolve,
+  testEffectUnitReturnOverflowGoesToGrave,
+  testEscortReturnOverflowGoesToGraveUpright,
+  testChurchInvestigationReturnOverflowGoesToGrave,
+  testEnterTriggerWaitsForConfrontationChainEnd,
+  testConfrontationChainTriggersStayQueuedAndOrderedByBucket,
+  testBattleFreeAutoStrategyDeclinesAndAdvances,
+  testSandboxBattleFreeOffStrategyEndsCurrentPlayerFreeStep,
 ];
 
 async function main() {

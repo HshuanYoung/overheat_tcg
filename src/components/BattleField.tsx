@@ -724,7 +724,7 @@ export const BattleField: React.FC = () => {
   // Join game effect
   useEffect(() => {
     if (!gameId || gameId === 'undefined') return;
-    if (seat === 'player' && !deckId && !gameId.startsWith('friend_') && !gameId.startsWith('bugcup_')) return;
+    if (seat === 'player' && !deckId && !gameId.startsWith('friend_') && !gameId.startsWith('bugcup_') && !gameId.startsWith('sandbox_')) return;
 
     const performJoin = () => {
       console.log('[BattleField] Emitting joinGame:', gameId);
@@ -747,7 +747,7 @@ export const BattleField: React.FC = () => {
 
     return () => {
       console.log('[BattleField] Emitting leaveGame:', gameId);
-      if (!gameId.startsWith('friend_')) {
+      if (!gameId.startsWith('friend_') && !gameId.startsWith('sandbox_')) {
         socket.emit('leaveGame', gameId);
       } else {
         socket.emit('leaveGameRoom', gameId);
@@ -756,10 +756,10 @@ export const BattleField: React.FC = () => {
   }, [gameId, deckId, seat]);
 
   useEffect(() => {
-    if (!gameId || !gameId.startsWith('friend_')) return;
+    if (!gameId || (!gameId.startsWith('friend_') && !gameId.startsWith('sandbox_'))) return;
     if (!myUid || seat !== 'player') return;
     if (me && opponent) return;
-    if (seat === 'player' && !deckId && !gameId.startsWith('friend_') && !gameId.startsWith('bugcup_')) return;
+    if (seat === 'player' && !deckId && !gameId.startsWith('friend_') && !gameId.startsWith('bugcup_') && !gameId.startsWith('sandbox_')) return;
 
     const timeout = window.setTimeout(() => {
       if (Date.now() - lastJoinEmitRef.current < 1200) return;

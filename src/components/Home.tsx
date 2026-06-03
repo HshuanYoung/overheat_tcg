@@ -1,7 +1,7 @@
 import { getAuthUser } from '../socket';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Swords, Bot, ShoppingBag, Library, Play, Users, Layout, CreditCard, Image as ImageIcon, Plus, GalleryHorizontalEnd } from 'lucide-react';
+import { Swords, Bot, ShoppingBag, Library, Play, Users, Layout, CreditCard, Image as ImageIcon, Plus, GalleryHorizontalEnd, Wrench } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RAY_CARDS } from '../data/customization';
 import { readJsonResponse } from '../lib/http';
@@ -10,6 +10,7 @@ export const Home: React.FC = () => {
   const [favoriteCard, setFavoriteCard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showBattleMenu, setShowBattleMenu] = useState(false);
+  const [showPracticeMenu, setShowPracticeMenu] = useState(false);
   const [showCollectionMenu, setShowCollectionMenu] = useState(false);
   const navigate = useNavigate();
   const user = getAuthUser();
@@ -93,7 +94,40 @@ export const Home: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        <MenuButton title="练习模式" icon={<Bot className="w-6 h-6" />} description="与人机进行练习对战" to="/practice" />
+        <div>
+          <motion.div
+            whileHover={{ x: 16, scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setShowPracticeMenu(!showPracticeMenu)}
+            className="p-5 rounded-r-full border-l-4 border-red-600 cursor-pointer w-full max-w-[420px] bg-zinc-900/60 hover:bg-red-600/20 group transition-all"
+          >
+            <div className="flex items-center gap-5">
+              <div className="p-3.5 rounded-full bg-black/50 group-hover:bg-red-600 transition-colors">
+                <Bot className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black italic tracking-tighter">练习模式</h2>
+                <p className="text-zinc-400 text-xs tracking-wider">选择练习或沙盒调试</p>
+              </div>
+            </div>
+          </motion.div>
+
+          <AnimatePresence>
+            {showPracticeMenu && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden ml-8"
+              >
+                <div className="pt-3 flex flex-col gap-2">
+                  <SubMenuButton title="人机对战" desc="选择人机对手练习" icon={<Bot className="w-4 h-4" />} to="/practice" />
+                  <SubMenuButton title="沙盒模式" desc="自定义局面并运行调试" icon={<Wrench className="w-4 h-4" />} to="/sandbox" />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         <MenuButton title="卡牌商店" icon={<ShoppingBag className="w-6 h-6" />} description="购买卡包并扩充收藏" to="/store" />
 

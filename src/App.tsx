@@ -17,6 +17,7 @@ const Profile = lazy(() => import('./components/Profile').then(module => ({ defa
 const Store = lazy(() => import('./components/Store').then(module => ({ default: module.Store })));
 const Collection = lazy(() => import('./components/Collection').then(module => ({ default: module.Collection })));
 const PracticeSetup = lazy(() => import('./components/PracticeSetup').then(module => ({ default: module.PracticeSetup })));
+const SandboxSetup = lazy(() => import('./components/SandboxSetup').then(module => ({ default: module.SandboxSetup })));
 const FriendMatch = lazy(() => import('./components/FriendMatch').then(module => ({ default: module.FriendMatch })));
 const DeckSquare = lazy(() => import('./components/DeckSquare').then(module => ({ default: module.DeckSquare })));
 const BugCup = lazy(() => import('./components/BugCup').then(module => ({ default: module.BugCup })));
@@ -853,6 +854,7 @@ export default function App() {
               <Route path="/deck-square" element={<DeckSquare />} />
               <Route path="/bug-cup" element={<BugCup />} />
               <Route path="/practice" element={<PracticeSetup />} />
+              <Route path="/sandbox" element={<SandboxSetup />} />
               <Route path="/friend-match" element={<FriendMatch />} />
               <Route path="/history" element={<div className="pt-24 px-12 text-zinc-500 uppercase tracking-widest text-center">对战历史即将上线</div>} />
             </Routes>

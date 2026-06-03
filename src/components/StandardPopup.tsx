@@ -428,33 +428,31 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
   return (
     <AnimatePresence initial={false}>
       <motion.div
-        initial={{ opacity: 1 }}
+        initial={{ opacity: 0 }}
         animate={{ opacity: isHidden ? 0 : 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0 }}
+        transition={{ duration: 0.2 }}
         className={cn(
           isDuelBottom
-            ? "fixed inset-0 z-[1000] flex items-end justify-center bg-gradient-to-t from-black/60 via-black/15 to-transparent p-0 md:p-4"
+            ? "fixed inset-0 z-[1000] flex items-end justify-center bg-gradient-to-t from-black/80 via-black/20 to-transparent p-0 md:p-6"
             : "fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 md:p-8",
-          "transition-none",
-          isHidden ? "opacity-0 pointer-events-none invisible" : "opacity-100 pointer-events-auto visible"
+          isHidden ? "pointer-events-none invisible" : "pointer-events-auto visible"
         )}
         onClick={isDuelBottom ? undefined : onClose}
       >
         <motion.div
-          initial={isDuelBottom ? { opacity: 1, y: 0 } : { scale: 1, opacity: 1, y: 0 }}
+          initial={isDuelBottom ? { opacity: 0, y: 40, scale: 0.98 } : { scale: 0.95, opacity: 0, y: 0 }}
           animate={isHidden
-            ? (isDuelBottom ? { opacity: 0, y: 18 } : { scale: 1, opacity: 0, y: 0 })
-            : (isDuelBottom ? { opacity: 1, y: 0 } : { scale: 1, opacity: 1, y: 0 })}
-          exit={isDuelBottom ? { opacity: 0, y: 18 } : { scale: 1, opacity: 0, y: 0 }}
-          transition={{ duration: 0 }}
+            ? (isDuelBottom ? { opacity: 0, y: 40, scale: 0.98 } : { scale: 0.95, opacity: 0, y: 0 })
+            : (isDuelBottom ? { opacity: 1, y: 0, scale: 1 } : { scale: 1, opacity: 1, y: 0 })}
+          exit={isDuelBottom ? { opacity: 0, y: 40, scale: 0.98 } : { scale: 0.95, opacity: 0, y: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 350 }}
           className={cn(
-            "relative w-full bg-zinc-900/90 border border-white/10 shadow-2xl overflow-hidden flex flex-col",
-            "transition-none",
+            "relative w-full bg-zinc-900/90 shadow-2xl overflow-hidden flex flex-col",
             isDuelBottom
-              ? "max-w-[min(118rem,100vw)] max-h-[44vh] rounded-t-xl border-x-0 border-b-0 bg-zinc-950/94 shadow-[0_-18px_70px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl md:rounded-xl md:border md:max-h-[42vh]"
+              ? "mb-0 md:mb-2 w-full md:w-auto md:min-w-[40rem] max-w-[100vw] md:max-w-6xl max-h-[60vh] md:max-h-[42vh] rounded-t-2xl md:rounded-2xl border-t md:border border-white/20 bg-zinc-950/95 shadow-[0_-20px_80px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-2xl"
               : cn(
-                  "rounded-[2rem]",
+                  "rounded-[2rem] border border-white/10",
                   squarePanel
                     ? "max-w-[22rem] md:max-w-[24rem] max-h-[90vh]"
                     : (mode === 'double_selection' && !children) ? "max-w-md" : "max-w-6xl max-h-[90vh]"
@@ -593,10 +591,11 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
             ) : (mode === 'card_selection' || mode === 'card_display' || mode === 'player_selection' || mode === 'choice_selection') ? (
               <div className={cn(
                 isRowLayout
-                  ? "flex w-full items-start gap-3 overflow-x-auto overflow-y-hidden pb-2 pr-2 custom-scrollbar"
+                  ? "flex items-start gap-3 md:gap-4 overflow-x-auto overflow-y-hidden pb-4 px-2 md:px-4 custom-scrollbar"
                   : "grid grid-cols-2 lg:grid-cols-5 gap-5 md:gap-8 place-items-center"
               )}>
-                {renderedOptions.map((option, i) => {
+                <div className={cn(isRowLayout ? "flex gap-3 md:gap-4 w-max min-w-[calc(100%-2rem)] md:min-w-full justify-start md:justify-center" : "contents")}>
+                  {renderedOptions.map((option, i) => {
                   const card = option.card;
                   const optionId = getOptionId(option);
                   const isSelected = selectedIds.includes(optionId);
@@ -667,6 +666,7 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                     </motion.div>
                   );
                 })}
+                </div>
               </div>
             ) : mode === 'payment_selection' ? (
               null // children already rendered above

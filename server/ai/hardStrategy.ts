@@ -13,6 +13,8 @@ import { scoreEffectTimingWindow } from './effectTimingKnowledge';
 import {
   chooseAdventurerGuildQuerySelections,
   scoreAdventurerGuildAttack,
+  scoreAdventurerGuildDefense,
+  scoreAdventurerGuildDevelopmentPriority,
   scoreAdventurerGuildEffect,
   scoreAdventurerGuildMulliganKeep,
   scoreAdventurerGuildPlayableCard,
@@ -179,6 +181,25 @@ export interface HardAiTurnPlan {
   tacticalScore?: number;
   tacticalNotes?: string[];
   reason: string;
+  notes: string[];
+}
+
+export interface CheatIntelSummary {
+  opponentHandSize: number;
+  opponentDeckSize: number;
+  opponentThreats: number;
+  opponentRemoval: number;
+  opponentProtection: number;
+  opponentResources: number;
+  opponentFinishers: number;
+  bestOpponentHandThreat: number;
+  bestOpponentDeckThreat: number;
+  notes: string[];
+}
+
+export interface CheatDrawScore {
+  card: Card;
+  score: number;
   notes: string[];
 }
 
@@ -873,6 +894,233 @@ export function scoreCardValue(card: Card | null | undefined, profile: DeckAiPro
   }
 
   return score;
+}
+
+function getKnowledgeRoles(card: Card | null | undefined) {
+  return getCardKnowledge(card)?.roles || [];
+}
+
+function hasCardRole(card: Card | null | undefined, roles: string[]) {
+  const knownRoles = getKnowledgeRoles(card);
+  return roles.some(role => knownRoles.includes(role as any));
+}
+
+function countCardsWithRoles(cards: Card[], roles: string[]) {
+  return cards.filter(card => hasCardRole(card, roles)).length;
+}
+
+export function buildCheatIntelSummary(gameState: GameState, player: PlayerState, profile: DeckAiProfile): CheatIntelSummary {
+  const opponent = getOpponent(gameState, player);
+  const hand = opponent?.hand.filter(Boolean) as Card[] || [];
+  const deck = opponent?.deck.filter(Boolean) as Card[] || [];
+  const opponentCards = [...hand, ...deck];
+  const threatValue = (card: Card) =>
+    scoreCardValue(card, profile) +
+    (card.type === 'UNIT' ? Math.max(0, card.damage || 0) * 8 + Math.max(0, card.power || 0) / 900 : 0) +
+    (hasCardRole(card, ['finisher']) ? 18 : 0) +
+    (hasCardRole(card, ['removal']) ? 10 : 0);
+
+  const bestOpponentHandThreat = Math.max(0, ...hand.map(threatValue));
+  const bestOpponentDeckThreat = Math.max(0, ...deck.map(threatValue));
+  const opponentThreats = opponentCards.filter(card => threatValue(card) >= 38).length;
+  const opponentRemoval = countCardsWithRoles(opponentCards, ['removal']);
+  const opponentProtection = countCardsWithRoles(opponentCards, ['protection']);
+  const opponentResources = countCardsWithRoles(opponentCards, ['engine', 'draw', 'search', 'resource']);
+  const opponentFinishers = countCardsWithRoles(opponentCards, ['finisher', 'damage']);
+
+  const notes = [
+    bestOpponentHandThreat >= 55 ? 'opponent hand high threat' : undefined,
+    opponentRemoval > 0 ? `opponent removal=${opponentRemoval}` : undefined,
+    opponentFinishers > 0 ? `opponent finishers=${opponentFinishers}` : undefined,
+    opponentResources >= 3 ? `opponent resources=${opponentResources}` : undefined,
+  ].filter(Boolean) as string[];
+
+  return {
+    opponentHandSize: hand.length,
+    opponentDeckSize: deck.length,
+    opponentThreats,
+    opponentRemoval,
+    opponentProtection,
+    opponentResources,
+    opponentFinishers,
+    bestOpponentHandThreat,
+    bestOpponentDeckThreat,
+    notes,
+  };
+}
+
+function canEventuallyPlayDrawnCard(gameState: GameState, player: PlayerState, card: Card) {
+  if (player.factionLock && card.faction !== player.factionLock) return false;
+  const colorReq = card.colorReq || {};
+  const availableColors: Record<string, number> = { RED: 0, WHITE: 0, YELLOW: 0, BLUE: 0, GREEN: 0, NONE: 0 };
+  let omniColorCount = 0;
+
+  player.unitZone.forEach(fieldCard => {
+    if (!fieldCard) return;
+    const isOmni = String(fieldCard.id) === '105000481' || !!fieldCard.effects?.some(effect => effect.id === '105000481_omni');
+    if (isOmni) {
+      omniColorCount += 1;
+    } else if (fieldCard.color !== 'NONE') {
+      availableColors[fieldCard.color] = (availableColors[fieldCard.color] || 0) + 1;
+    }
+    const extraColors = [
+      ...((fieldCard as any).temporaryExtraColors || []),
+      ...((fieldCard as any).persistentExtraColors || [])
+    ];
+    extraColors.forEach(color => {
+      if (typeof color === 'string' && color !== fieldCard.color && color in availableColors) {
+        availableColors[color] = (availableColors[color] || 0) + 1;
+      }
+    });
+  });
+
+  const totalDeficit = Object.entries(colorReq).reduce((sum, [color, amount]) =>
+    sum + Math.max(0, Number(amount || 0) - (availableColors[color] || 0)),
+    0
+  );
+  return totalDeficit <= omniColorCount;
+}
+
+export function scoreCheatDrawCard(
+  gameState: GameState,
+  player: PlayerState,
+  card: Card,
+  profile: DeckAiProfile,
+  turnPlan: HardAiTurnPlan = buildTurnPlan(gameState, player, profile),
+  intel: CheatIntelSummary = buildCheatIntelSummary(gameState, player, profile)
+): CheatDrawScore {
+  const knowledge = getCardKnowledge(card);
+  const roles = new Set(knowledge?.roles || []);
+  const notes: string[] = [];
+  const openUnitSlots = player.unitZone.filter(slot => slot === null).length;
+  const readyUnits = player.unitZone.filter(unit => unit && !unit.isExhausted).length;
+  const handPlayableUnits = player.hand.filter(handCard =>
+    handCard.type === 'UNIT' &&
+    canEventuallyPlayDrawnCard(gameState, player, handCard)
+  ).length;
+  const playableValue = scorePlayableCard(gameState, player, card, profile);
+  const baseValue = scoreCardValue(card, profile);
+  const adventurerDevelopment = scoreAdventurerGuildDevelopmentPriority(gameState, player, card, profile);
+  let score = baseValue + Math.max(0, playableValue) * 0.85 + (knowledge?.playPriority || 0) * 0.45;
+  if (adventurerDevelopment.score > 0) {
+    const multiplier = turnPlan.mode === 'defense' || turnPlan.mode === 'stabilize' ? 7.5 : 9.5;
+    score += adventurerDevelopment.score * multiplier;
+    notes.push(...adventurerDevelopment.notes.slice(0, 3));
+  }
+
+  if (canEventuallyPlayDrawnCard(gameState, player, card)) {
+    score += 8;
+    notes.push('playable colors');
+  } else {
+    score -= 16;
+    notes.push('color/faction locked');
+  }
+
+  if (card.type === 'UNIT') {
+    score += 8;
+    if (openUnitSlots > 0) score += 11 + Math.min(3, openUnitSlots) * 2;
+    if (handPlayableUnits === 0) {
+      score += 22;
+      notes.push('no playable unit in hand');
+    }
+    if (readyUnits === 0 && turnPlan.defendersNeededNextTurn > 0) {
+      score += 18;
+      notes.push('needs first defender');
+    }
+    if (card.isrush) {
+      score += turnPlan.lethalWindow || turnPlan.mode === 'pressure' || turnPlan.mode === 'lethal' ? 18 : 8;
+      notes.push('rush pressure');
+    }
+    if ((card.damage || 0) >= 2) score += Math.max(0, card.damage || 0) * 6;
+    if ((card.power || 0) >= 5000 && (turnPlan.mode === 'defense' || turnPlan.mode === 'stabilize')) {
+      score += 9;
+      notes.push('large defender');
+    }
+  } else if (card.type === 'ITEM') {
+    score += roles.has('engine') || roles.has('resource') ? 13 : 4;
+    if (turnPlan.mode === 'setup') score += 7;
+  } else {
+    score += 3;
+  }
+
+  if (roles.has('engine')) {
+    score += player.hand.length <= 4 ? 16 : 9;
+    notes.push('engine');
+  }
+  if (roles.has('search')) {
+    score += player.hand.length <= 4 ? 15 : 8;
+    notes.push('search');
+  }
+  if (roles.has('draw')) {
+    score += player.hand.length <= 3 ? 12 : 4;
+    if (player.deck.length <= riskValue(profile, 'stopSelfDrawAtDeck', riskValue(profile, 'lowDeck', 10))) {
+      score -= 15;
+      notes.push('low deck draw risk');
+    }
+  }
+  if (roles.has('removal')) {
+    const removalNeed = intel.bestOpponentHandThreat >= 45 || intel.opponentThreats > 0 || countLikelyDefenders(gameState, getOpponent(gameState, player)) > 0;
+    score += removalNeed ? 22 : 7;
+    notes.push(removalNeed ? 'answers known threat' : 'removal');
+  }
+  if (roles.has('protection')) {
+    const protectionNeed = turnPlan.opponentLethalWithoutBlocks || intel.opponentRemoval > 0 || intel.bestOpponentHandThreat >= 52;
+    score += protectionNeed ? 18 : 4;
+    notes.push(protectionNeed ? 'protects into known threat' : 'protection');
+  }
+  if (roles.has('finisher') || roles.has('damage')) {
+    const closingNeed = turnPlan.lethalWindow || turnPlan.mode === 'lethal' || turnPlan.mode === 'pressure' || turnPlan.damageToCritical <= 3;
+    score += closingNeed ? 24 : 8;
+    notes.push(closingNeed ? 'closing piece' : 'damage pressure');
+  }
+  if (roles.has('resource')) score += 6;
+  if (roles.has('tempo') && (turnPlan.mode === 'pressure' || intel.opponentThreats > 0)) score += 9;
+
+  if (turnPlan.mode === 'defense' || turnPlan.mode === 'stabilize') {
+    if (card.type === 'UNIT') score += 9 + Math.max(0, card.power || 0) / 1000;
+    if (roles.has('removal') || roles.has('protection')) score += 13;
+    if (roles.has('draw') && !roles.has('removal') && !roles.has('protection')) score -= 6;
+  }
+
+  if (turnPlan.mode === 'lethal' || turnPlan.lethalWindow) {
+    if (card.type === 'UNIT' && (card.isrush || (card.damage || 0) >= 2)) score += 18;
+    if (roles.has('finisher') || roles.has('damage') || roles.has('tempo')) score += 18;
+    if (card.type === 'UNIT' && !card.isrush && gameState.turnCount > 1) score -= 5;
+  }
+
+  if (profile.preferredCardIds?.[card.id] || profile.preferredCardIds?.[card.uniqueId]) score += 8;
+  if (profile.preserveCardIds?.[card.id] || profile.preserveCardIds?.[card.uniqueId]) score += 5;
+  if (roles.has('risk') && countErosion(player) >= riskValue(profile, 'highErosion', 7)) {
+    score -= 10;
+    notes.push('high erosion risk');
+  }
+
+  return { card, score, notes };
+}
+
+export function chooseCheatDrawCard(
+  gameState: GameState,
+  player: PlayerState,
+  profile: DeckAiProfile,
+  deck: Card[] = player.deck
+) {
+  if (deck.length === 0) return undefined;
+  const turnPlan = buildTurnPlan(gameState, player, profile);
+  const intel = buildCheatIntelSummary(gameState, player, profile);
+  const scored = deck
+    .map((card, index) => ({
+      ...scoreCheatDrawCard(gameState, player, card, profile, turnPlan, intel),
+      deckIndex: index,
+    }))
+    .sort((a, b) => b.score - a.score || b.deckIndex - a.deckIndex);
+
+  return {
+    selected: scored[0]?.card,
+    selectedScore: scored[0]?.score,
+    candidates: scored.slice(0, 3),
+    turnPlan,
+    intel,
+  };
 }
 
 function cardSearchText(card: Card) {
@@ -2470,6 +2718,7 @@ export function chooseDefender(
     }
     const preserveMultiplier = (critical || deckCritical) ? 0.18 : (danger || deckPressure) ? 0.25 : 0.45;
     score -= cardValue * preserveMultiplier * profile.weights.defenseBias;
+    score += scoreAdventurerGuildDefense(gameState, defender, card, attackingUnits, profile);
     return { card, score };
   }).sort((a, b) => b.score - a.score);
 

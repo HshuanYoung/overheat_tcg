@@ -10,7 +10,6 @@ export type BattleAnimationType =
   | 'damage'
   | 'attack'
   | 'confrontation'
-  | 'resolving'
   | 'goddess'
   | 'defeat'
   | 'erosion-flip'
@@ -36,6 +35,7 @@ export interface BattleAnimationEvent {
   revealTo?: 'owner' | 'all' | 'hidden';
   cardBackUrl?: string;
   chainItems?: BattleAnimationChainItem[];
+  durationMs?: number;
 }
 
 export interface BattleAnimationChainItem {
@@ -61,7 +61,6 @@ const DISPLAY_MS: Record<BattleAnimationType, number> = {
   damage: 950,
   attack: 1000,
   confrontation: 3000,
-  resolving: 1000,
   goddess: 1800,
   defeat: 1700,
   'erosion-flip': 1500,
@@ -77,7 +76,7 @@ export const battleAnimationGroupDuration = (events: BattleAnimationEvent[]) => 
   const firstType = events[0].type;
   if (firstType === 'erosion-flip') return 1500;
   if (firstType === 'card-draw') return 2000 + (events.length - 1) * 120;
-  return DISPLAY_MS[firstType] + (events.length - 1) * 120;
+  return (events[0].durationMs || DISPLAY_MS[firstType]) + (events.length - 1) * 120;
 };
 
 const EVENT_TONE: Record<BattleAnimationType, string> = {
@@ -85,7 +84,6 @@ const EVENT_TONE: Record<BattleAnimationType, string> = {
   damage: 'from-red-600 via-rose-300 to-white',
   attack: 'from-red-500 via-orange-300 to-white',
   confrontation: 'from-sky-400 via-white to-red-400',
-  resolving: 'from-violet-400 via-white to-[#f27d26]',
   goddess: 'from-amber-200 via-[#f27d26] to-red-600',
   defeat: 'from-zinc-500 via-white to-red-500',
   'erosion-flip': 'from-zinc-800 via-purple-500 to-black',
@@ -107,7 +105,7 @@ const ParallelEventPlayer: React.FC<{
 
     const groupDuration = event.type === 'erosion-flip'
       ? 1500
-      : DISPLAY_MS[event.type] + index * 120;
+      : (event.durationMs || DISPLAY_MS[event.type]) + index * 120;
     const exitDuration = 150; // duration of exit fade out
 
     const hideTimeout = window.setTimeout(() => {
@@ -202,7 +200,6 @@ const AnimationScene: React.FC<{
   if (event.type === 'goddess') return <GoddessAnimation event={event} />;
   if (event.type === 'defeat') return <DefeatAnimation event={event} />;
   if (event.type === 'confrontation') return <ConfrontationAnimation event={event} />;
-  if (event.type === 'resolving') return <ResolvingAnimation event={event} />;
   if (event.type === 'attack') return <AttackAnimation event={event} />;
   if (event.type === 'erosion-flip') return <ErosionFlipAnimation event={event} layerRef={layerRef} index={index} total={total} />;
   if (event.type === 'card-draw') return <CardDrawAnimation event={event} layerRef={layerRef} index={index} total={total} />;
@@ -671,6 +668,7 @@ const AttackAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) =
 );
 
 const ConfrontationAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) => {
+  const durationSeconds = (event.durationMs || DISPLAY_MS.confrontation) / 1000;
   const items = event.chainItems?.length
     ? event.chainItems
     : [{
@@ -689,13 +687,13 @@ const ConfrontationAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ eve
       initial={{ opacity: 0 }}
       animate={{ opacity: [0, 1, 1, 0] }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 3, times: [0, 0.08, 0.88, 1], ease: 'easeOut' }}
+      transition={{ duration: durationSeconds, times: [0, 0.08, 0.88, 1], ease: 'easeOut' }}
       className="absolute inset-0 flex items-end justify-center bg-black/5 px-3 pb-[18vh] md:pb-[13vh]"
     >
       <motion.div
         initial={{ y: 42, scale: 0.98 }}
         animate={{ y: [42, 0, 8], scale: [0.98, 1, 0.99] }}
-        transition={{ duration: 3, times: [0, 0.2, 1], ease: 'easeOut' }}
+        transition={{ duration: durationSeconds, times: [0, 0.2, 1], ease: 'easeOut' }}
         className="relative w-full max-w-[min(96vw,980px)] overflow-hidden rounded-lg border border-white/12 bg-zinc-950/90 px-3 py-3 shadow-[0_0_38px_rgba(0,0,0,0.55)] backdrop-blur-md md:px-4"
       >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
@@ -735,7 +733,8 @@ const ConfrontationChainNode: React.FC<{ item: BattleAnimationChainItem; index: 
       animate={{ opacity: [0, 1, 1, 0], y: [24, 0, 0, 12], scale: [0.94, isLatest ? 1.03 : 1, isLatest ? 1.01 : 1, 0.98] }}
       transition={{ duration: 2.72, delay: index * 0.1, times: [0, 0.14, 0.88, 1], ease: 'easeOut' }}
       className={cn(
-        "relative flex min-w-[16rem] max-w-[18rem] shrink-0 items-center gap-3 overflow-hidden rounded-md border bg-black/72 p-2.5 shadow-lg md:min-w-[19rem] md:max-w-[21rem]",
+        "relative flex shrink-0 items-center gap-3 overflow-hidden rounded-md border bg-black/72 p-2.5 shadow-lg",
+        isLatest ? "min-w-[16rem] max-w-[18rem] md:min-w-[19rem] md:max-w-[21rem]" : "min-w-[5.75rem] max-w-[5.75rem] md:min-w-[6.75rem] md:max-w-[6.75rem]",
         isMine ? "border-emerald-300/55 shadow-emerald-500/20" : isOpponent ? "border-red-300/55 shadow-red-500/20" : "border-white/20",
         isLatest && "ring-1 ring-white/35"
       )}
@@ -754,72 +753,35 @@ const ConfrontationChainNode: React.FC<{ item: BattleAnimationChainItem; index: 
           <Icon className={cn("h-7 w-7", isOpponent ? "text-red-100" : isMine ? "text-emerald-100" : "text-white")} />
         )}
         <motion.div
-          initial={{ y: 12, opacity: 0, scale: 0.85 }}
-          animate={{ y: [12, -2, -8], opacity: [0, 1, 0], scale: [0.85, 1, 1.05] }}
-          transition={{ duration: 1.45, delay: index * 0.1 + 0.18, times: [0, 0.35, 1], ease: 'easeOut' }}
+          initial={{ y: 0, opacity: 0, scale: 0.9 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          transition={{ duration: 0.18, delay: index * 0.1 + 0.12, ease: 'easeOut' }}
           className={cn(
-            "absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center border-2 bg-black text-base font-black leading-none shadow-lg",
+            "absolute -bottom-2 -left-2 flex h-8 w-8 items-center justify-center border-2 bg-black text-base font-black leading-none shadow-lg",
             isMine ? "border-emerald-300 text-emerald-100 shadow-emerald-500/30" : isOpponent ? "border-red-300 text-red-100 shadow-red-500/30" : "border-white/45 text-white"
           )}
         >
           {item.linkNumber}
         </motion.div>
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="line-clamp-2 text-xs font-black leading-tight text-white md:text-sm">
-          {item.cardName || item.title}
-        </div>
-        {item.subtitle && (
-          <div className={cn("mt-2 text-[11px] font-black tracking-wider", isMine ? "text-emerald-200" : isOpponent ? "text-red-200" : "text-white/60")}>
-            {item.subtitle}
+      {isLatest && (
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-xs font-black leading-tight text-white md:text-sm">
+            {item.cardName || item.title}
           </div>
-        )}
-      </div>
+          {item.subtitle && (
+            <div className={cn("mt-2 text-[11px] font-black tracking-wider", isMine ? "text-emerald-200" : isOpponent ? "text-red-200" : "text-white/60")}>
+              {item.subtitle}
+            </div>
+          )}
+        </div>
+      )}
       {index > 0 && (
         <div className="absolute -left-2 top-1/2 hidden h-px w-4 -translate-y-1/2 bg-white/35 md:block" />
       )}
     </motion.div>
   );
 };
-
-const ResolvingAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    className="absolute inset-0 flex items-center justify-center"
-  >
-    <motion.div
-      initial={{ opacity: 0, y: 34, scale: 0.9 }}
-      animate={{ opacity: [0, 1, 1, 0], y: [34, 0, 0, -18], scale: [0.9, 1.03, 1, 0.98] }}
-      transition={{ duration: 0.82, times: [0, 0.24, 0.72, 1], ease: 'easeOut' }}
-      className="relative flex max-w-[78vw] items-center gap-4 rounded-3xl border border-violet-200/25 bg-zinc-950/82 px-5 py-4 shadow-[0_0_58px_rgba(168,85,247,0.42)] backdrop-blur-md md:px-7"
-    >
-      <div className="absolute -inset-8 rounded-full bg-violet-500/15 blur-3xl" />
-      {event.cardImageUrl ? (
-        <img
-          src={event.cardImageUrl}
-          alt={event.cardName || event.title}
-          className="relative aspect-[3/4] w-14 rounded-lg border border-white/15 object-cover shadow-2xl md:w-20"
-          draggable={false}
-          referrerPolicy="no-referrer"
-        />
-      ) : (
-        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 bg-white/8 md:h-20 md:w-20">
-          <Zap className="h-8 w-8 text-violet-200" />
-        </div>
-      )}
-      <div className="relative min-w-0">
-        <div className="text-[10px] font-black tracking-[0.32em] text-violet-200">RESOLVE</div>
-        <div className="truncate text-lg font-black italic text-white md:text-2xl">{event.cardName || event.title}</div>
-        <div className="mt-1 truncate text-[10px] font-bold tracking-[0.24em] text-white/45 md:text-xs">
-          {event.subtitle || '效果结算'}
-        </div>
-      </div>
-    </motion.div>
-    <ImpactRing tone={EVENT_TONE.resolving} />
-  </motion.div>
-);
 
 const GoddessAnimation: React.FC<{ event: BattleAnimationEvent }> = ({ event }) => {
   const isOpponent = event.side === 'opponent';

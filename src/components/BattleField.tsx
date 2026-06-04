@@ -286,15 +286,15 @@ export const BattleField: React.FC = () => {
     return group;
   }, [battleAnimations.events, battleAnimationsEnabled]);
   const confrontationAnimationPlaying = battleAnimationsEnabled && battleAnimations.events.some(event => event.type === 'confrontation');
-  const confrontationHintUntil = game?.animationHint?.type === 'CONFRONTATION_CHAIN'
+  const confrontationHintUntil = game?.animationHint?.type === 'CONFRONTATION_CHAIN' && !game.isResolvingStack
     ? Number(game.animationHint.createdAt || Date.now()) + Math.max(900, Number(game.animationHint.durationMs || 1100))
     : 0;
   const confrontationPromptWaiting =
-    confrontationAnimationPlaying ||
-    (battleAnimationsEnabled && game?.animationHint?.type === 'CONFRONTATION_CHAIN' && Date.now() < Math.max(confrontationPromptBlockedUntil, confrontationHintUntil));
+    (!game?.isResolvingStack && confrontationAnimationPlaying) ||
+    (!game?.isResolvingStack && battleAnimationsEnabled && game?.animationHint?.type === 'CONFRONTATION_CHAIN' && Date.now() < Math.max(confrontationPromptBlockedUntil, confrontationHintUntil));
 
   useEffect(() => {
-    if (!battleAnimationsEnabled || game?.animationHint?.type !== 'CONFRONTATION_CHAIN') return;
+    if (!battleAnimationsEnabled || game?.animationHint?.type !== 'CONFRONTATION_CHAIN' || game.isResolvingStack) return;
     const duration = Math.max(900, Number(game.animationHint.durationMs || 1100));
     const until = Number(game.animationHint.createdAt || Date.now()) + duration;
     setConfrontationPromptBlockedUntil(current => Math.max(current, until));
@@ -303,7 +303,7 @@ export const BattleField: React.FC = () => {
       setConfrontationPromptBlockedUntil(current => current === until ? 0 : current);
     }, remaining + 40);
     return () => window.clearTimeout(timer);
-  }, [battleAnimationsEnabled, game?.animationHint?.id, game?.animationHint?.type, game?.animationHint?.durationMs, game?.animationHint?.createdAt]);
+  }, [battleAnimationsEnabled, game?.animationHint?.id, game?.animationHint?.type, game?.animationHint?.durationMs, game?.animationHint?.createdAt, game?.isResolvingStack]);
 
   useEffect(() => {
     if (activeBlockingAnimationEvents.length === 0 && stateBufferRef.current.length > 0) {
@@ -695,7 +695,7 @@ export const BattleField: React.FC = () => {
         setVisualGame(newState);
       }
       
-      const hintDuration = Number(newState.animationHint?.durationMs || 0);
+      const hintDuration = newState.isResolvingStack ? 0 : Number(newState.animationHint?.durationMs || 0);
       const serverAnimationUntil = Number(newState.animationUntil || 0);
       const serverHoldUntil = hintDuration > 0 ? Date.now() + hintDuration : serverAnimationUntil;
       const isServerAnimationHold = serverHoldUntil > Date.now();

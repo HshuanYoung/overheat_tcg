@@ -74,11 +74,11 @@ export const ServerGameService = {
     await new Promise(resolve => setTimeout(resolve, delayMs));
   },
 
-  markConfrontationChainAnimation(gameState: GameState, durationMs = 1100) {
+  markConfrontationChainAnimation(gameState: GameState, durationMs = 1100, reason: 'build' | 'resolve' = 'build') {
     if (!gameState.counterStack?.length) return;
     if (ServerGameService.shouldSkipVisualDelay(gameState)) return;
     const topItem = gameState.counterStack[gameState.counterStack.length - 1];
-    const chainKey = `${topItem.timestamp || Date.now()}-${gameState.counterStack.length}`;
+    const chainKey = `${reason}-${topItem.timestamp || Date.now()}-${gameState.counterStack.length}-${Date.now()}`;
     (topItem as any).chainAnimationShown = true;
     gameState.animationHint = {
       id: `confrontation-${chainKey}`,
@@ -2512,7 +2512,7 @@ export const ServerGameService = {
       !!gameState.priorityPlayerId &&
       (strategy === 'ON' || (strategy === 'AUTO' && ServerGameService.playerHasAvailableConfrontationAction(gameState, gameState.priorityPlayerId)));
     if (shouldShowChain) {
-      ServerGameService.markConfrontationChainAnimation(gameState, 1100);
+      ServerGameService.markConfrontationChainAnimation(gameState, 3000);
     }
   },
 
@@ -2954,12 +2954,11 @@ export const ServerGameService = {
     while (gameState.counterStack.length > 0) {
       const topItem = gameState.counterStack[gameState.counterStack.length - 1];
 
-      // 1. Visual Highlight: Show which item is being processed
       gameState.currentProcessingItem = topItem;
+      ServerGameService.markConfrontationChainAnimation(gameState, 1500, 'resolve');
       await emitVisualUpdate();
 
-      // Keep the visual highlight readable after it has been broadcast to clients.
-      await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getStackVisualDelayMs());
+      await ServerGameService.waitForVisualDelay(gameState, 1500);
 
       const stackItem = gameState.counterStack.pop();
       if (!stackItem) continue;

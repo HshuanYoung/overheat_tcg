@@ -155,14 +155,16 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
           const chainItems = (game.counterStack || []).map((item, index) =>
             stackItemToChainAnimationItem(item, index + 1, game, perspectiveUid)
           );
-          if (chainItems.length > 0) {
+          const visibleChainItems = lastChainItems(chainItems);
+          if (visibleChainItems.length > 0) {
             enqueue([{
               id: `confrontation_hint_${game.animationHint.id}`,
               type: 'confrontation',
               side: 'neutral',
               title: '对抗链',
               chainLength: game.counterStack?.length || chainItems.length,
-              chainItems
+              chainItems: visibleChainItems,
+              durationMs: game.animationHint.durationMs
             }]);
           }
         }
@@ -215,14 +217,16 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       const chainItems = (game.counterStack || []).map((item, index) =>
         stackItemToChainAnimationItem(item, index + 1, game, perspectiveUid)
       );
-      if (counterLength > 0 && chainItems.length > 0) {
+      const visibleChainItems = lastChainItems(chainItems);
+      if (counterLength > 0 && visibleChainItems.length > 0) {
         nextEvents.push({
           id: `confrontation_hint_${game.animationHint.id}`,
           type: 'confrontation',
           side: 'neutral',
           title: '对抗链',
           chainLength: counterLength,
-          chainItems
+          chainItems: visibleChainItems,
+          durationMs: game.animationHint.durationMs
         });
       }
     }
@@ -412,24 +416,8 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
           side: 'neutral',
           title: '对抗链',
           chainLength: 1,
-          chainItems: [stackItemToChainAnimationItem(item, 1, game, perspectiveUid)]
-        });
-      }
-      // Only show resolving animation if the confrontation chain reached >= 2 links
-      if (maxChainLengthRef.current >= 2) {
-        nextEvents.push({
-          id: `resolving_${currentProcessingKey}_${Date.now()}`,
-          type: 'resolving',
-          side: sideForUid(item?.ownerUid, perspectiveUid, game),
-          title: '效果结算',
-          subtitle: item?.type === 'PHASE_END'
-            ? (item.nextPhase === 'BATTLE_DECLARATION' ? '主要阶段结束' : item.nextPhase === 'MAIN' ? '返回主要阶段' : '战斗自由阶段结束')
-            : item?.type === 'ATTACK'
-              ? '攻击宣言'
-              : '连锁处理中',
-          cardName: item?.card?.fullName || (item?.type === 'PHASE_END' ? (item.nextPhase === 'BATTLE_DECLARATION' ? '主要阶段结束' : item.nextPhase === 'MAIN' ? '返回主要阶段' : '战斗自由阶段结束') : undefined),
-          cardImageUrl: item?.card ? getCardPreviewImage(item.card) : '/assets/fav_card/fav_card.jpg',
-          sourceCardId: item?.card?.gamecardId
+          chainItems: [stackItemToChainAnimationItem(item, 1, game, perspectiveUid)],
+          durationMs: 1500
         });
       }
     }
@@ -449,7 +437,8 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
         side: 'neutral',
         title: '对抗链',
         chainLength: counterLength,
-        chainItems: latestChainItems
+        chainItems: lastChainItems(latestChainItems),
+        durationMs: 3000
       });
     }
     previousCounterLengthRef.current = counterLength;
@@ -628,7 +617,7 @@ function stackItemToChainAnimationItem(
       ? '发动效果'
       : item.type === 'ATTACK'
         ? '宣言攻击'
-        : '回合结束';
+        : phaseTitle || '回合结束';
 
   return {
     linkNumber,
@@ -644,7 +633,13 @@ function stackItemToChainAnimationItem(
 
 function phaseEndTitle(item: StackItem) {
   if (item.type !== 'PHASE_END') return undefined;
+  if (item.nextPhase === 'DAMAGE_CALCULATION') return '战斗自由阶段结束';
+  if (item.nextPhase === 'BATTLE_DECLARATION' || item.nextPhase === 'DISCARD') return '宣言结束主要阶段';
   return '回合结束';
+}
+
+function lastChainItems<T>(items: T[], count = 3) {
+  return items.slice(Math.max(0, items.length - count));
 }
 
 function sideForUid(uid: string | null | undefined, perspectiveUid: string | null | undefined, game: GameState): BattleAnimationEvent['side'] {

@@ -16,6 +16,7 @@ import {
   chooseAttacker,
   chooseDefender,
   chooseDiscardCard,
+  chooseCheatDrawCard,
   chooseMulliganCards,
   chooseQuerySelections,
   buildTurnPlan,
@@ -34,7 +35,7 @@ import {
   scorePlayableCard,
   scorePaymentSacrificeValue
 } from './ai/hardStrategy';
-import { ADVENTURER_GUILD_CARD_IDS } from './ai/decks/adventurerGuildStrategy';
+import { ADVENTURER_GUILD_CARD_IDS, describeAdventurerGuildAttack, describeAdventurerGuildDefense, describeAdventurerGuildPlayableCard, describeAdventurerGuildQueryOption, getAdventurerGuildRouteAdvice, scoreAdventurerGuildDevelopmentPriority } from './ai/decks/adventurerGuildStrategy';
 
 type PaymentSummary = {
   success: boolean;
@@ -7556,7 +7557,13 @@ export const ServerGameService = {
 
     // Check effects at DRAW phase (TODO)
     if (player.deck.length > 0) {
-      const card = player.deck.pop();
+      const selected = ServerGameService.chooseHardAiDrawCard(gameState, player.uid, {
+        source: 'DRAW_PHASE',
+        drawIndex: 0,
+        drawCount: 1,
+      });
+      const selectedIndex = selected ? player.deck.findIndex(card => card.gamecardId === selected.gamecardId) : -1;
+      const card = selectedIndex !== -1 ? player.deck.splice(selectedIndex, 1)[0] : player.deck.pop();
       if (card) {
         card.cardlocation = 'HAND';
         player.hand.push(card);
@@ -8055,6 +8062,46 @@ export const ServerGameService = {
     }
   },
 
+  chooseHardAiDrawCard(gameState: GameState, playerUid: string, context: { source: 'DRAW_PHASE' | 'ATOMIC_DRAW'; drawIndex: number; drawCount: number }) {
+    const player = gameState.players[playerUid];
+    if (!player || player.deck.length === 0) return undefined;
+    const isBotPlayer = playerUid === 'BOT_PLAYER' || !!(player as PlayerState & { botDifficulty?: BotDifficulty }).botDifficulty;
+    if (!isBotPlayer) return undefined;
+    if (ServerGameService.getBotDifficulty(gameState, playerUid) !== 'hard') return undefined;
+
+    const profile = ServerGameService.getBotProfile(gameState, playerUid);
+    const result = chooseCheatDrawCard(gameState, player, profile);
+    const selected = result?.selected;
+    if (!selected) return undefined;
+
+    ServerGameService.recordAiDecision(gameState, playerUid, {
+      action: 'CHEAT_DRAW',
+      subject: ServerGameService.getAiCardName(selected),
+      score: result.selectedScore === undefined ? undefined : Number(result.selectedScore.toFixed(1)),
+      reason: '困难 AI 读取双方隐藏信息后，从卡组中选择当前评分最高的抽牌目标。',
+      details: {
+        source: context.source,
+        drawIndex: context.drawIndex + 1,
+        drawCount: context.drawCount,
+        ownDeck: player.deck.length,
+        handSize: player.hand.length,
+        turnPlan: result.turnPlan.mode,
+        opponentHand: result.intel.opponentHandSize,
+        opponentDeck: result.intel.opponentDeckSize,
+        opponentThreats: result.intel.opponentThreats,
+        opponentRemoval: result.intel.opponentRemoval,
+        bestOpponentHandThreat: Number(result.intel.bestOpponentHandThreat.toFixed(1)),
+      },
+      candidates: result.candidates.map(candidate => ({
+        name: ServerGameService.getAiCardName(candidate.card),
+        score: Number(candidate.score.toFixed(1)),
+        note: candidate.notes.slice(0, 3).join(', ') || undefined,
+      })),
+    });
+
+    return selected;
+  },
+
   describeAiSelection(gameState: GameState, query: any, selection: string) {
     const option = (query.options || []).find((candidate: any) =>
       candidate.id === selection || candidate.card?.gamecardId === selection
@@ -8445,6 +8492,9 @@ export const ServerGameService = {
         context: { sourceCardId: sourceCard.gamecardId, effectIndex }
       };
       const [selectedModeId] = chooseQuerySelections(gameState, playerUid, modeQuery, profile, difficulty);
+      if (difficulty === 'hard') {
+        ServerGameService.recordBotQuerySelectionDecision(gameState, playerUid, modeQuery, selectedModeId ? [selectedModeId] : [], profile);
+      }
       const selectedMode = availableModes.find((mode: any) => mode.id === selectedModeId) || availableModes[0];
       modeId = selectedMode.id;
       targetShapes = selectedMode.targetGroups?.length ? selectedMode.targetGroups : [selectedMode];
@@ -8487,6 +8537,9 @@ export const ServerGameService = {
         }
       };
       const selections = chooseQuerySelections(gameState, playerUid, targetQuery, profile, difficulty);
+      if (difficulty === 'hard') {
+        ServerGameService.recordBotQuerySelectionDecision(gameState, playerUid, targetQuery, selections, profile);
+      }
       if (selections.length < (targetShape.minSelections ?? 1)) {
         ServerGameService.clearDeclaredTargetMarkers(gameState, declaredTargets);
         return undefined;
@@ -8764,6 +8817,9 @@ export const ServerGameService = {
     failureAction: string,
     reason: string
   ) {
+    const player = gameState.players[playerUid];
+    const profile = ServerGameService.getBotProfile(gameState, playerUid);
+    const chosenDevelopment = player ? scoreAdventurerGuildDevelopmentPriority(gameState, player, chosen.card, profile) : { score: 0, notes: [] as string[] };
     ServerGameService.recordAiDecision(gameState, playerUid, {
       action,
       subject: ServerGameService.getAiCardName(chosen.card),
@@ -8777,10 +8833,14 @@ export const ServerGameService = {
         readyDefendersAfterPayment: chosen.paymentRisk?.readyDefendersAfter,
         estimatedDeckPayment: chosen.paymentRisk?.estimatedDeckPayment,
         battleAttackers: gameState.battleState?.attackers?.length || 0,
+        developmentTier: chosenDevelopment.tier,
+        developmentScore: chosenDevelopment.score ? Number(chosenDevelopment.score.toFixed(1)) : undefined,
+        developmentNotes: chosenDevelopment.notes.slice(0, 3).join(', ') || undefined,
       },
       candidates: candidates.slice(0, 3).map(candidate => ({
         name: ServerGameService.getAiCardName(candidate.card),
         score: candidate.score,
+        note: player ? scoreAdventurerGuildDevelopmentPriority(gameState, player, candidate.card, profile).notes.slice(0, 3).join(', ') || undefined : undefined,
       })),
     });
 
@@ -8896,13 +8956,53 @@ export const ServerGameService = {
   },
 
   getBotQuerySelectionsForPlayer(gameState: GameState, playerUid: string, query: any): string[] {
-    return chooseQuerySelections(
+    const profile = ServerGameService.getBotProfile(gameState, playerUid);
+    const difficulty = ServerGameService.getBotDifficulty(gameState, playerUid);
+    const selections = chooseQuerySelections(
       gameState,
       playerUid,
       query,
-      ServerGameService.getBotProfile(gameState, playerUid),
-      ServerGameService.getBotDifficulty(gameState, playerUid)
+      profile,
+      difficulty
     );
+    if (difficulty === 'hard') {
+      ServerGameService.recordBotQuerySelectionDecision(gameState, playerUid, query, selections, profile);
+    }
+    return selections;
+  },
+
+  recordBotQuerySelectionDecision(gameState: GameState, playerUid: string, query: any, selections: string[], profile: DeckAiProfile) {
+    const selectableOptions = (query.options || []).filter((option: any) => !option.disabled);
+    const scored = selectableOptions
+      .map((option: any) => ({
+        option,
+        detail: describeAdventurerGuildQueryOption(gameState, playerUid, query, option, profile),
+      }))
+      .filter((entry: any): entry is { option: any; detail: NonNullable<ReturnType<typeof describeAdventurerGuildQueryOption>> } => !!entry.detail)
+      .sort((a, b) => b.detail.score - a.detail.score);
+
+    if (scored.length === 0) return;
+
+    const selectedSet = new Set(selections);
+    ServerGameService.recordAiDecision(gameState, playerUid, {
+      action: 'QUERY_SELECTION',
+      subject: query.title || query.context?.effectId || query.callbackKey || '选择',
+      reason: '困难冒险者公会 AI 按专用目标/选项优先级处理选择窗口。',
+      details: {
+        effectId: query.context?.effectId,
+        step: query.context?.step,
+        callbackKey: query.callbackKey,
+        selections: selections.join(', '),
+      },
+      candidates: scored.slice(0, 3).map(({ option, detail }) => ({
+        name: option.card ? ServerGameService.getAiCardName(option.card) : (option.label || option.id),
+        score: detail.score,
+        note: [
+          selectedSet.has(option.card?.gamecardId || option.id) ? '已选择' : undefined,
+          ...detail.notes,
+        ].filter(Boolean).join('、') || undefined,
+      })),
+    });
   },
 
   buildBotPaymentSelection(gameState: GameState, query: any) {
@@ -9344,6 +9444,10 @@ export const ServerGameService = {
     }
 
     const turnPlan = difficulty === 'hard' ? buildTurnPlan(gameState, bot, profile) : undefined;
+    const describeAttackNote = (card: Card) =>
+      describeAdventurerGuildAttack(gameState, bot, card, profile).notes.slice(0, 3).join('、') || undefined;
+    const describePlayableNote = (card: Card) =>
+      describeAdventurerGuildPlayableCard(gameState, bot, card, profile).notes.slice(0, 3).join('、') || undefined;
     if (turnPlan && (gameState.phase === 'MAIN' || gameState.phase === 'BATTLE_DECLARATION')) {
       const planLogKey = `${playerUid}:${gameState.turnCount}`;
       if ((bot as any).lastBotTurnPlanLogKey !== planLogKey) {
@@ -9408,12 +9512,26 @@ export const ServerGameService = {
         const totalAttackerPower = attackingUnits.reduce((sum, unit) => sum + (unit.power || 0), 0);
         const totalAttackerDamage = attackingUnits.reduce((sum, unit) => sum + (unit.damage || 0), 0);
         const danger = countErosion(bot) + totalAttackerDamage >= 9;
+        const scoredDefenseCandidates = availableDefenders
+          .map(card => {
+            const adventurerDefense = describeAdventurerGuildDefense(gameState, bot, card, attackingUnits, profile);
+            const score = (card.power || 0) - totalAttackerPower + adventurerDefense.score;
+            return {
+              card,
+              score,
+              note: adventurerDefense.notes.slice(0, 3).join('、') || undefined,
+            };
+          })
+          .sort((a, b) => b.score - a.score);
+        const selectedDefenseScore = defender
+          ? scoredDefenseCandidates.find(entry => entry.card.gamecardId === defender.gamecardId)
+          : undefined;
 
         if (defender) {
           ServerGameService.recordAiDecision(gameState, playerUid, {
             action: 'DEFEND',
             subject: ServerGameService.getAiCardName(defender),
-            score: (defender.power || 0) - totalAttackerPower,
+            score: selectedDefenseScore?.score ?? (defender.power || 0) - totalAttackerPower,
             reason: danger
               ? '承受本次伤害会接近败北线，因此优先宣告防御。'
               : '防御者的交换价值可接受，选择减少本次战斗伤害。',
@@ -9422,14 +9540,14 @@ export const ServerGameService = {
               attackerPower: totalAttackerPower,
               defenderPower: defender.power || 0,
               availableDefenders: availableDefenders.length,
+              adventurerDefenseNote: selectedDefenseScore?.note,
             },
-            candidates: availableDefenders
-              .slice()
-              .sort((a, b) => (b.power || 0) - (a.power || 0))
+            candidates: scoredDefenseCandidates
               .slice(0, 3)
-              .map(card => ({
+              .map(({ card, score, note }) => ({
                 name: ServerGameService.getAiCardName(card),
-                score: card.power || 0,
+                score,
+                note,
               })),
           });
           await ServerGameService.declareDefense(gameState, playerUid, defender.gamecardId);
@@ -9446,13 +9564,12 @@ export const ServerGameService = {
               availableDefenders: availableDefenders.length,
               erosionAfterHit: countErosion(bot) + totalAttackerDamage,
             },
-            candidates: availableDefenders
-              .slice()
-              .sort((a, b) => (b.power || 0) - (a.power || 0))
+            candidates: scoredDefenseCandidates
               .slice(0, 3)
-              .map(card => ({
+              .map(({ card, score, note }) => ({
                 name: ServerGameService.getAiCardName(card),
-                score: card.power || 0,
+                score,
+                note,
               })),
           });
           await ServerGameService.declareDefense(gameState, playerUid, undefined);
@@ -9684,6 +9801,37 @@ export const ServerGameService = {
         return;
       }
 
+      const adventurerRouteAttack = difficulty === 'hard'
+        ? getAdventurerGuildRouteAdvice(gameState, bot, profile, 'ATTACK')
+        : undefined;
+      const routeAttackCandidates = adventurerRouteAttack?.preferredCardIds?.length
+        ? bot.unitZone.filter((unit): unit is Card =>
+          !!unit &&
+          adventurerRouteAttack.preferredCardIds!.includes(unit.id) &&
+          canUnitAttack(gameState, unit)
+        )
+        : [];
+      if (adventurerRouteAttack && routeAttackCandidates.length > 0 && (bot as any).botReservedAttackTurn !== gameState.turnCount) {
+        ServerGameService.recordAiDecision(gameState, playerUid, {
+          action: 'ADVENTURER_COMBO_ROUTE',
+          subject: adventurerRouteAttack.note,
+          score: adventurerRouteAttack.scoreBonus,
+          reason: '困难冒险者公会 AI 识别到本回合连招路线，优先进入战斗执行路线攻击步骤。',
+          details: {
+            routeId: adventurerRouteAttack.routeId,
+            stepKey: adventurerRouteAttack.stepKey,
+            preferredAttackers: adventurerRouteAttack.preferredCardIds?.join(', '),
+          },
+          candidates: routeAttackCandidates.slice(0, 3).map(card => ({
+            name: ServerGameService.getAiCardName(card),
+            score: scoreAttackCandidate(gameState, bot, card, profile),
+            note: adventurerRouteAttack.note,
+          })),
+        });
+        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+        return;
+      }
+
       if (difficulty === 'hard' && (bot as any).botReservedAttackTurn === gameState.turnCount) {
         const heldUnfavorableAttack = (bot as any).botHeldUnfavorableAttackTurn === gameState.turnCount;
         ServerGameService.recordAiDecision(gameState, playerUid, {
@@ -9725,6 +9873,7 @@ export const ServerGameService = {
             candidates: attackCandidates.slice(0, 3).map(card => ({
               name: ServerGameService.getAiCardName(card),
               score: scoreAttackCandidate(gameState, bot, card, profile),
+              note: describeAttackNote(card),
             })),
           });
           await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
@@ -9772,6 +9921,7 @@ export const ServerGameService = {
             candidates: attackCandidates.slice(0, 3).map(card => ({
               name: ServerGameService.getAiCardName(card),
               score: scoreAttackCandidate(gameState, bot, card, profile),
+              note: describeAttackNote(card),
             })),
           });
           await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
@@ -9806,6 +9956,7 @@ export const ServerGameService = {
             candidates: attackCandidates.slice(0, 3).map(card => ({
               name: ServerGameService.getAiCardName(card),
               score: scoreAttackCandidate(gameState, bot, card, profile),
+              note: describeAttackNote(card),
             })),
           });
           await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
@@ -10020,6 +10171,7 @@ export const ServerGameService = {
         let playFailure: string | undefined;
         const effectiveCost = chosenPlayOption.effectiveCost;
         const initialPaymentSelection = chosenPlayOption.initialPaymentSelection;
+        const chosenDevelopment = scoreAdventurerGuildDevelopmentPriority(gameState, bot, cardToPlay, profile);
         ServerGameService.recordAiDecision(gameState, playerUid, {
           action: 'PLAY_CARD',
           subject: ServerGameService.getAiCardName(cardToPlay),
@@ -10043,10 +10195,14 @@ export const ServerGameService = {
             estimatedDeckPayment: chosenPlayOption.estimatedDeckPayment,
             netReadyDefenders: chosenPlayOption.netReadyDefenders,
             projectedReadyDefenders: chosenPlayOption.projectedReadyDefenders,
+            developmentTier: chosenDevelopment.tier,
+            developmentScore: chosenDevelopment.score ? Number(chosenDevelopment.score.toFixed(1)) : undefined,
+            developmentNotes: chosenDevelopment.notes.slice(0, 3).join(', ') || undefined,
           },
           candidates: (difficulty === 'hard' ? rankedPlayOptions : playableCandidates).slice(0, 3).map(candidate => ({
             name: ServerGameService.getAiCardName(candidate.card),
             score: candidate.score,
+            note: describePlayableNote(candidate.card),
           })),
         });
         let declaredTargets: DeclaredEffectTarget[] | undefined;
@@ -10136,6 +10292,7 @@ export const ServerGameService = {
           candidates: attackCandidates.slice(0, 3).map(card => ({
             name: ServerGameService.getAiCardName(card),
             score: scoreAttackCandidate(gameState, bot, card, profile),
+            note: describeAttackNote(card),
           })),
         });
         await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
@@ -10340,6 +10497,7 @@ export const ServerGameService = {
           candidates: scoredAvailableAttackers.slice(0, 3).map(candidate => ({
             name: ServerGameService.getAiCardName(candidate.card),
             score: candidate.score,
+            note: describeAttackNote(candidate.card),
           })),
         });
         await ServerGameService.declareAttack(gameState, playerUid, [attacker.gamecardId], false, undefined, undefined, onUpdate);
@@ -10665,3 +10823,6 @@ export const ServerGameService = {
 (GameService as any).destroyUnit = ServerGameService.destroyUnit;
 (GameService as any).triggerGoddessTransformation = ServerGameService.triggerGoddessTransformation;
 (GameService as any).refreshCardAsNewInstance = ServerGameService.refreshCardAsNewInstance;
+AtomicEffectExecutor.setDrawCardSelector((gameState, playerUid, _player, context) =>
+  ServerGameService.chooseHardAiDrawCard(gameState, playerUid, context)
+);

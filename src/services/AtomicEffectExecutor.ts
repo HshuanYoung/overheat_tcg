@@ -26,7 +26,26 @@ const getCurrentEffectResolutionBatchKey = (gameState: GameState) => {
   return currentItem.effectResolutionBatchKey as string;
 };
 
+export interface DrawSelectionContext {
+  source: 'ATOMIC_DRAW';
+  drawIndex: number;
+  drawCount: number;
+}
+
+export type DrawCardSelector = (
+  gameState: GameState,
+  playerUid: string,
+  player: PlayerState,
+  context: DrawSelectionContext
+) => Card | string | undefined | null;
+
 export class AtomicEffectExecutor {
+  private static drawCardSelector?: DrawCardSelector;
+
+  static setDrawCardSelector(selector?: DrawCardSelector) {
+    this.drawCardSelector = selector;
+  }
+
   static beginRecalcBatch(gameState: GameState) {
     const state = gameState as any;
     state.__atomicRecalcBatchDepth = (state.__atomicRecalcBatchDepth || 0) + 1;
@@ -423,6 +442,18 @@ export class AtomicEffectExecutor {
     }
   }
 
+  static selectCardToDraw(gameState: GameState, playerUid: string, player: PlayerState, context: DrawSelectionContext) {
+    const selected = this.drawCardSelector?.(gameState, playerUid, player, context);
+    const selectedId = typeof selected === 'string' ? selected : selected?.gamecardId;
+    if (selectedId) {
+      const selectedIndex = player.deck.findIndex(card => card.gamecardId === selectedId);
+      if (selectedIndex !== -1) {
+        return player.deck.splice(selectedIndex, 1)[0];
+      }
+    }
+    return player.deck.pop();
+  }
+
   private static drawCards(gameState: GameState, playerUid: string, count: number) {
     const player = gameState.players[playerUid];
     if (count > 0) {
@@ -430,7 +461,11 @@ export class AtomicEffectExecutor {
     }
     for (let i = 0; i < count; i++) {
       if (player.deck.length > 0) {
-        const card = player.deck.pop()!;
+        const card = this.selectCardToDraw(gameState, playerUid, player, {
+          source: 'ATOMIC_DRAW',
+          drawIndex: i,
+          drawCount: count,
+        })!;
         card.cardlocation = 'HAND';
         player.hand.push(card);
         EventEngine.dispatchEvent(gameState, {

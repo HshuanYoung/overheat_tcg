@@ -3461,7 +3461,7 @@ export const ServerGameService = {
     if (!query || query.type.replace(/-/g, '_').toUpperCase() !== 'SELECT_CHOICE') return selections;
 
     return selections.map(selection => {
-      const option = query.options?.find(opt => opt.id === selection);
+      const option = query.options?.find(opt => opt.id === selection || opt.selectionId === selection);
       return option?.value ?? option?.id ?? selection;
     });
   },

@@ -193,9 +193,7 @@ const getVisualOptionMeta = (option: PopupOption): VisualOptionMeta => {
   const semanticId = String(option.value || id).toUpperCase();
   const label = option.label || option.card?.fullName || id || '选项';
   const detail = option.detail || option.disabledReason;
-  const standardEyebrow = option.sourceCardNo && option.optionCode
-    ? `${option.sourceCardNo} / OPTION ${option.optionCode}`
-    : undefined;
+  const standardEyebrow = undefined;
   const standardVisual = id ? STANDARD_CHOICE_VISUALS[id] : undefined;
 
   if (isPlayerOption(option)) {
@@ -698,7 +696,7 @@ export const StandardPopup: React.FC<StandardPopupProps> = ({
                       <div
                         key={`${optionId || i}-${i}`}
                         className={cn(
-                          isRowLayout && (option.cardWidth === 'card' ? "w-24 shrink-0 md:w-32 lg:w-36" : "w-36 shrink-0 md:w-44")
+                          isRowLayout && "w-24 shrink-0 md:w-32 lg:w-36"
                         )}
                       >
                         <VisualOptionCard

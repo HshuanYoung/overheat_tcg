@@ -12,13 +12,19 @@ const cardEffects: CardEffect[] = [{
     instance.cardlocation === 'ITEM' &&
     playerState.deck.length > 0,
   execute: async (instance, gameState, playerState) => {
-    const names = Array.from(new Set(playerState.deck.map(card => card.fullName))).sort();
+    const cardsByName = new Map<string, Card>();
+    playerState.deck.forEach(card => {
+      if (card.fullName && !cardsByName.has(card.fullName)) cardsByName.set(card.fullName, card);
+    });
+    const options = Array.from(cardsByName.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, card]) => ({ id: name, selectionId: name, label: name, card, cardWidth: 'card' as const }));
     createChoiceQuery(
       gameState,
       playerState.uid,
       '宣言卡名',
       '选择要宣言的卡名。',
-      names.map(name => ({ id: name, label: name })),
+      options,
       { sourceCardId: instance.gamecardId, effectId: '305000082_scan' }
     );
   },

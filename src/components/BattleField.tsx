@@ -3326,17 +3326,22 @@ export const BattleField: React.FC = () => {
         maxSelections={displayedPendingQuery?.maxSelections}
         onCardClick={(card) => {
           const optionId = card.gamecardId || card.id;
-          const option = pendingQueryOptions.find(o => getPendingOptionId(o) === optionId);
+          const option = pendingQueryOptions.find(o =>
+            getPendingOptionId(o) === optionId ||
+            o.card?.gamecardId === optionId ||
+            o.card?.id === optionId
+          );
           if (option?.disabled) return;
+          const selectedOptionId = option ? getPendingOptionId(option) : optionId;
 
           setSelectedQueryIds(prev => {
-            const alreadySelected = prev.includes(optionId);
-            if (alreadySelected) return prev.filter(id => id !== optionId);
+            const alreadySelected = prev.includes(selectedOptionId);
+            if (alreadySelected) return prev.filter(id => id !== selectedOptionId);
             if (prev.length >= (displayedPendingQuery?.maxSelections || 1)) {
-              if (displayedPendingQuery?.maxSelections === 1) return [optionId];
+              if (displayedPendingQuery?.maxSelections === 1) return [selectedOptionId];
               return prev;
             }
-            return [...prev, optionId];
+            return [...prev, selectedOptionId];
           });
         }}
         onSelectionComplete={handleQuerySubmit}

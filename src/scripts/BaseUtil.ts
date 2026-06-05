@@ -858,6 +858,30 @@ export const canPutItemOntoBattlefield = (player: PlayerState, card: Card) =>
   card.type === 'ITEM' &&
   (!card.specialName || !player.itemZone.some(item => item?.specialName === card.specialName));
 
+export const playerStateAfterSendingBattlefieldMaterials = <T extends PlayerState>(
+  playerState: T,
+  selectedMaterials: Card[]
+): T => {
+  const sentUnitIds = new Set(selectedMaterials
+    .filter(card => card.cardlocation === 'UNIT')
+    .map(card => card.gamecardId));
+  const sentItemIds = new Set(selectedMaterials
+    .filter(card => card.cardlocation === 'ITEM')
+    .map(card => card.gamecardId));
+
+  if (sentUnitIds.size === 0 && sentItemIds.size === 0) return playerState;
+
+  return {
+    ...playerState,
+    unitZone: playerState.unitZone.map(unit =>
+      unit && sentUnitIds.has(unit.gamecardId) ? null : unit
+    ),
+    itemZone: playerState.itemZone.map(item =>
+      item && sentItemIds.has(item.gamecardId) ? null : item
+    )
+  };
+};
+
 export const hasTruthUnit = (player: PlayerState) =>
   player.unitZone.some(unit => unit && unit.type === 'UNIT' && (unit.specialName === '真理' || unit.fullName.includes('真理')));
 

@@ -5,13 +5,15 @@ import { hasCardSkin } from '../data/cardSkins';
 interface CardSkinSettings {
   enabledCardKeys: string[];
   showOpponentCardSkins: boolean;
+  handEffectsEnabled: boolean;
 }
 
 const STORAGE_KEY = 'ohr_card_skin_settings_v2';
 const CHANGE_EVENT = 'ohr-card-skin-settings-change';
 const DEFAULT_SETTINGS: CardSkinSettings = {
   enabledCardKeys: [],
-  showOpponentCardSkins: true
+  showOpponentCardSkins: true,
+  handEffectsEnabled: true
 };
 
 const isBrowser = typeof window !== 'undefined';
@@ -29,7 +31,8 @@ const normalizeSettings = (value: unknown): CardSkinSettings => {
 
   return {
     enabledCardKeys: Array.from(new Set(enabledCardKeys.filter((key): key is string => typeof key === 'string'))),
-    showOpponentCardSkins: raw.showOpponentCardSkins !== false
+    showOpponentCardSkins: raw.showOpponentCardSkins !== false,
+    handEffectsEnabled: raw.handEffectsEnabled !== false
   };
 };
 
@@ -92,6 +95,11 @@ export const setShowOpponentCardSkins = (enabled: boolean) => {
   writeCardSkinSettings({ ...settings, showOpponentCardSkins: enabled });
 };
 
+export const setHandEffectsEnabled = (enabled: boolean) => {
+  const settings = getStoredCardSkinSettings();
+  writeCardSkinSettings({ ...settings, handEffectsEnabled: enabled });
+};
+
 export const useCardSkinSettings = () => {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const settings = normalizeSettings(JSON.parse(snapshot));
@@ -113,12 +121,18 @@ export const useCardSkinSettings = () => {
     setShowOpponentCardSkins(enabled);
   }, []);
 
+  const updateHandEffectsEnabled = useCallback((enabled: boolean) => {
+    setHandEffectsEnabled(enabled);
+  }, []);
+
   return {
     settings,
     isCardSkinEnabled,
     setCardSkinEnabled: updateCardSkinEnabled,
     toggleCardSkin,
     showOpponentCardSkins: settings.showOpponentCardSkins,
-    setShowOpponentCardSkins: updateShowOpponentCardSkins
+    setShowOpponentCardSkins: updateShowOpponentCardSkins,
+    handEffectsEnabled: settings.handEffectsEnabled,
+    setHandEffectsEnabled: updateHandEffectsEnabled
   };
 };

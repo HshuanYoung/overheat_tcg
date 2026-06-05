@@ -378,7 +378,7 @@ export const BattleField: React.FC = () => {
   const lastStrategyUpdateRef = useRef<number>(0);
   const lastJoinEmitRef = useRef<number>(0);
   const [pregameNow, setPregameNow] = useState(Date.now());
-  const { isCardSkinEnabled, showOpponentCardSkins } = useCardSkinSettings();
+  const { isCardSkinEnabled, showOpponentCardSkins, handEffectsEnabled } = useCardSkinSettings();
   const [debugTarget, setDebugTarget] = useState<DebugTarget | null>(null);
   const [debugSelectedCard, setDebugSelectedCard] = useState<Card | null>(null);
   const [debugMoveTargetZone, setDebugMoveTargetZone] = useState<TriggerLocation>('HAND');
@@ -1867,6 +1867,12 @@ export const BattleField: React.FC = () => {
     if (!gameId || (!isMainTurn && !isBattleFreeTurn && !isCounteringTurn)) return;
     if (isCounteringTurn && card.type !== 'STORY') return;
 
+    const playability = GameService.canPlayCard(game, me, card);
+    if (!playability.canPlay) {
+      setLastError(playability.reason || '当前不能打出这张卡');
+      return;
+    }
+
     const playEffect = card.type === 'STORY'
       ? card.effects?.find(e => e.type === 'ACTIVATE' || e.type === 'TRIGGER' || e.type === 'ALWAYS')
       : undefined;
@@ -3128,6 +3134,7 @@ export const BattleField: React.FC = () => {
                   onHidePopup={() => setIsPopupHidden(true)}
                   onExpand={() => setIsPopupHidden(false)}
                   ignoreOpponentCardSkins={!showOpponentCardSkins}
+                  handEffectsEnabled={handEffectsEnabled}
                   sandboxEditMode={isDebugEnabled}
                   onSandboxZoneClick={openDebugTarget}
 

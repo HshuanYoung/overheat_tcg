@@ -5,6 +5,7 @@ import {
   collectHighAlchemyMaterialColors,
   createSelectCardQuery,
   moveCard,
+  playerStateAfterSendingBattlefieldMaterials,
   putCardOntoField
 } from './BaseUtil';
 
@@ -27,10 +28,11 @@ const deckCandidatesForMaterials = (
     highAlchemyMaterialColors: materialColors,
     highAlchemyMaterialCount: selectedMaterials.length,
   };
+  const targetPlayerState = playerStateAfterSendingBattlefieldMaterials(playerState, selectedMaterials);
   return playerState.deck.filter((card: Card) =>
     !card.godMark &&
     (card.type === 'UNIT' || card.type === 'ITEM') &&
-    canPutCardOntoBattlefieldByEffect(playerState, card, highAlchemyContext)
+    canPutCardOntoBattlefieldByEffect(targetPlayerState, card, highAlchemyContext)
   );
 };
 

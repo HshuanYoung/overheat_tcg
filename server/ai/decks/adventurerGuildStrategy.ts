@@ -26,12 +26,14 @@ export const ADVENTURER_GUILD_CARD_IDS = {
   deepSeaFantasy: '204000115',
 } as const;
 
-const DEFAULT_OPENING_IDS = new Set<string>([
+export const ADVENTURER_GUILD_DEFAULT_OPENING_CARD_IDS = [
   ADVENTURER_GUILD_CARD_IDS.albert,
   ADVENTURER_GUILD_CARD_IDS.association,
   ADVENTURER_GUILD_CARD_IDS.xiaoting,
   ADVENTURER_GUILD_CARD_IDS.foxMerchant,
-]);
+] as const;
+
+const DEFAULT_OPENING_IDS = new Set<string>(ADVENTURER_GUILD_DEFAULT_OPENING_CARD_IDS);
 
 const SWITCH_ADVENTURER_IDS = new Set<string>([
   ADVENTURER_GUILD_CARD_IDS.batra,
@@ -127,6 +129,14 @@ function countCardIds(cards: Array<Card | null | undefined>, cardIds: Set<string
 
 function hasFieldCard(player: PlayerState, cardId: string) {
   return hasCardId([...player.unitZone, ...player.itemZone], cardId);
+}
+
+function isDefaultOpeningCard(card: Card) {
+  return DEFAULT_OPENING_IDS.has(card.id);
+}
+
+function needsDefaultOpeningCardOnField(player: PlayerState, card: Card) {
+  return isDefaultOpeningCard(card) && !hasFieldCard(player, card.id);
 }
 
 function hasFieldOrHandCard(player: PlayerState, cardId: string) {
@@ -1225,6 +1235,10 @@ export function scoreAdventurerGuildDevelopmentPriority(
     notes.push(`${note}${value >= 0 ? '+' : ''}${value.toFixed(1)}`);
   };
 
+  if (needsDefaultOpeningCardOnField(player, card)) {
+    add(isFirstTurn(gameState) ? 3.0 : 2.2, '榛樿璧锋墜鍥涗欢濂楋細浼樺厛鎷嶅嚭');
+  }
+
   switch (card.id) {
     case ids.albert:
       tier = '核心启动';
@@ -1311,7 +1325,7 @@ function scoreDevelopmentPriority(gameState: GameState, player: PlayerState, car
 
 export function scoreAdventurerGuildMulliganKeep(card: Card, profile: DeckAiProfile) {
   if (!isProfile(profile)) return 0;
-  if (DEFAULT_OPENING_IDS.has(card.id)) return 80;
+  if (isDefaultOpeningCard(card)) return 80;
   return -8;
 }
 

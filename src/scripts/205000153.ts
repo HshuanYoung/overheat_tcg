@@ -10,6 +10,7 @@ import {
   isNonGodUnit,
   moveCard,
   nameContains,
+  playerStateAfterSendingBattlefieldMaterials,
   putUnitOntoField,
   story
 } from './BaseUtil';
@@ -26,11 +27,10 @@ const materialCandidates = (playerState: any) => [
   )
 );
 
-const deckTargets = (playerState: any) =>
+const rawAlchemyDeckTargets = (playerState: any) =>
   playerState.deck.filter((card: Card) =>
     isNonGodUnit(card) &&
-    nameContains(card, '炼金') &&
-    canPutUnitOntoBattlefield(playerState, card)
+    nameContains(card, '炼金')
   );
 
 const deckTargetsForMaterials = (
@@ -42,16 +42,18 @@ const deckTargetsForMaterials = (
     highAlchemyMaterialColors: materialColors,
     highAlchemyMaterialCount: selectedMaterials.length,
   };
+  const targetPlayerState = playerStateAfterSendingBattlefieldMaterials(playerState, selectedMaterials);
+  const alchemyTargets = rawAlchemyDeckTargets(playerState);
   const rawTargets = [
-    ...deckTargets(playerState),
+    ...alchemyTargets,
     ...playerState.deck.filter((card: Card) =>
-      !deckTargets(playerState).some((target: Card) => target.gamecardId === card.gamecardId) &&
+      !alchemyTargets.some((target: Card) => target.gamecardId === card.gamecardId) &&
       isNonGodUnit(card) &&
       (card.id === '105000406' || card.id === '105000407' || card.id === '105000408')
     ),
   ];
   return rawTargets.filter((card: Card) =>
-    canPutUnitOntoBattlefield(playerState, card, highAlchemyContext)
+    canPutUnitOntoBattlefield(targetPlayerState, card, highAlchemyContext)
   );
 };
 
@@ -125,10 +127,11 @@ const cardEffects: CardEffect[] = [story('205000153_rainbow_high_alchemy', '创�
       highAlchemyMaterialColors: context.materialColors || [],
       highAlchemyMaterialCount: Number(context.materialCount || 0),
     };
+    const alchemyTargets = rawAlchemyDeckTargets(playerState);
     const rawTargets = [
-      ...deckTargets(playerState),
+      ...alchemyTargets,
       ...playerState.deck.filter((card: Card) =>
-        !deckTargets(playerState).some((deckTarget: Card) => deckTarget.gamecardId === card.gamecardId) &&
+        !alchemyTargets.some((deckTarget: Card) => deckTarget.gamecardId === card.gamecardId) &&
         isNonGodUnit(card) &&
         (card.id === '105000406' || card.id === '105000407' || card.id === '105000408')
       ),

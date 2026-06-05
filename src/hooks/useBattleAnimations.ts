@@ -169,9 +169,9 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
       if (hintedCardId) {
         hintedDrawCardsRef.current.add(`${ownerUid}:${hintedCardId}`);
         const isNormalDrawPhase = game.phase === 'DRAW' && ownerUid === game.playerIds[game.currentTurnPlayer];
-        const revealTo = isNormalDrawPhase
-          ? (!isSpectator && perspectiveUid && ownerUid === perspectiveUid ? 'owner' : 'hidden')
-          : (game.animationHint.revealTo || 'all');
+        const revealTo = game.animationHint.revealTo === 'all'
+          ? 'all'
+          : (!isSpectator && perspectiveUid && ownerUid === perspectiveUid ? 'owner' : 'hidden');
         const shouldRevealCard = revealTo !== 'hidden';
         const hintedCard = shouldRevealCard
           ? (game.animationHint.card || findCardByGamecardId(game, hintedCardId))
@@ -187,7 +187,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
           id: `card_draw_hint_${game.animationHint.id}`,
           type: 'card-draw',
           side: sideForUid(ownerUid, perspectiveUid, game),
-          title: isNormalDrawPhase ? '抽牌' : '卡组加入手牌',
+          title: game.animationHint.revealTo === 'all' && !isNormalDrawPhase ? '卡组加入手牌' : '抽牌',
           cardName: hintedCard?.fullName || '抽到的卡',
           cardImageUrl: hintedCard ? getCardPreviewImage(hintedCard) : undefined,
           sourceCardId: hintedCardId,
@@ -321,16 +321,13 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
             return;
           }
           if (game.animationHint?.type === 'DRAW_CARD' && game.animationHint.cardId === gamecardId) return;
-          const isNormalDrawPhase = game.phase === 'DRAW' && currentLoc.ownerUid === game.playerIds[game.currentTurnPlayer];
-            const revealTo = isNormalDrawPhase
-              ? (!isSpectator && perspectiveUid && currentLoc.ownerUid === perspectiveUid ? 'owner' : 'hidden')
-              : 'all';
+          const revealTo = !isSpectator && perspectiveUid && currentLoc.ownerUid === perspectiveUid ? 'owner' : 'hidden';
           const shouldRevealCard = revealTo !== 'hidden';
           nextEvents.push({
             id: `card_draw_${gamecardId}_${Date.now()}_${Math.random()}`,
             type: 'card-draw',
             side: sideForUid(currentLoc.ownerUid, perspectiveUid, game),
-            title: isNormalDrawPhase ? '抽牌' : '卡组加入手牌',
+            title: '抽牌',
             cardName: shouldRevealCard ? currentLoc.card.fullName : '抽到的卡',
             cardImageUrl: shouldRevealCard ? getCardPreviewImage(currentLoc.card) : undefined,
             sourceCardId: gamecardId,

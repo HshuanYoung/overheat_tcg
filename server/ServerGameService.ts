@@ -74,6 +74,12 @@ export const ServerGameService = {
     await new Promise(resolve => setTimeout(resolve, delayMs));
   },
 
+  isVisualAnimationPending(gameState: GameState) {
+    if (ServerGameService.shouldSkipVisualDelay(gameState)) return false;
+    if (gameState.drawAnimationResume) return true;
+    return Number(gameState.animationUntil || 0) > Date.now();
+  },
+
   markConfrontationChainAnimation(gameState: GameState, durationMs = 1100, reason: 'build' | 'resolve' = 'build') {
     if (!gameState.counterStack?.length) return;
     if (ServerGameService.shouldSkipVisualDelay(gameState)) return;
@@ -3524,6 +3530,7 @@ export const ServerGameService = {
         declaredTargets,
         { resumeFromQuery: true, paymentSelectionResolved: true }
       );
+      if (onUpdate) await onUpdate(gameState);
       return gameState;
     }
 
@@ -6517,9 +6524,6 @@ export const ServerGameService = {
       }
     }
 
-    // Keep triggered effects readable while normal stack resolution stays fast.
-    await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getTriggerVisualDelayMs());
-
     // 4. Atomic Effects
     if (effect.atomicEffects) {
       await AtomicEffectExecutor.executeBatch(gameState, playerUid, effect.atomicEffects, liveCard, event);
@@ -6549,6 +6553,7 @@ export const ServerGameService = {
         text: '诱发效果结算完成。',
         metadata: { effectIndex, effectId: effect.id }
       });
+      await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getTriggerVisualDelayMs());
     }
 
     // 7. Cleanup highlight
@@ -8736,6 +8741,7 @@ export const ServerGameService = {
     const bot = gameState.players[playerUid];
     if (!bot) return;
     if (gameState.pendingQuery && gameState.pendingQuery.playerUid !== playerUid) return;
+    if (ServerGameService.isVisualAnimationPending(gameState)) return;
 
     const difficulty = ServerGameService.getBotDifficulty(gameState, playerUid);
     const profile = ServerGameService.getBotProfile(gameState, playerUid);

@@ -255,24 +255,51 @@ export const BattleField: React.FC = () => {
   const stateBufferRef = useRef<any[]>([]);
   const [stateBufferVersion, setStateBufferVersion] = useState(0);
   const serverAnimationHoldUntilRef = useRef(0);
+  const bufferReplayCooldownUntilRef = useRef(0);
+  const lastAppliedGameRef = useRef<GameState | null>(null);
   const [serverAnimationHoldUntil, setServerAnimationHoldUntil] = useState(0);
   const applyGameStateRef = useRef<((state: any) => void) | null>(null);
+  const hasNewPlayZoneCard = useCallback((previousState: GameState | null, nextState: GameState) => {
+    if (!previousState?.players || !nextState?.players) return false;
+    return Object.entries(nextState.players).some(([uid, nextPlayer]) => {
+      const previousPlayer = previousState.players[uid];
+      if (!previousPlayer || !nextPlayer) return false;
+      const previousPlayIds = new Set((previousPlayer.playZone || []).map(card => card?.gamecardId).filter(Boolean));
+      return (nextPlayer.playZone || []).some(card => card?.gamecardId && !previousPlayIds.has(card.gamecardId));
+    });
+  }, []);
+  const hasPhaseChanged = useCallback((previousState: GameState | null, nextState: GameState) => {
+    if (!previousState) return false;
+    return previousState.phase !== nextState.phase ||
+      previousState.currentTurnPlayer !== nextState.currentTurnPlayer ||
+      previousState.turnCount !== nextState.turnCount;
+  }, []);
   const applyBufferedGameState = useCallback(() => {
     if (stateBufferRef.current.length === 0) return;
-    const latestState = stateBufferRef.current[stateBufferRef.current.length - 1];
+    const [nextState, ...remainingStates] = stateBufferRef.current;
     console.log('[BattleFieldAnimationBuffer] applying buffered state', {
-      phase: latestState.phase,
-      droppedBufferedStates: Math.max(0, stateBufferRef.current.length - 1)
+      phase: nextState.phase,
+      remainingBufferedStates: remainingStates.length
     });
-    stateBufferRef.current = [];
+    stateBufferRef.current = remainingStates;
     setStateBufferVersion(version => version + 1);
-    serverAnimationHoldUntilRef.current = 0;
-    setServerAnimationHoldUntil(0);
-    setVisualGame(null);
-    if (applyGameStateRef.current) {
-      applyGameStateRef.current(latestState);
+    const hintDuration = battleAnimationsEnabled && !nextState.isResolvingStack ? Number(nextState.animationHint?.durationMs || 0) : 0;
+    const serverAnimationUntil = battleAnimationsEnabled ? Number(nextState.animationUntil || 0) : 0;
+    const nextHoldUntil = hintDuration > 0 ? Date.now() + hintDuration : serverAnimationUntil;
+    if (nextHoldUntil > Date.now()) {
+      serverAnimationHoldUntilRef.current = nextHoldUntil;
+      setServerAnimationHoldUntil(nextHoldUntil);
+    } else {
+      serverAnimationHoldUntilRef.current = 0;
+      setServerAnimationHoldUntil(0);
     }
-  }, []);
+    setVisualGame(nextState.animationHint ? nextState : null);
+    if (applyGameStateRef.current) {
+      applyGameStateRef.current(nextState);
+    }
+    lastAppliedGameRef.current = nextState;
+    bufferReplayCooldownUntilRef.current = Date.now() + 80;
+  }, [battleAnimationsEnabled]);
   const activeBlockingAnimationEvents = useMemo(() => {
     if (!battleAnimationsEnabled) return [];
     return getBattleAnimationPlaybackGroup(battleAnimations.events);
@@ -304,6 +331,11 @@ export const BattleField: React.FC = () => {
 
   useEffect(() => {
     if (activeBlockingAnimationEvents.length === 0 && stateBufferRef.current.length > 0) {
+      const cooldownRemaining = bufferReplayCooldownUntilRef.current - Date.now();
+      if (cooldownRemaining > 0) {
+        const timer = window.setTimeout(() => setStateBufferVersion(version => version + 1), cooldownRemaining);
+        return () => window.clearTimeout(timer);
+      }
       const remaining = serverAnimationHoldUntilRef.current - Date.now();
       if (remaining > 0) {
         setServerAnimationHoldUntil(serverAnimationHoldUntilRef.current);
@@ -451,6 +483,7 @@ export const BattleField: React.FC = () => {
 
 
   useEffect(() => { gameRef.current = game; }, [game]);
+  useEffect(() => { lastAppliedGameRef.current = game; }, [game]);
   useEffect(() => { pendingPlayCardRef.current = pendingPlayCard; }, [pendingPlayCard]);
   const findCardInGame = useCallback((gamecardId?: string) => {
     if (!gamecardId || !game) return undefined;
@@ -577,7 +610,9 @@ export const BattleField: React.FC = () => {
 
   useEffect(() => {
     if (isSpectator || !game || !gameId) return;
-    if (isBattleAnimationBlockingUi || game.pendingQuery || game.isResolvingStack || game.currentProcessingItem) return;
+    const isCounteringPriority = game.phase === 'COUNTERING' && game.priorityPlayerId === myUid;
+    if (isBattleAnimationBlockingUi && !isCounteringPriority) return;
+    if (game.pendingQuery || game.isResolvingStack || game.currentProcessingItem) return;
     
     // OFF Strategy: Always auto-pass
     // AUTO Strategy: Auto-pass ONLY if no cards/effects available
@@ -603,7 +638,7 @@ export const BattleField: React.FC = () => {
         GameService.advancePhase(gameId, 'DECLINE_CONFRONTATION');
       }
     }
-  }, [game?.phase, game?.priorityPlayerId, game?.battleState?.askConfront, game?.pendingQuery?.id, game?.isResolvingStack, game?.currentProcessingItem, localStrategy, canConfront, isSpectator, isBattleAnimationBlockingUi]);
+  }, [game?.phase, game?.priorityPlayerId, game?.battleState?.askConfront, game?.pendingQuery?.id, game?.isResolvingStack, game?.currentProcessingItem, localStrategy, canConfront, isSpectator, isBattleAnimationBlockingUi, myUid]);
 
   // Reset interaction states when phase or priority changes
   useEffect(() => {
@@ -702,17 +737,6 @@ export const BattleField: React.FC = () => {
         }
         return;
       }
-      if (newState.animationHint) {
-        console.log('[BattleField] Received animation hint state', {
-          phase: newState.phase,
-          animationHint: newState.animationHint.id,
-          animationUntil: newState.animationUntil
-        });
-        setVisualGame(newState);
-      } else {
-        setVisualGame(null);
-      }
-      
       const hintDuration = newState.isResolvingStack ? 0 : Number(newState.animationHint?.durationMs || 0);
       const serverAnimationUntil = Number(newState.animationUntil || 0);
       const serverHoldUntil = hintDuration > 0 ? Date.now() + hintDuration : serverAnimationUntil;
@@ -721,6 +745,47 @@ export const BattleField: React.FC = () => {
       const existingServerHold = serverAnimationHoldUntilRef.current > Date.now();
       const startsServerHold = isServerAnimationHold && serverAnimationHoldUntilRef.current === 0;
       const isAnimationPlaying = localAnimationPlaying || existingServerHold;
+      const isConfrontationChainHint = newState.animationHint?.type === 'CONFRONTATION_CHAIN';
+      const shouldApplyPhaseImmediately = hasPhaseChanged(lastAppliedGameRef.current, newState);
+      const shouldApplyPlayZoneImmediately = hasNewPlayZoneCard(lastAppliedGameRef.current, newState);
+      if (shouldApplyPhaseImmediately || shouldApplyPlayZoneImmediately) {
+        stateBufferRef.current = [];
+        bufferReplayCooldownUntilRef.current = 0;
+        setStateBufferVersion(version => version + 1);
+        serverAnimationHoldUntilRef.current = 0;
+        setServerAnimationHoldUntil(0);
+        setVisualGame(newState.animationHint ? newState : null);
+        console.log('[BattleFieldAnimationBuffer] applying state immediately', {
+          phase: newState.phase,
+          previousPhase: lastAppliedGameRef.current?.phase,
+          animationHint: newState.animationHint?.id,
+          phaseChanged: shouldApplyPhaseImmediately,
+          playZoneChanged: shouldApplyPlayZoneImmediately,
+          interruptedLocalAnimation: localAnimationPlaying,
+          interruptedServerHold: existingServerHold
+        });
+        applyGameState(newState);
+        lastAppliedGameRef.current = newState;
+        return;
+      }
+      if (isConfrontationChainHint) {
+        stateBufferRef.current = [];
+        bufferReplayCooldownUntilRef.current = 0;
+        setStateBufferVersion(version => version + 1);
+        serverAnimationHoldUntilRef.current = serverHoldUntil > Date.now() ? serverHoldUntil : 0;
+        setServerAnimationHoldUntil(serverAnimationHoldUntilRef.current);
+        console.log('[BattleFieldAnimationBuffer] applying confrontation chain immediately', {
+          phase: newState.phase,
+          animationHint: newState.animationHint.id,
+          animationUntil: newState.animationUntil,
+          interruptedLocalAnimation: localAnimationPlaying,
+          interruptedServerHold: existingServerHold
+        });
+        setVisualGame(newState);
+        applyGameState(newState);
+        lastAppliedGameRef.current = newState;
+        return;
+      }
       if (isAnimationPlaying) {
         console.log('[BattleFieldAnimationBuffer] buffering state', {
           phase: newState.phase,
@@ -733,6 +798,16 @@ export const BattleField: React.FC = () => {
         stateBufferRef.current.push(newState);
         setStateBufferVersion(version => version + 1);
         return;
+      }
+      if (newState.animationHint) {
+        console.log('[BattleField] Received animation hint state', {
+          phase: newState.phase,
+          animationHint: newState.animationHint.id,
+          animationUntil: newState.animationUntil
+        });
+        setVisualGame(newState);
+      } else {
+        setVisualGame(null);
       }
       if (isServerAnimationHold) {
         serverAnimationHoldUntilRef.current = Math.max(serverAnimationHoldUntilRef.current, serverHoldUntil);
@@ -748,6 +823,7 @@ export const BattleField: React.FC = () => {
       }
       
       applyGameState(newState);
+      lastAppliedGameRef.current = newState;
     };
 
     const onGameTimerUpdate = (patch: any) => {
@@ -787,7 +863,7 @@ export const BattleField: React.FC = () => {
       socket.off('gameTimerUpdate', onGameTimerUpdate);
       socket.off('error', onSocketError);
     };
-  }, [gameId]);
+  }, [battleAnimationsEnabled, gameId, hasNewPlayZoneCard, hasPhaseChanged]);
 
   // Monitor logs for battle interruption
   useEffect(() => {
@@ -1729,9 +1805,11 @@ export const BattleField: React.FC = () => {
     if (!gameId) return;
 
     try {
-      await GameService.activateEffect(gameId, myUid, card.gamecardId, effectIndex);
       setEffectConfirmation(null);
       setEffectSelection(null);
+      setCardMenu(null);
+      setIsConfronting(false);
+      await GameService.activateEffect(gameId, myUid, card.gamecardId, effectIndex);
     } catch (error: any) {
       setLastError(error.message);
     }
@@ -1815,10 +1893,10 @@ export const BattleField: React.FC = () => {
 
   const handleResolve = async () => {
     if (!gameId) return;
-    if (isBattleAnimationBlockingUi) return;
     if (game.pendingQuery || game.isResolvingStack || game.currentProcessingItem) return;
     try {
       setIsConfronting(false);
+      setIsPopupHidden(false);
       if (game.phase === 'COUNTERING') {
         await GameService.passConfrontation(gameId);
       } else {
@@ -2605,7 +2683,6 @@ export const BattleField: React.FC = () => {
                   }
                   isCounteringPromptActive={
                     !isSpectator &&
-                    !isBattleAnimationBlockingUi &&
                     game.phase === 'COUNTERING' &&
                     game.priorityPlayerId === myUid &&
                     !game.pendingQuery &&

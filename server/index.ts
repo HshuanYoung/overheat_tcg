@@ -63,6 +63,33 @@ const SLOW_GAME_ACTION_MS = Number(process.env.SLOW_GAME_ACTION_MS || 500);
 const SLOW_STATE_SYNC_MS = Number(process.env.SLOW_STATE_SYNC_MS || 250);
 const FORCE_LOGOUT_REASON = '账号已在其他设备登录';
 
+function getBotVisualAnimationDelayMs(gameState: any, now = Date.now()) {
+    if (ServerGameService.shouldSkipVisualDelay(gameState)) return 0;
+    const animationUntil = Number(gameState.animationUntil || 0);
+    const drawResumeAt = Number(gameState.drawAnimationResume?.resumeAt || 0);
+    const waitUntil = Math.max(animationUntil, drawResumeAt);
+    if (waitUntil > now) return waitUntil - now + 250;
+    return gameState.drawAnimationResume ? 250 : 0;
+}
+
+function scheduleBotMoveRetry(gameId: string, delayMs: number) {
+    if (botMovingGames.has(gameId)) return;
+    botMovingGames.add(gameId);
+    setTimeout(async () => {
+        try {
+            const stateRows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
+            if (stateRows.length === 0) return;
+            const latestState = typeof stateRows[0].state === 'string' ? JSON.parse(stateRows[0].state) : stateRows[0].state;
+            ServerGameService.hydrateGameState(latestState);
+            botMovingGames.delete(gameId);
+            handleBotMove(latestState, gameId);
+        } catch (err) {
+            console.error('[Bot] scheduleBotMoveRetry error:', err);
+            botMovingGames.delete(gameId);
+        }
+    }, Math.max(250, delayMs));
+}
+
 async function insertGame(gameId: string, gameState: any, status = 0) {
     const now = Date.now();
     await pool.query(
@@ -264,6 +291,11 @@ async function handleBotMove(gameState: any, gameId: string) {
     const bot = gameState.players['BOT_PLAYER'];
     if (!bot) return;
     if (gameState.pendingQuery && gameState.pendingQuery.playerUid !== 'BOT_PLAYER') return;
+    const visualDelayMs = getBotVisualAnimationDelayMs(gameState);
+    if (visualDelayMs > 0) {
+        scheduleBotMoveRetry(gameId, visualDelayMs);
+        return;
+    }
 
     // The bot should move if it's its turn, if it's being asked for a confrontation response, if it has priority, or has a query
     const isBotAsked = gameState.battleState && gameState.battleState.askConfront === 'ASKING_OPPONENT';
@@ -294,6 +326,12 @@ async function handleBotMove(gameState: any, gameId: string) {
                     }
                     const currentGameState = typeof stateRows[0].state === 'string' ? JSON.parse(stateRows[0].state) : stateRows[0].state;
                     ServerGameService.hydrateGameState(currentGameState);
+                    const visualDelayMs = getBotVisualAnimationDelayMs(currentGameState);
+                    if (visualDelayMs > 0) {
+                        botMovingGames.delete(gameId);
+                        scheduleBotMoveRetry(gameId, visualDelayMs);
+                        return;
+                    }
 
                     const syncCallback = async (state: any) => {
                         await syncGameStateForCallback(gameId, state, 'botMove:callback');
@@ -354,6 +392,10 @@ function triggerBotIfNeeded(gameState: any, gameId: string) {
     const bot = gameState.players['BOT_PLAYER'];
     if (!bot) return;
     if (gameState.pendingQuery && gameState.pendingQuery.playerUid !== 'BOT_PLAYER') return;
+    if (getBotVisualAnimationDelayMs(gameState) > 0) {
+        handleBotMove(gameState, gameId);
+        return;
+    }
 
     const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const isBotAsked = gameState.battleState && gameState.battleState.askConfront === 'ASKING_OPPONENT';
@@ -4231,7 +4273,18 @@ io.on('connection', (socket) => {
                     }
                 } else if (action === 'PLAY_CARD') {
                     const { cardId, paymentSelection } = payload;
+                    const wasInPlayZone = player.playZone?.some((card: Card | null) => card?.gamecardId === cardId);
                     await ServerGameService.playCard(gameState, myUid, cardId, paymentSelection);
+                    const isNowInPlayZone = player.playZone?.some((card: Card | null) => card?.gamecardId === cardId);
+                    if (!wasInPlayZone && isNowInPlayZone) {
+                        const ackStart = process.hrtime.bigint();
+                        await syncAndSaveState(gameId, gameState, {
+                            recalc: false,
+                            persist: false,
+                            source: `${action}:playZoneAck`
+                        });
+                        actionTimings.ackEmitMs = elapsedMs(ackStart);
+                    }
                 } else if (action === 'ATTACK') {
                     const { attackerIds, isAlliance, targetId, skipDefense } = payload;
                     await ServerGameService.declareAttack(gameState, myUid, attackerIds, isAlliance, targetId, skipDefense, syncCallback);
@@ -4258,6 +4311,13 @@ io.on('connection', (socket) => {
                     actionTimings.ackEmitMs = elapsedMs(ackStart);
                 } else if (action === 'PASS_CONFRONTATION') {
                     await ServerGameService.passConfrontation(gameState, myUid, syncCallback);
+                    const ackStart = process.hrtime.bigint();
+                    await syncAndSaveState(gameId, gameState, {
+                        recalc: false,
+                        persist: false,
+                        source: `${action}:ack`
+                    });
+                    actionTimings.ackEmitMs = elapsedMs(ackStart);
                 } else if (action === 'RESOLVE_PLAY') {
                     if (gameState.phase === 'COUNTERING') {
                         await ServerGameService.resolveCounterStack(gameState, syncCallback);

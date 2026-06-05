@@ -4,11 +4,14 @@ import { createChoiceQuery, createSelectCardQuery } from './BaseUtil';
 import { ensureDeckHasCardsForMove, getTopDeckCards, moveCard, moveCardsToBottom } from './BaseUtil';
 
 const getDeclaredNameOptions = (playerState: PlayerState) => {
-  const uniqueNames = Array.from(
-    new Set(playerState.deck.map((card: Card) => card.fullName).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b));
+  const cardsByName = new Map<string, Card>();
+  playerState.deck.forEach((card: Card) => {
+    if (card.fullName && !cardsByName.has(card.fullName)) cardsByName.set(card.fullName, card);
+  });
 
-  return uniqueNames.map(name => ({ id: name, label: name }));
+  return Array.from(cardsByName.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, card]) => ({ id: name, selectionId: name, label: name, card, cardWidth: 'card' as const }));
 };
 
 const effect_105110108_activate: CardEffect = {

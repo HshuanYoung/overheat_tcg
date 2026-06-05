@@ -79,6 +79,41 @@ export const ServerGameService = {
     await new Promise(resolve => setTimeout(resolve, delayMs));
   },
 
+  isVisualAnimationPending(gameState: GameState) {
+    if (ServerGameService.shouldSkipVisualDelay(gameState)) return false;
+    if (gameState.drawAnimationResume) return true;
+    return Number(gameState.animationUntil || 0) > Date.now();
+  },
+
+  markConfrontationChainAnimation(gameState: GameState, durationMs = 1100, reason: 'build' | 'resolve' = 'build') {
+    if (!gameState.counterStack?.length) return;
+    if (ServerGameService.shouldSkipVisualDelay(gameState)) return;
+    const now = Date.now();
+    const resolvedDurationMs = Math.max(0, Number(durationMs) || 0);
+    const topItem = gameState.counterStack[gameState.counterStack.length - 1];
+    const chainKey = `${reason}-${topItem.timestamp || now}-${gameState.counterStack.length}-${now}`;
+    (topItem as any).chainAnimationShown = true;
+    gameState.animationHint = {
+      id: `confrontation-${chainKey}`,
+      type: 'CONFRONTATION_CHAIN',
+      playerUid: gameState.priorityPlayerId || topItem.ownerUid,
+      durationMs: resolvedDurationMs,
+      createdAt: now
+    };
+    gameState.animationUntil = now + resolvedDurationMs;
+  },
+
+  isConfrontationAnimationPending(gameState: GameState) {
+    if (ServerGameService.shouldSkipVisualDelay(gameState)) return false;
+    return gameState.animationHint?.type === 'CONFRONTATION_CHAIN' &&
+      Number(gameState.animationUntil || 0) > Date.now();
+  },
+
+  assertConfrontationAnimationComplete(gameState: GameState) {
+    if (!ServerGameService.isConfrontationAnimationPending(gameState)) return;
+    throw new Error('对抗链动画播放中，请稍候。');
+  },
+
   clearAllianceAttackMarkers(gameState: GameState, attackerIds?: string[]) {
     const targetIds = attackerIds?.length ? new Set(attackerIds) : undefined;
     Object.values(gameState.players || {}).forEach(player => {
@@ -341,6 +376,21 @@ export const ServerGameService = {
       }
     }
     return undefined;
+  },
+
+  getTriggerZoneLabel(zone?: TriggerLocation) {
+    const labels: Record<TriggerLocation, string> = {
+      HAND: '手牌',
+      UNIT: '战场',
+      ITEM: '道具区',
+      GRAVE: '墓地',
+      EXILE: '放逐区',
+      EROSION_FRONT: '侵蚀区正面',
+      EROSION_BACK: '侵蚀区背面',
+      PLAY: '使用区',
+      DECK: '卡组'
+    };
+    return zone ? labels[zone] || zone : '';
   },
 
   isUnaffectedByCardEffect(gameState: GameState, target: Card, source?: Card, sourceOwnerUid?: string) {
@@ -2464,6 +2514,7 @@ export const ServerGameService = {
 
     const strategy = player.confrontationStrategy || 'AUTO';
     if (strategy === 'ON') return gameState;
+    if (ServerGameService.isConfrontationAnimationPending(gameState)) return gameState;
 
     const hasAction = strategy === 'AUTO'
       ? ServerGameService.playerHasAvailableConfrontationAction(gameState, player.uid)
@@ -2791,6 +2842,16 @@ export const ServerGameService = {
         metadata: { linkNumber, stackType: stackItem.type, effectIndex: stackItem.effectIndex }
       });
     }
+
+    const priorityPlayer = gameState.priorityPlayerId ? gameState.players[gameState.priorityPlayerId] : undefined;
+    const strategy = priorityPlayer?.confrontationStrategy || 'AUTO';
+    const shouldShowChain =
+      !isUncounterable &&
+      !!gameState.priorityPlayerId &&
+      (strategy === 'ON' || (strategy === 'AUTO' && ServerGameService.playerHasAvailableConfrontationAction(gameState, gameState.priorityPlayerId)));
+    if (shouldShowChain) {
+      ServerGameService.markConfrontationChainAnimation(gameState, 3000);
+    }
   },
 
   isShingiNamedCard(card?: Card) {
@@ -2820,6 +2881,9 @@ export const ServerGameService = {
   async playCard(gameState: GameState, playerId: string, cardId: string, paymentSelection: { feijingCardId?: string, exhaustUnitIds?: string[], erosionFrontIds?: string[] }, declaredTargets?: DeclaredEffectTarget[], options?: { resumeFromQuery?: boolean; paymentSelectionResolved?: boolean; declaredModeId?: string; effectCostResolved?: boolean }) {
     if (!options?.resumeFromQuery && (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem)) {
       throw new Error('当前有未结算步骤，请等待处理完毕。');
+    }
+    if (!options?.resumeFromQuery) {
+      ServerGameService.assertConfrontationAnimationComplete(gameState);
     }
     const player = gameState.players[playerId];
     let card = player.hand.find(c => c.gamecardId === cardId);
@@ -3029,6 +3093,9 @@ export const ServerGameService = {
     if (!options?.resumeFromQuery && (gameState.pendingQuery || gameState.isResolvingStack || gameState.currentProcessingItem)) {
       throw new Error('当前有未结算步骤，请等待处理完毕。');
     }
+    if (!options?.resumeFromQuery) {
+      ServerGameService.assertConfrontationAnimationComplete(gameState);
+    }
     // Find card in hand or on field
     const player = gameState.players[playerId];
     let card: Card | undefined;
@@ -3212,13 +3279,14 @@ export const ServerGameService = {
 
   async passConfrontation(gameState: GameState, playerId: string, onUpdate?: (state: GameState) => Promise<void>) {
     if (gameState.phase !== 'COUNTERING') return;
+    ServerGameService.assertConfrontationAnimationComplete(gameState);
     if (gameState.pendingQuery) {
       if (gameState.pendingQuery.playerUid === playerId) {
         throw new Error('请先完成当前选择，再继续对抗。');
       }
       return gameState;
     }
-    if (gameState.priorityPlayerId !== playerId) throw new Error('尚未轮到你进行响应');
+    if (gameState.priorityPlayerId !== playerId) throw new Error('尚未轮到你进行对抗');
 
     const player = gameState.players[playerId];
     const topItem = gameState.counterStack[gameState.counterStack.length - 1];
@@ -3297,12 +3365,11 @@ export const ServerGameService = {
     while (gameState.counterStack.length > 0) {
       const topItem = gameState.counterStack[gameState.counterStack.length - 1];
 
-      // 1. Visual Highlight: Show which item is being processed
       gameState.currentProcessingItem = topItem;
+      ServerGameService.markConfrontationChainAnimation(gameState, 1500, 'resolve');
       await emitVisualUpdate();
 
-      // Keep the visual highlight readable after it has been broadcast to clients.
-      await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getStackVisualDelayMs());
+      await ServerGameService.waitForVisualDelay(gameState, 1500);
 
       const stackItem = gameState.counterStack.pop();
       if (!stackItem) continue;
@@ -3677,8 +3744,8 @@ export const ServerGameService = {
       type: 'ASK_TRIGGER',
       playerUid,
       options: [],
-      title: '发动提示',
-      description: `是否发动 ${getCardIdentity(gameState, playerUid, card)} [${card.fullName}] 的诱发效果：${effect.description}`,
+      title: `是否发动${ServerGameService.getTriggerZoneLabel(triggerLocation)}${card.fullName}的诱发效果？`,
+      description: `是否发动${ServerGameService.getTriggerZoneLabel(triggerLocation)}${card.fullName}的诱发效果？`,
       minSelections: 1,
       maxSelections: 1,
       callbackKey: 'TRIGGER_CHOICE',
@@ -3805,7 +3872,7 @@ export const ServerGameService = {
     if (!query || query.type.replace(/-/g, '_').toUpperCase() !== 'SELECT_CHOICE') return selections;
 
     return selections.map(selection => {
-      const option = query.options?.find(opt => opt.id === selection);
+      const option = query.options?.find(opt => opt.id === selection || opt.selectionId === selection);
       return option?.value ?? option?.id ?? selection;
     });
   },
@@ -3851,6 +3918,7 @@ export const ServerGameService = {
           effectCostResolved: !!query.context?.effectCostResolved
         }
       );
+      if (onUpdate) await onUpdate(gameState);
       return gameState;
     }
 
@@ -4258,14 +4326,14 @@ export const ServerGameService = {
       if (currentSelections[0] !== 'YES' || !sourceCard) {
         gameState.logs.push(`[抽牌阶段] ${gameState.players[playerUid].displayName} 选择通常抽卡。`);
         (gameState.players[playerUid] as any).skipDrawReplacementOnce = gameState.turnCount;
-        await ServerGameService.executeDrawPhase(gameState, gameState.players[playerUid]);
+        await ServerGameService.executeDrawPhase(gameState, gameState.players[playerUid], onUpdate);
         return gameState;
       }
 
       const player = gameState.players[playerUid];
       const candidates = player.grave.filter(Boolean) as Card[];
       if (candidates.length < 2) {
-        await ServerGameService.executeDrawPhase(gameState, player);
+        await ServerGameService.executeDrawPhase(gameState, player, onUpdate);
         return gameState;
       }
 
@@ -4302,6 +4370,11 @@ export const ServerGameService = {
         }
       });
       gameState.logs.push(`[${sourceCard?.fullName || '替代抽卡'}] 代替通常抽卡，将2张墓地卡放置到卡组底。`);
+      if (onUpdate) {
+        gameState.animationUntil = Date.now() + 1200;
+        await onUpdate(gameState);
+        await new Promise(resolve => setTimeout(resolve, 1200));
+      }
       gameState.phase = 'EROSION';
       await ServerGameService.executeErosionPhase(gameState, player);
       return gameState;
@@ -7154,9 +7227,6 @@ export const ServerGameService = {
       }
     }
 
-    // Keep triggered effects readable while normal stack resolution stays fast.
-    await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getTriggerVisualDelayMs());
-
     // 4. Atomic Effects
     const executed = await ServerGameService.executeWithDeclaredTargets(
       gameState,
@@ -7196,6 +7266,7 @@ export const ServerGameService = {
         text: '诱发效果结算完成。',
         metadata: { effectIndex, effectId: effect.id }
       });
+      await ServerGameService.waitForVisualDelay(gameState, ServerGameService.getTriggerVisualDelayMs());
     }
 
     // 7. Cleanup highlight
@@ -7259,13 +7330,13 @@ export const ServerGameService = {
         gameState.logs.push(`[阶段切换] 进入开始阶段`);
         await ServerGameService.dispatchEventAndDrainTriggers(gameState, { type: 'PHASE_CHANGED', data: { phase: 'START' } }, onUpdate);
         if (gameState.pendingQuery || gameState.phase !== 'START') return gameState;
-        await ServerGameService.executeStartPhase(gameState, turnPlayer);
+        await ServerGameService.executeStartPhase(gameState, turnPlayer, onUpdate);
         break;
       case 'START':
         gameState.phase = 'DRAW';
         gameState.logs.push(`[阶段切换] 进入抽牌阶段`);
         EventEngine.dispatchEvent(gameState, { type: 'PHASE_CHANGED', data: { phase: 'DRAW' } });
-        await ServerGameService.executeDrawPhase(gameState, turnPlayer);
+        await ServerGameService.executeDrawPhase(gameState, turnPlayer, onUpdate);
         break;
       case 'DRAW':
         gameState.phase = 'EROSION';
@@ -7453,7 +7524,7 @@ export const ServerGameService = {
     return gameState;
   },
 
-  async executeStartPhase(gameState: GameState, player: PlayerState) {
+  async executeStartPhase(gameState: GameState, player: PlayerState, onUpdate?: (state: GameState) => Promise<void>) {
     // console.log(`[ServerGameService] executeStartPhase for ${player.displayName}`);
 
     // Update public hand duration
@@ -7576,10 +7647,49 @@ export const ServerGameService = {
     // Automatically move to DRAW phase
     gameState.phase = 'DRAW';
     gameState.phaseTimerStart = Date.now();
-    await ServerGameService.executeDrawPhase(gameState, player);
+    await ServerGameService.executeDrawPhase(gameState, player, onUpdate);
   },
 
-  async executeDrawPhase(gameState: GameState, player: PlayerState) {
+  async completeDrawAnimationResume(gameState: GameState, player: PlayerState, onUpdate?: (state: GameState) => Promise<void>) {
+    const resume = gameState.drawAnimationResume;
+    if (!resume || resume.playerUid !== player.uid) return false;
+
+    const pendingCardId = resume.cardId || resume.card?.gamecardId;
+    const deckIndex = pendingCardId
+      ? player.deck.findIndex(card => card.gamecardId === pendingCardId)
+      : player.deck.length - 1;
+    const card = deckIndex >= 0 ? player.deck.splice(deckIndex, 1)[0] : undefined;
+
+    if (!card) {
+      delete gameState.drawAnimationResume;
+      delete gameState.animationHint;
+      delete gameState.animationUntil;
+      gameState.logs.push(`[抽卡异常] ${player.displayName} 的待抽卡牌已不在卡组中。`);
+      return false;
+    }
+
+    card.cardlocation = 'HAND';
+    player.hand.push(card);
+    gameState.logs.push(`${player.displayName} 抽了一张卡`);
+    EventEngine.dispatchEvent(gameState, {
+      type: 'CARD_DRAWN',
+      playerUid: player.uid,
+      data: { cardId: card.gamecardId }
+    });
+    await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+
+    delete gameState.drawAnimationResume;
+    delete gameState.animationUntil;
+    if (gameState.pendingQuery) {
+      return true;
+    }
+    gameState.phase = 'EROSION';
+    await ServerGameService.executeErosionPhase(gameState, player);
+    delete gameState.animationHint;
+    return true;
+  },
+
+  async executeDrawPhase(gameState: GameState, player: PlayerState, onUpdate?: (state: GameState) => Promise<void>) {
     if (player.skipDrawPhase) {
       player.skipDrawPhase = false;
       gameState.logs.push(`${player.displayName} 的抽牌阶段被跳过了。`);
@@ -7652,6 +7762,8 @@ export const ServerGameService = {
         await ServerGameService.checkTriggeredEffects(gameState);
       }
     } else {
+    const drawnCard = player.deck[player.deck.length - 1];
+    if (!drawnCard) {
       // 1. During the card drawing stage, there are no cards available for drawing
       gameState.logs.push(`[游戏结束] ${player.displayName} 在抽牌阶段卡组已空，判负。`);
       gameState.gameStatus = 2;
@@ -7660,9 +7772,37 @@ export const ServerGameService = {
       return; // Stop processing further phases
     }
 
-    // Automatically move to EROSION phase
-    gameState.phase = 'EROSION';
-    await ServerGameService.executeErosionPhase(gameState, player);
+    gameState.animationUntil = Date.now() + 2000;
+    gameState.animationHint = {
+      id: `draw_${player.uid}_${drawnCard.gamecardId}_${Date.now()}`,
+      type: 'DRAW_CARD',
+      playerUid: player.uid,
+      cardId: drawnCard.gamecardId,
+      card: { ...drawnCard, cardlocation: 'HAND' },
+      revealTo: 'owner',
+      durationMs: 2000,
+      createdAt: Date.now()
+    };
+    gameState.drawAnimationResume = {
+      playerUid: player.uid,
+      cardId: drawnCard.gamecardId,
+      card: { ...drawnCard, cardlocation: 'HAND' },
+      resumeAt: gameState.animationUntil
+    };
+
+    if (onUpdate) {
+      await onUpdate(gameState);
+    }
+    if (gameState.pendingQuery) {
+      return;
+    }
+    if (onUpdate) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await ServerGameService.completeDrawAnimationResume(gameState, player, onUpdate);
+      return;
+    } else {
+      return;
+    }
   },
 
   async executeErosionPhase(gameState: GameState, player: PlayerState) {
@@ -9339,6 +9479,7 @@ export const ServerGameService = {
     const bot = gameState.players[playerUid];
     if (!bot) return;
     if (gameState.pendingQuery && gameState.pendingQuery.playerUid !== playerUid) return;
+    if (ServerGameService.isVisualAnimationPending(gameState)) return;
 
     const difficulty = ServerGameService.getBotDifficulty(gameState, playerUid);
     const profile = ServerGameService.getBotProfile(gameState, playerUid);
@@ -9515,7 +9656,7 @@ export const ServerGameService = {
 
     // Handle Shenyi Choice (Bot chooses to confirm)
     if (gameState.phase === 'SHENYI_CHOICE' && gameState.priorityPlayerId === playerUid) {
-      await ServerGameService.advancePhase(gameState, 'CONFIRM_SHENYI', playerUid);
+      await ServerGameService.advancePhase(gameState, 'CONFIRM_SHENYI', playerUid, onUpdate);
       return;
     }
 
@@ -9699,7 +9840,7 @@ export const ServerGameService = {
             askConfront: gameState.battleState.askConfront,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid, onUpdate);
         return;
       }
     }
@@ -9873,7 +10014,7 @@ export const ServerGameService = {
             forcedAttack: true,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
         return;
       }
 
@@ -9924,7 +10065,7 @@ export const ServerGameService = {
         });
         delete (bot as any).lastBotPlayFailure;
         delete (bot as any).botHeldUnfavorableAttackTurn;
-        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid, onUpdate);
         return;
       }
 
@@ -9952,7 +10093,7 @@ export const ServerGameService = {
               note: describeAttackNote(card),
             })),
           });
-          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
           return;
         }
 
@@ -9967,7 +10108,7 @@ export const ServerGameService = {
           },
         });
         delete (bot as any).lastBotPlayFailure;
-        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid, onUpdate);
         return;
       }
 
@@ -10000,7 +10141,7 @@ export const ServerGameService = {
               note: describeAttackNote(card),
             })),
           });
-          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
           return;
         }
       }
@@ -10035,7 +10176,7 @@ export const ServerGameService = {
               note: describeAttackNote(card),
             })),
           });
-          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+          await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
           return;
         }
       }
@@ -10371,7 +10512,7 @@ export const ServerGameService = {
             note: describeAttackNote(card),
           })),
         });
-        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_BATTLE', playerUid, onUpdate);
       } else {
         // console.log('[Bot] Ending Turn');
         ServerGameService.recordAiDecision(gameState, playerUid, {
@@ -10390,7 +10531,7 @@ export const ServerGameService = {
           },
         });
         delete (bot as any).lastBotPlayFailure;
-        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLARE_END', playerUid, onUpdate);
       }
       return;
     }
@@ -10611,7 +10752,7 @@ export const ServerGameService = {
             planMode: turnPlan?.mode,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'RETURN_MAIN', playerUid);
+        await ServerGameService.advancePhase(gameState, 'RETURN_MAIN', playerUid, onUpdate);
       }
       return;
     }
@@ -10639,7 +10780,7 @@ export const ServerGameService = {
             attackers: gameState.battleState?.attackers?.length || 0,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'PROPOSE_DAMAGE_CALCULATION', playerUid);
+        await ServerGameService.advancePhase(gameState, 'PROPOSE_DAMAGE_CALCULATION', playerUid, onUpdate);
       } else if (gameState.battleState.askConfront === 'ASKING_TURN_PLAYER') {
         // Player declined, bot now asked if it wants to counter? 
         // Bot usually just declines to get to resolution.
@@ -10652,7 +10793,7 @@ export const ServerGameService = {
             askConfront: gameState.battleState.askConfront,
           },
         });
-        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid);
+        await ServerGameService.advancePhase(gameState, 'DECLINE_CONFRONTATION', playerUid, onUpdate);
       }
       return;
     }

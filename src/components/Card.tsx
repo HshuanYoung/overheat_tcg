@@ -126,7 +126,6 @@ const CardComponentImpl: React.FC<CardProps> = ({
   return (
     <motion.div
       initial={false}
-      whileHover={disableZoom ? undefined : { scale: 1.02, y: -2 }}
       whileTap={disableZoom ? undefined : { scale: 0.98 }}
       onClick={handleCardClick}
       className={clsx(
@@ -145,7 +144,7 @@ const CardComponentImpl: React.FC<CardProps> = ({
         <img
           src={imageUrl}
           alt={card.fullName || fullImageUrl}
-          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="absolute inset-0 w-full h-full object-cover"
           loading="lazy"
           decoding="async"
           draggable={false}

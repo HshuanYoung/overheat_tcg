@@ -450,6 +450,7 @@ export interface StackItem {
   timestamp: number;
   isNegated?: boolean;
   isInterrupted?: boolean;
+  autoSingleChainShown?: boolean;
   skipDefense?: boolean;
 }
 
@@ -476,6 +477,7 @@ export interface EffectQuery {
     zoneLabel?: string;
     disabled?: boolean;
     disabledReason?: string;
+    cardWidth?: 'default' | 'card';
   }[];
   title: string;
   description: string;
@@ -636,6 +638,24 @@ export interface GameState {
   aiDecisionLogs?: AiDecisionLog[];
   pendingShenyi?: PendingShenyi;
   mulliganRevealStartedAt?: number;
+  animationUntil?: number;
+  animationHint?: {
+    id: string;
+    type: 'DRAW_CARD' | 'CONFRONTATION_CHAIN';
+    playerUid: string;
+    cardId?: string;
+    card?: Card;
+    revealTo?: 'owner' | 'all' | 'hidden';
+    durationMs?: number;
+    createdAt: number;
+  };
+  drawAnimationResume?: {
+    playerUid: string;
+    cardId?: string;
+    card?: Card;
+    resumeAt: number;
+    visualStateEmitted?: boolean;
+  };
   turnTimerLimit?: number; // Total seconds for turn timer (180-999)
   publicReveal?: {
     id: string;

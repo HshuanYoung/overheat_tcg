@@ -66,6 +66,33 @@ const SLOW_GAME_ACTION_MS = Number(process.env.SLOW_GAME_ACTION_MS || 500);
 const SLOW_STATE_SYNC_MS = Number(process.env.SLOW_STATE_SYNC_MS || 250);
 const FORCE_LOGOUT_REASON = '账号已在其他设备登录';
 
+function getBotVisualAnimationDelayMs(gameState: any, now = Date.now()) {
+    if (ServerGameService.shouldSkipVisualDelay(gameState)) return 0;
+    const animationUntil = Number(gameState.animationUntil || 0);
+    const drawResumeAt = Number(gameState.drawAnimationResume?.resumeAt || 0);
+    const waitUntil = Math.max(animationUntil, drawResumeAt);
+    if (waitUntil > now) return waitUntil - now + 250;
+    return gameState.drawAnimationResume ? 250 : 0;
+}
+
+function scheduleBotMoveRetry(gameId: string, delayMs: number) {
+    if (botMovingGames.has(gameId)) return;
+    botMovingGames.add(gameId);
+    setTimeout(async () => {
+        try {
+            const stateRows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
+            if (stateRows.length === 0) return;
+            const latestState = typeof stateRows[0].state === 'string' ? JSON.parse(stateRows[0].state) : stateRows[0].state;
+            ServerGameService.hydrateGameState(latestState);
+            botMovingGames.delete(gameId);
+            handleBotMove(latestState, gameId);
+        } catch (err) {
+            console.error('[Bot] scheduleBotMoveRetry error:', err);
+            botMovingGames.delete(gameId);
+        }
+    }, Math.max(250, delayMs));
+}
+
 async function insertGame(gameId: string, gameState: any, status = 0) {
     const now = Date.now();
     await pool.query(
@@ -508,6 +535,11 @@ async function handleBotMove(gameState: any, gameId: string) {
     const bot = gameState.players['BOT_PLAYER'];
     if (!bot) return;
     if (gameState.pendingQuery && gameState.pendingQuery.playerUid !== 'BOT_PLAYER') return;
+    const visualDelayMs = getBotVisualAnimationDelayMs(gameState);
+    if (visualDelayMs > 0) {
+        scheduleBotMoveRetry(gameId, visualDelayMs);
+        return;
+    }
 
     // The bot should move if it's its turn, if it's being asked for a confrontation response, if it has priority, or has a query
     const isBotAsked = gameState.battleState && gameState.battleState.askConfront === 'ASKING_OPPONENT';
@@ -521,6 +553,11 @@ async function handleBotMove(gameState: any, gameId: string) {
     botMovingGames.add(gameId);
 
     // Use a delay to simulate thinking and allow final state propagation
+    const now = Date.now();
+    const delay = gameState.animationUntil && gameState.animationUntil > now 
+        ? Math.max(1600, gameState.animationUntil - now + 500) 
+        : 1600;
+
     setTimeout(async () => {
         try {
             await withGameLock(gameId, async () => {
@@ -533,6 +570,12 @@ async function handleBotMove(gameState: any, gameId: string) {
                     }
                     const currentGameState = typeof stateRows[0].state === 'string' ? JSON.parse(stateRows[0].state) : stateRows[0].state;
                     ServerGameService.hydrateGameState(currentGameState);
+                    const visualDelayMs = getBotVisualAnimationDelayMs(currentGameState);
+                    if (visualDelayMs > 0) {
+                        botMovingGames.delete(gameId);
+                        scheduleBotMoveRetry(gameId, visualDelayMs);
+                        return;
+                    }
 
                     const syncCallback = async (state: any) => {
                         await syncGameStateForCallback(gameId, state, 'botMove:callback');
@@ -586,13 +629,17 @@ async function handleBotMove(gameState: any, gameId: string) {
             console.error('[Bot] handleBotMove outer error:', err);
             botMovingGames.delete(gameId);
         }
-    }, 1000);
+    }, delay);
 }
 
 function triggerBotIfNeeded(gameState: any, gameId: string) {
     const bot = gameState.players['BOT_PLAYER'];
     if (!bot) return;
     if (gameState.pendingQuery && gameState.pendingQuery.playerUid !== 'BOT_PLAYER') return;
+    if (getBotVisualAnimationDelayMs(gameState) > 0) {
+        handleBotMove(gameState, gameId);
+        return;
+    }
 
     const currentPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
     const isBotAsked = gameState.battleState && gameState.battleState.askConfront === 'ASKING_OPPONENT';
@@ -1417,46 +1464,57 @@ function decideFirstPlayerChoiceTimeout(gameState: any) {
     chooseFirstPlayer(gameState, chooserUid, opponentUid);
 }
 
+const MULLIGAN_REVEAL_TOTAL_MS = 3600;
+
+async function finalizeMulliganReveal(gameId: string, expectedStartedAt?: number): Promise<boolean> {
+    const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
+    if (rows.length === 0) return false;
+
+    const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
+    ServerGameService.hydrateGameState(gameState);
+
+    const startedAt = Number(gameState.mulliganRevealStartedAt || 0);
+    const allDone = Object.values(gameState.players || {}).every((p: any) => p.mulliganDone);
+    if (
+        gameState.phase !== 'MULLIGAN' ||
+        !startedAt ||
+        (expectedStartedAt !== undefined && startedAt !== expectedStartedAt) ||
+        Date.now() - startedAt < MULLIGAN_REVEAL_TOTAL_MS ||
+        !allDone
+    ) {
+        return false;
+    }
+
+    gameState.phase = 'START';
+    gameState.turnCount = 1;
+    delete gameState.mulliganRevealStartedAt;
+
+    const currentUid = gameState.playerIds[gameState.currentTurnPlayer];
+    gameState.playerIds.forEach((uid: string) => {
+        gameState.players[uid].isTurn = (uid === currentUid);
+        if (gameState.players[uid]?.mulliganReveal) {
+            delete gameState.players[uid].mulliganReveal;
+        }
+    });
+
+    const firstPlayerName = gameState.players[currentUid]?.displayName || '玩家';
+    const playerNames = gameState.playerIds.map((uid: string) => gameState.players[uid]?.displayName || '玩家');
+    addBattleLog(gameState, {
+        category: 'SYSTEM',
+        actorUid: currentUid,
+        actorName: firstPlayerName,
+        text: `对战开始：${playerNames[0]} vs ${playerNames[1]}，${firstPlayerName} 先攻。`
+    });
+    await advancePhase(gameState, gameId, currentUid);
+    return true;
+}
+
 async function finishMulliganAfterReveal(gameId: string, expectedStartedAt: number) {
     setTimeout(async () => {
         await withGameLock(gameId, async () => {
-            const rows = await pool.query('SELECT state FROM games WHERE id = ?', [gameId]);
-            if (rows.length === 0) return;
-
-            const gameState = typeof rows[0].state === 'string' ? JSON.parse(rows[0].state) : rows[0].state;
-            ServerGameService.hydrateGameState(gameState);
-
-            if (
-                gameState.phase !== 'MULLIGAN' ||
-                gameState.mulliganRevealStartedAt !== expectedStartedAt ||
-                !Object.values(gameState.players || {}).every((p: any) => p.mulliganDone)
-            ) {
-                return;
-            }
-
-            gameState.phase = 'START';
-            gameState.turnCount = 1;
-            delete gameState.mulliganRevealStartedAt;
-
-            const currentUid = gameState.playerIds[gameState.currentTurnPlayer];
-            gameState.playerIds.forEach((uid: string) => {
-                gameState.players[uid].isTurn = (uid === currentUid);
-                if (gameState.players[uid]?.mulliganReveal) {
-                    delete gameState.players[uid].mulliganReveal;
-                }
-            });
-
-            const firstPlayerName = gameState.players[currentUid]?.displayName || '玩家';
-            const playerNames = gameState.playerIds.map((uid: string) => gameState.players[uid]?.displayName || '玩家');
-            addBattleLog(gameState, {
-                category: 'SYSTEM',
-                actorUid: currentUid,
-                actorName: firstPlayerName,
-                text: `对战开始：${playerNames[0]} vs ${playerNames[1]}，${firstPlayerName} 先攻。`
-            });
-            await advancePhase(gameState, gameId, currentUid);
+            await finalizeMulliganReveal(gameId, expectedStartedAt);
         });
-    }, 3600);
+    }, MULLIGAN_REVEAL_TOTAL_MS);
 }
 
 async function saveMatchLog(gameState: any, gameId?: string): Promise<boolean> {
@@ -1523,6 +1581,10 @@ type SyncStateOptions = {
     persist?: boolean;
 };
 
+function cloneStateForEmit(gameState: any) {
+    return JSON.parse(JSON.stringify(gameState));
+}
+
 async function syncAndSaveState(gameId: string, gameState: any, options: SyncStateOptions = {}) {
     if (!gameState) return;
     const totalStart = process.hrtime.bigint();
@@ -1557,7 +1619,10 @@ async function syncAndSaveState(gameId: string, gameState: any, options: SyncSta
 
     // 3. Emit full state to clients (they need logs for display)
     const emitStart = process.hrtime.bigint();
-    io.to(gameId).emit('gameStateUpdate', gameState);
+    const emitState = cloneStateForEmit(gameState);
+    if (emitState.animationHint) {
+    }
+    io.to(gameId).emit('gameStateUpdate', emitState);
     timings.emitMs = elapsedMs(emitStart);
 
     if (options.persist === false) {
@@ -1699,7 +1764,7 @@ setInterval(async () => {
             ? ` OR id IN (${activeRoomIds.map(() => '?').join(',')})`
             : '';
         const games = await pool.query(
-            `SELECT id FROM games WHERE status = 0 AND (updated_at IS NULL OR updated_at >= ?${activeRoomParams})`,
+            `SELECT id FROM games WHERE (status = 0 AND (updated_at IS NULL OR updated_at >= ?))${activeRoomParams}`,
             [Date.now() - ACTIVE_GAME_SCAN_WINDOW_MS, ...activeRoomIds]
         );
         for (const row of games) {
@@ -1733,7 +1798,51 @@ setInterval(async () => {
                         stateChanged = true;
                     }
                 } else if (gameState.phase === 'MULLIGAN') {
-                    // Mulligan countdown is visual-only here; player choices still drive state transitions.
+                    const revealStartedAt = Number(gameState.mulliganRevealStartedAt || 0);
+                    const allMulliganDone = Object.values(gameState.players || {}).every((p: any) => p.mulliganDone);
+                    if (revealStartedAt && allMulliganDone && now - revealStartedAt >= MULLIGAN_REVEAL_TOTAL_MS) {
+                        await finalizeMulliganReveal(gameId, revealStartedAt);
+                        return;
+                    }
+                } else if (gameState.phase === 'DRAW' && gameState.drawAnimationResume && !gameState.pendingQuery) {
+                    const resumeAt = Number(gameState.drawAnimationResume.resumeAt || 0);
+                    if (!gameState.drawAnimationResume.visualStateEmitted) {
+                        gameState.drawAnimationResume.visualStateEmitted = true;
+                        await syncAndSaveState(gameId, gameState, { source: 'drawAnimationResume:visualFrame' });
+                        return;
+                    }
+                    if (resumeAt && now >= resumeAt) {
+                        const playerUid = gameState.drawAnimationResume.playerUid || gameState.playerIds[gameState.currentTurnPlayer];
+                        const player = gameState.players[playerUid];
+                        if (!player) {
+                            delete gameState.drawAnimationResume;
+                            delete gameState.animationHint;
+                            delete gameState.animationUntil;
+                            await syncAndSaveState(gameId, gameState, { source: 'drawAnimationResume:missingPlayer' });
+                            return;
+                        }
+
+                        await ServerGameService.completeDrawAnimationResume(gameState, player, async () => {});
+                        await syncAndSaveState(gameId, gameState, { source: 'drawAnimationResume' });
+                        triggerBotIfNeeded(gameState, gameId);
+                        return;
+                    }
+                } else if (
+                    gameState.phase === 'COUNTERING' &&
+                    !gameState.pendingQuery &&
+                    !gameState.isResolvingStack &&
+                    !gameState.currentProcessingItem &&
+                    gameState.animationHint?.type === 'CONFRONTATION_CHAIN' &&
+                    Number(gameState.animationUntil || 0) > 0 &&
+                    now >= Number(gameState.animationUntil || 0)
+                ) {
+                    delete gameState.animationUntil;
+                    await ServerGameService.applyConfrontationStrategy(gameState, async (state) => {
+                        await syncGameStateForCallback(gameId, state, 'timer:confrontationAnimationComplete');
+                    });
+                    await syncAndSaveState(gameId, gameState, { source: 'confrontationAnimationComplete' });
+                    triggerBotIfNeeded(gameState, gameId);
+                    return;
                 } else {
                     activePlayerUid = getActiveTimerPlayerUid(gameState);
                 }
@@ -4967,7 +5076,7 @@ io.on('connection', (socket) => {
                         }
                     } catch (err: any) {
                         socket.emit('error', err.message || '无法加入该席位');
-                        socket.emit('gameStateUpdate', gameState);
+                        socket.emit('gameStateUpdate', cloneStateForEmit(gameState));
                         return;
                     }
                 }
@@ -5071,7 +5180,7 @@ io.on('connection', (socket) => {
                 }
 
                 // Always emit current state to the joining socket so they don't get stuck on "Syncing Battlefield"
-                socket.emit('gameStateUpdate', gameState);
+                socket.emit('gameStateUpdate', cloneStateForEmit(gameState));
             });
         } catch (err) {
             console.error('[Socket] joinGame exception:', err);
@@ -5175,8 +5284,20 @@ io.on('connection', (socket) => {
 
                 if (action === 'RPS_CHOICE') {
                     submitRpsChoice(gameState, myUid, payload?.choice);
+                    actionTimings.executeActionMs = elapsedMs(executeStart);
+                    await syncAndSaveState(gameId, gameState, {
+                        recalc: false,
+                        source: action
+                    });
+                    return;
                 } else if (action === 'CHOOSE_FIRST_PLAYER') {
                     chooseFirstPlayer(gameState, myUid, payload?.firstPlayerUid);
+                    actionTimings.executeActionMs = elapsedMs(executeStart);
+                    await syncAndSaveState(gameId, gameState, {
+                        recalc: false,
+                        source: action
+                    });
+                    return;
                 } else if (action === 'MULLIGAN') {
                     if (gameState.phase !== 'MULLIGAN') return;
                     const selectedIds: string[] = payload || [];
@@ -5240,7 +5361,18 @@ io.on('connection', (socket) => {
                     }
                 } else if (action === 'PLAY_CARD') {
                     const { cardId, paymentSelection } = payload;
+                    const wasInPlayZone = player.playZone?.some((card: Card | null) => card?.gamecardId === cardId);
                     await ServerGameService.playCard(gameState, myUid, cardId, paymentSelection);
+                    const isNowInPlayZone = player.playZone?.some((card: Card | null) => card?.gamecardId === cardId);
+                    if (!wasInPlayZone && isNowInPlayZone) {
+                        const ackStart = process.hrtime.bigint();
+                        await syncAndSaveState(gameId, gameState, {
+                            recalc: false,
+                            persist: false,
+                            source: `${action}:playZoneAck`
+                        });
+                        actionTimings.ackEmitMs = elapsedMs(ackStart);
+                    }
                 } else if (action === 'ATTACK') {
                     const { attackerIds, isAlliance, targetId, skipDefense } = payload;
                     await ServerGameService.declareAttack(gameState, myUid, attackerIds, isAlliance, targetId, skipDefense, syncCallback);
@@ -5267,6 +5399,13 @@ io.on('connection', (socket) => {
                     actionTimings.ackEmitMs = elapsedMs(ackStart);
                 } else if (action === 'PASS_CONFRONTATION') {
                     await ServerGameService.passConfrontation(gameState, myUid, syncCallback);
+                    const ackStart = process.hrtime.bigint();
+                    await syncAndSaveState(gameId, gameState, {
+                        recalc: false,
+                        persist: false,
+                        source: `${action}:ack`
+                    });
+                    actionTimings.ackEmitMs = elapsedMs(ackStart);
                 } else if (action === 'RESOLVE_PLAY') {
                     if (gameState.phase === 'COUNTERING') {
                         await ServerGameService.resolveCounterStack(gameState, syncCallback);
@@ -5306,6 +5445,12 @@ io.on('connection', (socket) => {
                             triggerBotIfNeeded(gameState, gameId);
                         }
                         return; // advancePhase already calls syncAndSaveState
+                    }
+                } else if (action === 'ADD_ANIMATION_TIME') {
+                    const duration = Math.min(5000, Number(payload?.duration || 0));
+                    if (duration > 0) {
+                        gameState.phaseTimerStart = (gameState.phaseTimerStart || Date.now()) + duration;
+                        gameState.animationUntil = Date.now() + duration;
                     }
                 } else if (action === 'SURRENDER') {
                     await ServerGameService.surrender(gameState, myUid);

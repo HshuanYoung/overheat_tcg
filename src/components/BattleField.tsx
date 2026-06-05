@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
 import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation, GAME_TIMEOUTS, SandboxEditableZone, SandboxPlayerKey } from '../types/game';
@@ -22,6 +22,8 @@ import { BattleLogPanel } from './BattleLogPanel';
 import { battleLogText } from '../lib/battleLog';
 import { getCardSkinUrl } from '../data/cardSkins';
 import { useCardSkinSettings } from '../hooks/useCardSkinSettings';
+import { BattleAnimationLayer, battleAnimationGroupDuration, getBattleAnimationPlaybackGroup } from './BattleAnimationLayer';
+import { useBattleAnimationPreference, useBattleAnimations } from '../hooks/useBattleAnimations';
 
 const EFFECT_TYPE_LABELS: Record<string, string> = {
   ACTIVATE: '主动',
@@ -30,105 +32,11 @@ const EFFECT_TYPE_LABELS: Record<string, string> = {
   CONTINUOUS: '永续'
 };
 
-const ACTION_TYPE_LABELS: Record<string, string> = {
-  PHASE_END: '阶段结束请求'
-};
+const EROSION_NO_CARD_ID = '__NO_EROSION_CARD__';
 
 const getEffectTypeLabel = (type?: string | null) => {
   if (!type) return '效果';
   return EFFECT_TYPE_LABELS[type] || type;
-};
-
-const getActionTypeLabel = (type?: string | null) => {
-  if (!type) return '处理中';
-  return ACTION_TYPE_LABELS[type] || type.replace(/_/g, ' ');
-};
-
-const getPhaseRequestMeta = (item?: StackItem | null) => {
-  if (!item || item.type !== 'PHASE_END') {
-    return {
-      title: getActionTypeLabel(item?.type),
-      subtitle: '行动请求',
-      Icon: Send,
-      tone: 'orange'
-    };
-  }
-
-  if (item.nextPhase === 'DAMAGE_CALCULATION') {
-    return {
-      title: '结束战斗自由',
-      subtitle: '进入伤害计算',
-      Icon: Sword,
-      tone: 'red'
-    };
-  }
-
-  if (item.nextPhase === 'DISCARD') {
-    return {
-      title: '结束回合',
-      subtitle: '进入结束处理',
-      Icon: Flag,
-      tone: 'blue'
-    };
-  }
-
-  return {
-    title: '阶段切换请求',
-    subtitle: item.nextPhase ? getPhaseLabel(item.nextPhase) : '等待响应',
-    Icon: Send,
-    tone: 'orange'
-  };
-};
-
-const PhaseRequestCard: React.FC<{ item: StackItem; className?: string }> = ({ item, className }) => {
-  const meta = getPhaseRequestMeta(item);
-  const Icon = meta.Icon;
-  const toneClass = meta.tone === 'red'
-    ? 'border-red-400/70 bg-red-950/80 text-red-100 shadow-[0_0_24px_rgba(239,68,68,0.35)]'
-    : meta.tone === 'blue'
-      ? 'border-sky-400/70 bg-sky-950/80 text-sky-100 shadow-[0_0_24px_rgba(56,189,248,0.3)]'
-      : 'border-[#f27d26]/70 bg-zinc-950/90 text-orange-100 shadow-[0_0_24px_rgba(242,125,38,0.28)]';
-
-  return (
-    <div className={cn(
-      'relative flex aspect-[3/4] w-full flex-col items-center justify-center overflow-hidden rounded-xl border-2 p-2 text-center',
-      toneClass,
-      className
-    )}>
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.16),transparent_36%,rgba(255,255,255,0.05))]" />
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/35 shadow-inner md:h-12 md:w-12">
-        <Icon className="h-5 w-5 md:h-7 md:w-7" />
-      </div>
-      <div className="relative mt-2 text-[10px] font-black leading-tight md:text-sm">
-        {meta.title}
-      </div>
-      <div className="relative mt-1 text-[7px] font-bold uppercase tracking-widest text-white/55 md:text-[9px]">
-        {meta.subtitle}
-      </div>
-    </div>
-  );
-};
-
-const AttackRequestCard: React.FC<{ item: StackItem; className?: string }> = ({ item, className }) => {
-  const isAlliance = !!item.isAlliance || (item.attackerIds?.length || 0) > 1;
-
-  return (
-    <div className={cn(
-      'relative flex aspect-[3/4] w-full flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-red-400/70 bg-red-950/80 p-2 text-center text-red-100 shadow-[0_0_24px_rgba(239,68,68,0.35)]',
-      className
-    )}>
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.16),transparent_36%,rgba(255,255,255,0.05))]" />
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/35 shadow-inner md:h-12 md:w-12">
-        <Sword className="h-5 w-5 md:h-7 md:w-7" />
-      </div>
-      <div className="relative mt-2 text-[10px] font-black leading-tight md:text-sm">
-        {isAlliance ? '联军攻击' : '宣告攻击'}
-      </div>
-      <div className="relative mt-1 text-[7px] font-bold uppercase tracking-widest text-white/55 md:text-[9px]">
-        单位攻击
-      </div>
-    </div>
-  );
 };
 
 const MulliganRevealOverlay: React.FC<{
@@ -329,7 +237,6 @@ export const BattleField: React.FC = () => {
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [showAttackModal, setShowAttackModal] = useState(false);
   const [selectedErosionCardId, setSelectedErosionCardId] = useState<string | null>(null);
-  const [erosionChoice, setErosionChoice] = useState<'A' | 'C' | null>(null);
   const [selectedQueryIds, setSelectedQueryIds] = useState<string[]>([]);
   const [favoriteBackId, setFavoriteBackId] = useState<string>('default');
   const [showLogSidebar, setShowLogSidebar] = useState(true);
@@ -373,8 +280,10 @@ export const BattleField: React.FC = () => {
   const [interruptionNotice, setInterruptionNotice] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [isPopupHidden, setIsPopupHidden] = useState(false);
+  const [confrontationPromptBlockedUntil, setConfrontationPromptBlockedUntil] = useState(0);
+  const [queryHandoff, setQueryHandoff] = useState<{ query: EffectQuery; clearAt: number } | null>(null);
   const [dismissedPublicRevealId, setDismissedPublicRevealId] = useState<string | null>(null);
-  const [hoveredPopupCard, setHoveredPopupCard] = useState<Card | null>(null);
+  const [hoverPreviewCard, setHoverPreviewCard] = useState<Card | null>(null);
   const lastStrategyUpdateRef = useRef<number>(0);
   const lastJoinEmitRef = useRef<number>(0);
   const [pregameNow, setPregameNow] = useState(Date.now());
@@ -385,6 +294,9 @@ export const BattleField: React.FC = () => {
   const [debugMoveTargetPlayerUid, setDebugMoveTargetPlayerUid] = useState<string>('');
   const [debugMoveTargetIndex, setDebugMoveTargetIndex] = useState<number>(0);
   const [debugDrawCount, setDebugDrawCount] = useState<number>(1);
+  const cardBackUrl = useMemo(() => {
+    return CARD_BACKS.find(b => b.id === favoriteBackId)?.url || DEFAULT_CARD_BACK_URL;
+  }, [favoriteBackId]);
 
   const isOpponentOwnedCard = (card?: Card | null) => {
     if (!card || !opponent) return false;
@@ -424,6 +336,161 @@ export const BattleField: React.FC = () => {
   const opponent = useMemo(() => (game && opponentUid) ? game.players[opponentUid] : null, [game, opponentUid]);
   const confrontationStrategy = (me?.confrontationStrategy || 'AUTO') as 'ON' | 'AUTO' | 'OFF';
   const [localStrategy, setLocalStrategy] = useState<'ON' | 'AUTO' | 'OFF'>(confrontationStrategy);
+  const [battleAnimationsEnabled] = useBattleAnimationPreference();
+  const [visualGame, setVisualGame] = useState<GameState | null>(null);
+  const animationSourceGame = visualGame || game;
+  const battleAnimations = useBattleAnimations(animationSourceGame, effectiveMyUid, isSpectator, cardBackUrl);
+  const battleAnimationsRef = useRef(battleAnimations);
+  useEffect(() => {
+    battleAnimationsRef.current = battleAnimations;
+  }, [battleAnimations]);
+
+  const lastEmittedAnimationTimeRef = useRef<string | null>(null);
+  const stateBufferRef = useRef<any[]>([]);
+  const [stateBufferVersion, setStateBufferVersion] = useState(0);
+  const serverAnimationHoldUntilRef = useRef(0);
+  const bufferReplayCooldownUntilRef = useRef(0);
+  const lastAppliedGameRef = useRef<GameState | null>(null);
+  const [serverAnimationHoldUntil, setServerAnimationHoldUntil] = useState(0);
+  const applyGameStateRef = useRef<((state: any) => void) | null>(null);
+  const hasNewPlayZoneCard = useCallback((previousState: GameState | null, nextState: GameState) => {
+    if (!previousState?.players || !nextState?.players) return false;
+    return Object.entries(nextState.players).some(([uid, nextPlayer]) => {
+      const previousPlayer = previousState.players[uid];
+      if (!previousPlayer || !nextPlayer) return false;
+      const previousPlayIds = new Set((previousPlayer.playZone || []).map(card => card?.gamecardId).filter(Boolean));
+      return (nextPlayer.playZone || []).some(card => card?.gamecardId && !previousPlayIds.has(card.gamecardId));
+    });
+  }, []);
+  const hasPhaseChanged = useCallback((previousState: GameState | null, nextState: GameState) => {
+    if (!previousState) return false;
+    return previousState.phase !== nextState.phase ||
+      previousState.currentTurnPlayer !== nextState.currentTurnPlayer ||
+      previousState.turnCount !== nextState.turnCount;
+  }, []);
+  const applyBufferedGameState = useCallback(() => {
+    if (stateBufferRef.current.length === 0) return;
+    const [nextState, ...remainingStates] = stateBufferRef.current;
+    console.log('[BattleFieldAnimationBuffer] applying buffered state', {
+      phase: nextState.phase,
+      remainingBufferedStates: remainingStates.length
+    });
+    stateBufferRef.current = remainingStates;
+    setStateBufferVersion(version => version + 1);
+    const hintDuration = battleAnimationsEnabled && !nextState.isResolvingStack ? Number(nextState.animationHint?.durationMs || 0) : 0;
+    const serverAnimationUntil = battleAnimationsEnabled ? Number(nextState.animationUntil || 0) : 0;
+    const nextHoldUntil = hintDuration > 0 ? Date.now() + hintDuration : serverAnimationUntil;
+    if (nextHoldUntil > Date.now()) {
+      serverAnimationHoldUntilRef.current = nextHoldUntil;
+      setServerAnimationHoldUntil(nextHoldUntil);
+    } else {
+      serverAnimationHoldUntilRef.current = 0;
+      setServerAnimationHoldUntil(0);
+    }
+    setVisualGame(nextState.animationHint ? nextState : null);
+    if (applyGameStateRef.current) {
+      applyGameStateRef.current(nextState);
+    }
+    lastAppliedGameRef.current = nextState;
+    bufferReplayCooldownUntilRef.current = Date.now() + 80;
+  }, [battleAnimationsEnabled]);
+  const activeBlockingAnimationEvents = useMemo(() => {
+    if (!battleAnimationsEnabled) return [];
+    return getBattleAnimationPlaybackGroup(battleAnimations.events);
+  }, [battleAnimations.events, battleAnimationsEnabled]);
+  const serverAnimationHoldingUi = battleAnimationsEnabled && serverAnimationHoldUntil > Date.now();
+  const isBattleAnimationBlockingUi = activeBlockingAnimationEvents.length > 0;
+  const confrontationAnimationPlaying = activeBlockingAnimationEvents.some(event => event.type === 'confrontation');
+  const confrontationServerHintUntil = game?.animationHint?.type === 'CONFRONTATION_CHAIN' && !game.isResolvingStack
+    ? Number(game.animationUntil || 0)
+    : 0;
+  const confrontationHintUntil = game?.animationHint?.type === 'CONFRONTATION_CHAIN' && !game.isResolvingStack
+    ? Number(game.animationHint.createdAt || Date.now()) + Math.max(900, Number(game.animationHint.durationMs || 1100))
+    : 0;
+  const confrontationPromptWaiting =
+    (!game?.isResolvingStack && confrontationAnimationPlaying) ||
+    (!game?.isResolvingStack && battleAnimationsEnabled && game?.animationHint?.type === 'CONFRONTATION_CHAIN' && Date.now() < Math.max(confrontationPromptBlockedUntil, confrontationHintUntil, confrontationServerHintUntil));
+
+  useEffect(() => {
+    if (!battleAnimationsEnabled || game?.animationHint?.type !== 'CONFRONTATION_CHAIN' || game.isResolvingStack) return;
+    const duration = Math.max(900, Number(game.animationHint.durationMs || 1100));
+    const until = Number(game.animationHint.createdAt || Date.now()) + duration;
+    setConfrontationPromptBlockedUntil(current => Math.max(current, until));
+    const remaining = Math.max(0, until - Date.now());
+    const timer = window.setTimeout(() => {
+      setConfrontationPromptBlockedUntil(current => current === until ? 0 : current);
+    }, remaining + 40);
+    return () => window.clearTimeout(timer);
+  }, [battleAnimationsEnabled, game?.animationHint?.id, game?.animationHint?.type, game?.animationHint?.durationMs, game?.animationHint?.createdAt, game?.isResolvingStack]);
+
+  useEffect(() => {
+    if (activeBlockingAnimationEvents.length === 0 && stateBufferRef.current.length > 0) {
+      const cooldownRemaining = bufferReplayCooldownUntilRef.current - Date.now();
+      if (cooldownRemaining > 0) {
+        const timer = window.setTimeout(() => setStateBufferVersion(version => version + 1), cooldownRemaining);
+        return () => window.clearTimeout(timer);
+      }
+      const remaining = serverAnimationHoldUntilRef.current - Date.now();
+      if (remaining > 0) {
+        setServerAnimationHoldUntil(serverAnimationHoldUntilRef.current);
+        return;
+      }
+      applyBufferedGameState();
+    }
+  }, [activeBlockingAnimationEvents, applyBufferedGameState, stateBufferVersion]);
+
+  useEffect(() => {
+    if (activeBlockingAnimationEvents.length > 0 || stateBufferRef.current.length === 0) return;
+    const remaining = serverAnimationHoldUntil - Date.now();
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(() => {
+      const isAnimationPlaying = battleAnimationsEnabled && getBattleAnimationPlaybackGroup(battleAnimationsRef.current?.events || []).length > 0;
+      if (isAnimationPlaying || stateBufferRef.current.length === 0) return;
+      applyBufferedGameState();
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [activeBlockingAnimationEvents.length, applyBufferedGameState, battleAnimationsEnabled, serverAnimationHoldUntil, stateBufferVersion]);
+
+  useEffect(() => {
+    if (!serverAnimationHoldingUi || activeBlockingAnimationEvents.length > 0 || stateBufferRef.current.length > 0) return;
+    const remaining = serverAnimationHoldUntil - Date.now();
+    if (remaining <= 0) {
+      serverAnimationHoldUntilRef.current = 0;
+      setServerAnimationHoldUntil(0);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (stateBufferRef.current.length > 0) return;
+      serverAnimationHoldUntilRef.current = 0;
+      setServerAnimationHoldUntil(0);
+    }, remaining + 40);
+    return () => window.clearTimeout(timer);
+  }, [activeBlockingAnimationEvents.length, serverAnimationHoldUntil, serverAnimationHoldingUi, stateBufferVersion]);
+
+  useEffect(() => {
+    if (!battleAnimationsEnabled || !activeBlockingAnimationEvents.length || !socket || !gameId) return;
+
+    // Generate a unique key for this parallel group to avoid duplicate emissions
+    const groupKey = activeBlockingAnimationEvents.map(e => e.id).join(',');
+    if (lastEmittedAnimationTimeRef.current === groupKey) return;
+    lastEmittedAnimationTimeRef.current = groupKey;
+
+    const duration = battleAnimationGroupDuration(activeBlockingAnimationEvents);
+    socket.emit('gameAction', { gameId, action: 'ADD_ANIMATION_TIME', payload: { duration } });
+  }, [activeBlockingAnimationEvents, battleAnimationsEnabled, socket, gameId]);
+
+  const animatingCardIds = useMemo(() => {
+    const ids = new Set<string>();
+    battleAnimations.events.forEach(event => {
+      if (
+        event.sourceCardId &&
+        (event.type === 'card-played' || event.type === 'card-draw' || event.type === 'erosion-flip')
+      ) {
+        ids.add(event.sourceCardId);
+      }
+    });
+    return ids;
+  }, [battleAnimations.events]);
   const activeMulliganReveal = !isSpectator && game?.phase === 'MULLIGAN' ? me?.mulliganReveal : undefined;
   const debugControllerUid = useMemo(() => {
     if (!game || !myUid) return undefined;
@@ -641,10 +708,10 @@ export const BattleField: React.FC = () => {
 
 
   useEffect(() => { gameRef.current = game; }, [game]);
+  useEffect(() => { lastAppliedGameRef.current = game; }, [game]);
   useEffect(() => { pendingPlayCardRef.current = pendingPlayCard; }, [pendingPlayCard]);
-  useEffect(() => {
-    if (!previewCard || !game) return;
-
+  const findCardInGame = useCallback((gamecardId?: string) => {
+    if (!gamecardId || !game) return undefined;
     const allCards = [
       ...((Object.values(game.players || {}) as PlayerState[]).flatMap(player => [
         ...player.hand,
@@ -661,11 +728,17 @@ export const BattleField: React.FC = () => {
       ...(game.pendingQuery?.options?.map(option => option.card).filter(Boolean) || [])
     ].filter(Boolean) as Card[];
 
-    const latestCard = allCards.find(card => card.gamecardId === previewCard.gamecardId);
+    return allCards.find(card => card.gamecardId === gamecardId);
+  }, [game]);
+
+  useEffect(() => {
+    if (!previewCard) return;
+
+    const latestCard = findCardInGame(previewCard.gamecardId);
     if (latestCard && latestCard !== previewCard) {
       setPreviewCard(latestCard);
     }
-  }, [game, previewCard]);
+  }, [findCardInGame, previewCard]);
 
   // Error Toast timeout
   useEffect(() => {
@@ -718,10 +791,6 @@ export const BattleField: React.FC = () => {
     fetchProfile();
   }, []);
 
-  const cardBackUrl = useMemo(() => {
-    return CARD_BACKS.find(b => b.id === favoriteBackId)?.url || DEFAULT_CARD_BACK_URL;
-  }, [favoriteBackId]);
-
   // Universal Visual Timer Logic - Stabilized with gameRef
   useEffect(() => {
     if (!gameId || !myUid || isSpectator) return;
@@ -734,10 +803,12 @@ export const BattleField: React.FC = () => {
       const elapsed = now - (game.phaseTimerStart || now);
 
       const me = game.players[myUid];
+      const isAnimationPlaying = battleAnimationsEnabled && getBattleAnimationPlaybackGroup(battleAnimationsRef.current?.events || []).length > 0;
       const isWaiting = game.isResolvingStack ||
         game.currentProcessingItem ||
         game.pendingQuery ||
-        (game.battleState && game.battleState.askConfront);
+        (game.battleState && game.battleState.askConfront) ||
+        isAnimationPlaying;
 
       const activeTimerUid = game.priorityPlayerId ||
         (game.phase === 'DEFENSE_DECLARATION'
@@ -764,6 +835,8 @@ export const BattleField: React.FC = () => {
 
   useEffect(() => {
     if (isSpectator || !game || !gameId) return;
+    const isCounteringPriority = game.phase === 'COUNTERING' && game.priorityPlayerId === myUid;
+    if (isBattleAnimationBlockingUi && !isCounteringPriority) return;
     if (game.pendingQuery || game.isResolvingStack || game.currentProcessingItem) return;
     
     // OFF Strategy: Always auto-pass
@@ -790,7 +863,7 @@ export const BattleField: React.FC = () => {
         GameService.advancePhase(gameId, 'DECLINE_CONFRONTATION');
       }
     }
-  }, [game?.phase, game?.priorityPlayerId, game?.battleState?.askConfront, game?.pendingQuery?.id, game?.isResolvingStack, game?.currentProcessingItem, localStrategy, canConfront, isSpectator]);
+  }, [game?.phase, game?.priorityPlayerId, game?.battleState?.askConfront, game?.pendingQuery?.id, game?.isResolvingStack, game?.currentProcessingItem, localStrategy, canConfront, isSpectator, isBattleAnimationBlockingUi, myUid]);
 
   // Reset interaction states when phase or priority changes
   useEffect(() => {
@@ -814,7 +887,7 @@ export const BattleField: React.FC = () => {
     console.log('[BattleField] Registering socket listeners for game:', gameId);
     let active = true;
     let cardLibraryReady = false;
-    let pendingState: any = null;
+    let pendingStates: any[] = [];
 
     const applyGameState = (newState: any) => {
       if (newState.gameId !== gameId) return;
@@ -856,13 +929,21 @@ export const BattleField: React.FC = () => {
         setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
       }
     };
+    
+    applyGameStateRef.current = applyGameState;
 
     loadCardLibrary().then(() => {
       if (!active) return;
       cardLibraryReady = true;
-      if (pendingState) {
-        applyGameState(pendingState);
-        pendingState = null;
+      if (pendingStates.length) {
+        console.log('[BattleField] Replaying queued states after card library load', {
+          count: pendingStates.length,
+          phases: pendingStates.map(state => state.phase),
+          animationHints: pendingStates.map(state => state.animationHint?.id).filter(Boolean)
+        });
+        const statesToReplay = pendingStates;
+        pendingStates = [];
+        statesToReplay.forEach(onGameStateUpdate);
       }
     }).catch(err => {
       console.error('[BattleField] Failed to load card scripts:', err);
@@ -871,10 +952,103 @@ export const BattleField: React.FC = () => {
     const onGameStateUpdate = (newState: any) => {
       if (newState.gameId !== gameId) return;
       if (!cardLibraryReady) {
-        pendingState = newState;
+        pendingStates.push(newState);
+        if (newState.animationHint) {
+          console.log('[BattleField] Queued animation hint before card library ready', {
+            phase: newState.phase,
+            animationHint: newState.animationHint.id,
+            queued: pendingStates.length
+          });
+        }
         return;
       }
+      const hintDuration = newState.isResolvingStack ? 0 : Number(newState.animationHint?.durationMs || 0);
+      const serverAnimationUntil = Number(newState.animationUntil || 0);
+      const serverHoldUntil = hintDuration > 0 ? Date.now() + hintDuration : serverAnimationUntil;
+      const isServerAnimationHold = serverHoldUntil > Date.now();
+      const localAnimationPlaying = battleAnimationsEnabled && getBattleAnimationPlaybackGroup(battleAnimationsRef.current?.events || []).length > 0;
+      const existingServerHold = serverAnimationHoldUntilRef.current > Date.now();
+      const startsServerHold = isServerAnimationHold && serverAnimationHoldUntilRef.current === 0;
+      const isAnimationPlaying = localAnimationPlaying || existingServerHold;
+      const isConfrontationChainHint = newState.animationHint?.type === 'CONFRONTATION_CHAIN';
+      const shouldApplyPhaseImmediately = hasPhaseChanged(lastAppliedGameRef.current, newState);
+      const shouldApplyPlayZoneImmediately = hasNewPlayZoneCard(lastAppliedGameRef.current, newState);
+      if (shouldApplyPhaseImmediately || shouldApplyPlayZoneImmediately) {
+        stateBufferRef.current = [];
+        bufferReplayCooldownUntilRef.current = 0;
+        setStateBufferVersion(version => version + 1);
+        serverAnimationHoldUntilRef.current = 0;
+        setServerAnimationHoldUntil(0);
+        setVisualGame(newState.animationHint ? newState : null);
+        console.log('[BattleFieldAnimationBuffer] applying state immediately', {
+          phase: newState.phase,
+          previousPhase: lastAppliedGameRef.current?.phase,
+          animationHint: newState.animationHint?.id,
+          phaseChanged: shouldApplyPhaseImmediately,
+          playZoneChanged: shouldApplyPlayZoneImmediately,
+          interruptedLocalAnimation: localAnimationPlaying,
+          interruptedServerHold: existingServerHold
+        });
+        applyGameState(newState);
+        lastAppliedGameRef.current = newState;
+        return;
+      }
+      if (isConfrontationChainHint) {
+        stateBufferRef.current = [];
+        bufferReplayCooldownUntilRef.current = 0;
+        setStateBufferVersion(version => version + 1);
+        serverAnimationHoldUntilRef.current = serverHoldUntil > Date.now() ? serverHoldUntil : 0;
+        setServerAnimationHoldUntil(serverAnimationHoldUntilRef.current);
+        console.log('[BattleFieldAnimationBuffer] applying confrontation chain immediately', {
+          phase: newState.phase,
+          animationHint: newState.animationHint.id,
+          animationUntil: newState.animationUntil,
+          interruptedLocalAnimation: localAnimationPlaying,
+          interruptedServerHold: existingServerHold
+        });
+        setVisualGame(newState);
+        applyGameState(newState);
+        lastAppliedGameRef.current = newState;
+        return;
+      }
+      if (isAnimationPlaying) {
+        console.log('[BattleFieldAnimationBuffer] buffering state', {
+          phase: newState.phase,
+          previousPhase: gameRef.current?.phase,
+          localAnimationPlaying,
+          existingServerHold,
+          serverAnimationUntil: serverHoldUntil,
+          bufferSize: stateBufferRef.current.length + 1
+        });
+        stateBufferRef.current.push(newState);
+        setStateBufferVersion(version => version + 1);
+        return;
+      }
+      if (newState.animationHint) {
+        console.log('[BattleField] Received animation hint state', {
+          phase: newState.phase,
+          animationHint: newState.animationHint.id,
+          animationUntil: newState.animationUntil
+        });
+        setVisualGame(newState);
+      } else {
+        setVisualGame(null);
+      }
+      if (isServerAnimationHold) {
+        serverAnimationHoldUntilRef.current = Math.max(serverAnimationHoldUntilRef.current, serverHoldUntil);
+        setServerAnimationHoldUntil(serverAnimationHoldUntilRef.current);
+        if (startsServerHold) {
+          console.log('[BattleFieldAnimationBuffer] applying visual frame and starting hold', {
+            phase: newState.phase,
+            serverAnimationUntil: serverHoldUntil,
+            holdMs: Math.max(0, serverHoldUntil - Date.now()),
+            source: hintDuration > 0 ? 'animationHint.durationMs' : 'animationUntil'
+          });
+        }
+      }
+      
       applyGameState(newState);
+      lastAppliedGameRef.current = newState;
     };
 
     const onGameTimerUpdate = (patch: any) => {
@@ -914,7 +1088,7 @@ export const BattleField: React.FC = () => {
       socket.off('gameTimerUpdate', onGameTimerUpdate);
       socket.off('error', onSocketError);
     };
-  }, [gameId]);
+  }, [battleAnimationsEnabled, gameId, hasNewPlayZoneCard, hasPhaseChanged]);
 
   // Monitor logs for battle interruption
   useEffect(() => {
@@ -992,6 +1166,8 @@ export const BattleField: React.FC = () => {
   useEffect(() => {
     // Always clear if a new query has arrived
     if (game?.pendingQuery) {
+      setQueryHandoff(null);
+      setIsPopupHidden(false);
       setSelectedQueryIds([]);
       setPaymentSelection({ useFeijing: [], exhaustIds: [], erosionFrontIds: [] });
     } else if (!pendingPlayCard) {
@@ -1008,6 +1184,19 @@ export const BattleField: React.FC = () => {
       setAllianceConfirmation(null);
     }
   }, [game?.phase]);
+
+  useEffect(() => {
+    if (!queryHandoff) return;
+    if (game?.pendingQuery) {
+      setQueryHandoff(null);
+      return;
+    }
+    const delay = Math.max(0, queryHandoff.clearAt - Date.now());
+    const timer = window.setTimeout(() => {
+      setQueryHandoff(current => current?.query.id === queryHandoff.query.id ? null : current);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [queryHandoff, game?.pendingQuery?.id]);
 
 
 
@@ -1264,7 +1453,10 @@ export const BattleField: React.FC = () => {
   const displayedPreviewCard = previewCostDisplay?.card || previewCard;
   const previewEffectiveColors = displayedPreviewCard ? getEffectiveCardColors(displayedPreviewCard) : [];
 
-  const pendingQuery = game?.pendingQuery;
+  const displayedPendingQuery = game?.pendingQuery || queryHandoff?.query || null;
+  const canShowPendingInteraction = !isBattleAnimationBlockingUi;
+  const isQueryHandoffWaiting = !!queryHandoff && !game?.pendingQuery;
+  const pendingQuery = displayedPendingQuery;
   const normalizedPendingQueryType = pendingQuery?.type?.replace(/-/g, '_').toUpperCase();
   const rawPendingQueryOptions = Array.isArray(pendingQuery?.options) ? pendingQuery.options : [];
   const isSelectCardPendingQuery = normalizedPendingQueryType === 'SELECT_CARD';
@@ -1382,10 +1574,39 @@ export const BattleField: React.FC = () => {
   const querySubmitLabel = normalizedPendingQueryType === 'SELECT_PAYMENT'
     ? '确认支付'
     : (isInspectOnlyPendingQuery ? '确认' : '确认选择');
+  const pendingPaymentSourceCard = normalizedPendingQueryType === 'SELECT_PAYMENT'
+    ? findCardInGame(
+        displayedPendingQuery?.context?.paymentTargetId ||
+        displayedPendingQuery?.context?.targetCardId ||
+        displayedPendingQuery?.context?.targetId ||
+        displayedPendingQuery?.context?.sourceCardId
+      )
+    : undefined;
+  const isEffectPaymentQuery =
+    normalizedPendingQueryType === 'SELECT_PAYMENT' &&
+    displayedPendingQuery?.callbackKey !== 'PLAY_CARD_PAYMENT';
+  const pendingQueryTitle = (() => {
+    if (isQueryHandoffWaiting) return '处理中...';
+    if (normalizedPendingQueryType === 'SELECT_PAYMENT' && pendingPaymentSourceCard) {
+      return `支付${pendingPaymentSourceCard.fullName}费用`;
+    }
+    return displayedPendingQuery?.title || '';
+  })();
+  const pendingQueryDescription = (() => {
+    if (isQueryHandoffWaiting) return '正在连续处理下一段效果选择';
+    if (normalizedPendingQueryType === 'ASK_TRIGGER') return '';
+    if (normalizedPendingQueryType === 'SELECT_PAYMENT') return '';
+    return displayedPendingQuery?.description || '';
+  })();
+  const pendingQueryPresentation =
+    normalizedPendingQueryType === 'ASK_TRIGGER' ? 'center' : 'duel-bottom';
+  const pendingQuerySelectionStatusPlacement =
+    normalizedPendingQueryType === 'SELECT_CARD' ? 'header-center' : 'default';
 
   const highlightedCardIds = useMemo(() => {
     const ids = new Set<string>();
     if (isSpectator || !game || !me || !myUid) return ids;
+    if (isBattleAnimationBlockingUi) return ids;
     if (isSelectCardPendingQuery && game.pendingQuery?.playerUid === myUid) {
       selectablePendingQueryCardIds.forEach(id => ids.add(id));
       return ids;
@@ -1450,7 +1671,7 @@ export const BattleField: React.FC = () => {
     });
 
     return ids;
-  }, [game, me, myUid, isSpectator, isSelectCardPendingQuery, selectablePendingQueryCardIds]);
+  }, [game, me, myUid, isSpectator, isBattleAnimationBlockingUi, isSelectCardPendingQuery, selectablePendingQueryCardIds]);
 
 
 
@@ -1841,9 +2062,11 @@ export const BattleField: React.FC = () => {
     if (!gameId) return;
 
     try {
-      await GameService.activateEffect(gameId, myUid, card.gamecardId, effectIndex);
       setEffectConfirmation(null);
       setEffectSelection(null);
+      setCardMenu(null);
+      setIsConfronting(false);
+      await GameService.activateEffect(gameId, myUid, card.gamecardId, effectIndex);
     } catch (error: any) {
       setLastError(error.message);
     }
@@ -1936,6 +2159,7 @@ export const BattleField: React.FC = () => {
     if (game.pendingQuery || game.isResolvingStack || game.currentProcessingItem) return;
     try {
       setIsConfronting(false);
+      setIsPopupHidden(false);
       if (game.phase === 'COUNTERING') {
         await GameService.passConfrontation(gameId);
       } else {
@@ -1949,6 +2173,7 @@ export const BattleField: React.FC = () => {
 
   const handleConfirmPlay = async () => {
     if (!gameId || !pendingPlayCard) return;
+    setIsPopupHidden(true);
     try {
       await GameService.playCard(gameId, myUid, pendingPlayCard.gamecardId, {
         feijingCardId: paymentSelection.useFeijing[0],
@@ -1964,14 +2189,12 @@ export const BattleField: React.FC = () => {
 
 
   const handleConfirmErosion = async () => {
-    if (!gameId || !erosionChoice) return;
-    if (erosionChoice === 'C' && !selectedErosionCardId) {
-      setLastError('请选择一张侵蚀区正面卡');
-      return;
-    }
+    if (!gameId) return;
+    const choice = !selectedErosionCardId || selectedErosionCardId === EROSION_NO_CARD_ID ? 'A' : 'C';
+    const selectedCardId = choice === 'C' ? selectedErosionCardId : undefined;
+    setIsPopupHidden(true);
     try {
-      await GameService.handleErosionChoice(gameId, myUid, erosionChoice, selectedErosionCardId || undefined);
-      setErosionChoice(null);
+      await GameService.handleErosionChoice(gameId, myUid, choice, selectedCardId);
       setSelectedErosionCardId(null);
     } catch (error: any) {
       setLastError(error.message);
@@ -1979,11 +2202,14 @@ export const BattleField: React.FC = () => {
   };
 
   const handleQuerySubmit = async () => {
-    if (!gameId || !game?.pendingQuery) return;
+    if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+    const submittingQuery = displayedPendingQuery;
+    setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
+    setIsPopupHidden(false);
 
     if (import.meta.env.ENABLE_PERF_LOGS === '1') {
-      console.log(`[Query] Submitting choice for ${game.pendingQuery.type}:`, {
-        id: game.pendingQuery.id,
+      console.log(`[Query] Submitting choice for ${submittingQuery.type}:`, {
+        id: submittingQuery.id,
         selectedIds: selectedQueryIds,
         payment: paymentSelection
       });
@@ -1992,7 +2218,7 @@ export const BattleField: React.FC = () => {
     try {
       let selections = selectedQueryIds;
       // Normalize type check to handle potential variations
-      const queryType = game.pendingQuery.type?.replace(/-/g, '_').toUpperCase();
+      const queryType = submittingQuery.type?.replace(/-/g, '_').toUpperCase();
 
       if (queryType === 'SELECT_PAYMENT') {
         const mappedPayment = {
@@ -2003,7 +2229,7 @@ export const BattleField: React.FC = () => {
         selections = [JSON.stringify(mappedPayment)];
       }
 
-      await GameService.submitQueryChoice(gameId, game.pendingQuery.id, selections);
+      await GameService.submitQueryChoice(gameId, submittingQuery.id, selections);
       setSelectedQueryIds([]);
     } catch (error: any) {
       console.error('[Query] Submission error:', error);
@@ -2062,6 +2288,117 @@ export const BattleField: React.FC = () => {
           : [...prev.erosionFrontIds, gamecardId]
       };
     });
+  };
+
+  const renderPaymentCardTile = (
+    card: Card,
+    selected: boolean,
+    onClick: () => void,
+    badge: string,
+    tone: 'blue' | 'green' | 'red',
+    effectiveAcValue?: number
+  ) => {
+    const toneClass = tone === 'blue'
+      ? {
+          border: 'border-sky-400',
+          shadow: 'shadow-[0_0_22px_rgba(56,189,248,0.55)]',
+          badge: 'bg-sky-500/95 text-black',
+          idle: 'border-sky-900/40'
+        }
+      : tone === 'green'
+        ? {
+            border: 'border-emerald-400',
+            shadow: 'shadow-[0_0_22px_rgba(52,211,153,0.55)]',
+            badge: 'bg-emerald-400/95 text-black',
+            idle: 'border-emerald-900/40'
+          }
+        : {
+            border: 'border-red-400',
+            shadow: 'shadow-[0_0_22px_rgba(248,113,113,0.55)]',
+            badge: 'bg-red-500/95 text-white',
+            idle: 'border-red-900/40'
+          };
+
+    return (
+      <motion.button
+        key={card.gamecardId}
+        type="button"
+        whileHover={{ y: -4 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={onClick}
+        onMouseEnter={() => setHoverPreviewCard(card)}
+        onMouseLeave={() => setHoverPreviewCard(null)}
+        className={cn(
+          "relative aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-lg border-2 bg-zinc-950 transition-all md:w-32 lg:w-36",
+          selected
+            ? cn(toneClass.border, toneClass.shadow, "scale-105")
+            : cn(toneClass.idle, "opacity-70 grayscale hover:opacity-100 hover:grayscale-0")
+        )}
+      >
+        <CardComponent
+          card={card}
+          disableZoom
+          displayMode={effectiveAcValue !== undefined ? 'hand' : undefined}
+          cardBackUrl={cardBackUrl}
+          effectiveAcValue={effectiveAcValue}
+        />
+        <div className={cn("absolute left-1.5 top-1.5 max-w-[calc(100%-0.75rem)] rounded px-1.5 py-1 text-[9px] font-black leading-tight shadow-lg", toneClass.badge)}>
+          {badge}
+        </div>
+        {selected && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
+            <div className={cn("flex h-10 w-10 items-center justify-center rounded-full text-lg font-black italic shadow-xl", toneClass.badge)}>
+              ✓
+            </div>
+          </div>
+        )}
+      </motion.button>
+    );
+  };
+
+  const renderPaymentTrayContent = (required: number, paymentColor?: string, excludeCardId?: string) => {
+    const handOptions = required > 0 ? getHandPaymentOptions(paymentColor, required, excludeCardId) : [];
+    const exhaustOptions = required > 0
+      ? me.unitZone.filter(c => canCardBeExhausted(c) && !getPaymentExcludedExhaustIds().includes(c!.gamecardId)) as Card[]
+      : [];
+    const erosionOptions = required < 0
+      ? me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT') as Card[]
+      : [];
+    const hasOptions = handOptions.length > 0 || exhaustOptions.length > 0 || erosionOptions.length > 0;
+
+    return (
+      <div className="flex w-full flex-col gap-3">
+        <div className="flex min-h-[8.4rem] items-start gap-3 overflow-x-auto overflow-y-hidden pb-2 pr-2 custom-scrollbar md:min-h-[11rem]">
+          {handOptions.map(card => renderPaymentCardTile(
+            card,
+            paymentSelection.useFeijing.includes(card.gamecardId),
+            () => togglePaymentFeijing(card.gamecardId),
+            `${getOwnedCardLocationLabel(card)} / 代替支付`,
+            'blue',
+            getEffectiveCardCost(card)
+          ))}
+          {exhaustOptions.map(card => renderPaymentCardTile(
+            card,
+            paymentSelection.exhaustIds.includes(card.gamecardId),
+            () => togglePaymentExhaust(card.gamecardId),
+            `${getOwnedCardLocationLabel(card)} / ${getAccessPaymentLabel(card, paymentColor)}`,
+            'green'
+          ))}
+          {erosionOptions.map(card => renderPaymentCardTile(
+            card,
+            paymentSelection.erosionFrontIds.includes(card.gamecardId),
+            () => togglePaymentErosionFront(card.gamecardId),
+            `${getOwnedCardLocationLabel(card)} / 侵蚀支付`,
+            'red'
+          ))}
+          {!hasOptions && (
+            <div className="flex min-h-[7rem] min-w-full items-center justify-center rounded-lg border border-white/10 bg-black/35 px-6 text-center text-xs font-bold tracking-widest text-white/45">
+              没有可直接选择的支付卡牌，剩余费用将按规则自动处理。
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const handleShenyiChoice = async (action: 'CONFIRM_SHENYI' | 'DECLINE_SHENYI') => {
@@ -2751,289 +3088,77 @@ export const BattleField: React.FC = () => {
       {!isSpectator && <StandardPopup
         isOpen={!isSpectator && game.phase === 'EROSION' && me.isTurn && me.erosionFront.some(c => c !== null && c.displayState === 'FRONT_UPRIGHT')}
         title="侵蚀阶段"
-        description="选择如何处理正面朝上的侵蚀卡"
-        mode={erosionChoice === 'C' ? 'card_selection' : 'double_selection'}
-        confirmText="确认选择"
+        description="选择一张加入手牌，或不加入手牌"
+        mode="card_selection"
+        presentation="duel-bottom"
+        optionLayout="row"
+        confirmText="确认"
         onConfirm={handleConfirmErosion}
         onSelectionComplete={handleConfirmErosion}
-        cards={me.erosionFront.filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT').map(c => c!)}
-        selectedIds={selectedErosionCardId ? [selectedErosionCardId] : []}
+        options={[
+          {
+            id: EROSION_NO_CARD_ID,
+            value: 'NO_CARD',
+            label: '不加入手牌',
+            icon: 'grave',
+            detail: '将正面侵蚀卡送入墓地',
+            cardWidth: 'card'
+          },
+          ...me.erosionFront
+            .filter(c => c !== null && c.displayState === 'FRONT_UPRIGHT')
+            .map(c => ({
+              id: c!.gamecardId,
+              card: c!,
+              zoneLabel: '侵蚀区正面'
+            }))
+        ]}
+        selectedIds={[selectedErosionCardId || EROSION_NO_CARD_ID]}
         maxSelections={1}
-        minSelections={erosionChoice === 'C' ? 1 : 0}
+        minSelections={1}
         onCardClick={(card) => setSelectedErosionCardId(card.gamecardId)}
-        onCardHover={setHoveredPopupCard}
+        onCardHover={setHoverPreviewCard}
         cardBackUrl={cardBackUrl}
         onHide={() => {
-          setHoveredPopupCard(null);
+          setHoverPreviewCard(null);
           setIsPopupHidden(true);
         }}
         isHidden={isPopupHidden}
+      />}
+
+      {/* Payment Selection Tray */}
+      <StandardPopup
+        isOpen={!!pendingPlayCard}
+        title="支付费用"
+        description=""
+        mode="payment_selection"
+        presentation="duel-bottom"
+        paymentCost={pendingPlayCard ? getEffectiveCardCost(pendingPlayCard) : undefined}
+        paymentCurrent={pendingPlayCard
+          ? getEffectiveCardCost(pendingPlayCard) > 0
+            ? formatSelectedPaymentValue(getEffectiveCardCost(pendingPlayCard), pendingPlayCard.color, pendingPlayCard.gamecardId)
+            : paymentSelection.erosionFrontIds.length
+          : undefined}
+        confirmText="确认并使用"
+        cancelText="取消"
+        onSelectionComplete={handleConfirmPlay}
+        onCancel={() => setPendingPlayCard(null)}
+        cardBackUrl={cardBackUrl}
+        onHide={() => setIsPopupHidden(true)}
+        isHidden={isPopupHidden}
       >
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full mb-8">
-          <button
-            onClick={() => { setErosionChoice('A'); setSelectedErosionCardId(null); }}
-            className={cn(
-              "p-3 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 md:gap-4 text-center",
-              erosionChoice === 'A' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
-            )}
-          >
-            <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">A</div>
-            <div className="font-bold text-white text-sm md:text-base">全部送入墓地</div>
-            <div className="text-[10px] md:text-xs text-zinc-500">将侵蚀区所有正面卡送入墓地</div>
-          </button>
-
-          <button
-            onClick={() => setErosionChoice('C')}
-            className={cn(
-              "p-3 md:p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 md:gap-4 text-center",
-              erosionChoice === 'C' ? "border-[#f27d26] bg-[#f27d26]/10" : "border-white/10 bg-white/5 hover:bg-white/10"
-            )}
-          >
-            <div className="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg md:text-xl font-bold">B</div>
-            <div className="font-bold text-white text-sm md:text-base">加入手牌</div>
-            <div className="text-[10px] md:text-xs text-zinc-500">选择一张加入手牌，其余送墓，并从牌库放置一张到侵蚀区背面</div>
-          </button>
-        </div>
-      </StandardPopup>}
-
-      <AnimatePresence>
-        {hoveredPopupCard && (
-          <motion.div
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 16 }}
-            className="pointer-events-none fixed right-4 top-24 z-[1200] hidden max-h-[calc(100vh-7rem)] w-[520px] overflow-hidden rounded-2xl border border-white/10 bg-black/85 p-3 shadow-2xl backdrop-blur-md lg:grid lg:grid-cols-[155px_1fr] lg:gap-3"
-          >
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
-              <img
-                src={getPreviewFullImage(hoveredPopupCard)}
-                alt={hoveredPopupCard.fullName}
-                className="aspect-[3/4] w-full object-contain"
-                draggable={false}
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="min-h-0 overflow-hidden">
-              <div className="text-sm font-black text-white">{hoveredPopupCard.fullName}</div>
-              <div className="mt-1 text-[10px] font-bold tracking-widest text-white/45">
-                {hoveredPopupCard.id} · {hoveredPopupCard.type} · {hoveredPopupCard.color}
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
-                <div className="rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-center">
-                  <div className="text-[8px] font-black text-white/35">AC</div>
-                  <div className="text-xs font-black text-white">{hoveredPopupCard.acValue ?? '-'}</div>
-                </div>
-                <div className="rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-center">
-                  <div className="text-[8px] font-black text-white/35">力量</div>
-                  <div className="text-xs font-black text-white">{hoveredPopupCard.type === 'UNIT' ? hoveredPopupCard.power : '-'}</div>
-                </div>
-                <div className="rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-center">
-                  <div className="text-[8px] font-black text-white/35">伤害</div>
-                  <div className="text-xs font-black text-white">{hoveredPopupCard.type === 'UNIT' ? hoveredPopupCard.damage : '-'}</div>
-                </div>
-              </div>
-              <div className="mt-2">
-                <KeywordBadges card={hoveredPopupCard} variant="compact" />
-              </div>
-              {hoveredPopupCard.description && (
-                <div className="mt-2 rounded-xl border border-white/5 bg-white/5 p-2 text-[11px] leading-relaxed text-white/55">
-                  {hoveredPopupCard.description}
-                </div>
-              )}
-              <CardEffectList
-                card={hoveredPopupCard}
-                compact
-                className="mt-2 max-h-[270px] overflow-y-auto pr-1 custom-scrollbar"
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Payment Selection Overlay */}
-      <AnimatePresence>
         {pendingPlayCard && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className={cn(
-              "fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md transition-all duration-300",
-              isPopupHidden ? "pointer-events-none invisible opacity-0" : "pointer-events-auto visible opacity-100"
-            )}
-          >
-            <div className="relative max-w-2xl w-[95vw] md:w-full bg-zinc-900/90 border border-white/10 rounded-[2rem] flex flex-col items-center gap-3 md:gap-4 p-4 md:p-6 overflow-y-auto max-h-[90vh] shadow-2xl">
-              <button
-                onClick={() => setIsPopupHidden(true)}
-                className="absolute left-4 top-4 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black tracking-widest text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-                title="隐藏窗口以查看战场"
-              >
-                隐藏
-              </button>
-              <div className="text-center">
-                <h3 className="text-lg md:text-2xl font-black italic text-[#f27d26] tracking-tighter mb-1">支付费用</h3>
-                <div className="flex items-center justify-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-zinc-500 text-[10px] font-bold tracking-widest">需求</span>
-                    <span className={cn(
-                      "text-3xl font-black px-4 py-1 rounded-xl",
-                      getEffectiveCardCost(pendingPlayCard) > 0 ? "bg-red-600/20 text-red-500" : "bg-green-600/20 text-green-500"
-                    )}>
-                      {getEffectiveCardCost(pendingPlayCard)}
-                    </span>
-                  </div>
-                  <div className="h-8 w-px bg-white/10" />
-                  <div className="flex items-center gap-2">
-                    <span className="text-zinc-500 text-[8px] font-bold tracking-widest">已选</span>
-                    <span className="text-xl md:text-2xl font-black text-white">
-                      {getEffectiveCardCost(pendingPlayCard) > 0
-                        ? formatSelectedPaymentValue(getEffectiveCardCost(pendingPlayCard), pendingPlayCard.color, pendingPlayCard.gamecardId)
-                        : paymentSelection.erosionFrontIds.length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col md:grid md:grid-cols-[300px_1fr] gap-6 md:gap-12 w-full items-center md:items-start">
-                {/* Left: Card being played */}
-                <div className="flex flex-col items-center gap-2 md:gap-4 w-48 md:w-full">
-                  <div className="w-full aspect-[3/4] rounded-2xl border-2 border-[#f27d26] shadow-[0_0_50px_rgba(242,125,38,0.3)] overflow-hidden">
-                    <CardComponent card={pendingPlayCard} disableZoom cardBackUrl={cardBackUrl} />
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm md:text-lg font-black text-white uppercase italic tracking-tight">{pendingPlayCard.fullName}</div>
-                    <div className="text-[8px] md:text-[10px] text-zinc-500 tracking-widest mt-1">{getCardTypeLabel(pendingPlayCard.type)} / {getCardColorLabel(pendingPlayCard.color)}</div>
-                  </div>
-                </div>
-
-                {/* Right: Selection Area */}
-                <div className="flex flex-col gap-8">
-                  {getEffectiveCardCost(pendingPlayCard) > 0 ? (
-                    <>
-                      {/* Hand Replacement Section */}
-                      {getHandPaymentOptions(pendingPlayCard.color, getEffectiveCardCost(pendingPlayCard), pendingPlayCard.gamecardId).length > 0 && (
-                        <div className="flex flex-col gap-3">
-                          <div className="flex items-center gap-2 text-blue-400 font-black uppercase italic tracking-widest text-sm">
-                            <Zap className="w-4 h-4" />
-                            手牌代替支付
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 pb-2 justify-items-center">
-                            {getHandPaymentOptions(pendingPlayCard.color, getEffectiveCardCost(pendingPlayCard), pendingPlayCard.gamecardId).map((card, i) => {
-                              const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
-                              return (
-                                <motion.div
-                                  key={`${card.gamecardId}-${i}`}
-                                  whileHover={{ y: -3 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  onClick={() => togglePaymentFeijing(card.gamecardId)}
-                                  className={cn(
-                                    "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
-                                    isSelected ? "border-blue-500 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
-                                  )}
-                                >
-                                  <div className="relative h-full w-full">
-                                    <CardComponent card={card} disableZoom cardBackUrl={cardBackUrl} />
-                                    <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                                      {getOwnedCardLocationLabel(card)}
-                                    </div>
-                                  </div>
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Exhaust Section */}
-                      {me.unitZone.some(c => c && !c.isExhausted) && (
-                        <div className="flex flex-col gap-3">
-                          <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
-                            <Sword className="w-4 h-4" />
-                            横置支付（按单位ACCESS值）
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 pb-2 justify-items-center">
-                          {me.unitZone.filter(c => c && !c.isExhausted).map((card, i) => {
-                            const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
-                            const accessValue = getAccessPaymentLabel(card, pendingPlayCard?.color);
-                            return (
-                                <motion.div
-                                  key={`${card!.gamecardId}-${i}`}
-                                  whileHover={{ y: -3 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  onClick={() => togglePaymentExhaust(card!.gamecardId)}
-                                  className={cn(
-                                    "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
-                                    isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
-                                  )}
-                                >
-                                  <div className="relative h-full w-full">
-                                    <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
-                                    <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                                      {getOwnedCardLocationLabel(card!)} · {accessValue}
-                                    </div>
-                                  </div>
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    /* Negative Cost Section */
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2 text-red-500 font-black uppercase italic tracking-widest text-sm">
-                        <Trash2 className="w-4 h-4" />
-                        侵蚀区支付 (Erosion Payment - Select {Math.abs(getEffectiveCardCost(pendingPlayCard))} cards)
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
-                        {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map((card, i) => {
-                          const isSelected = paymentSelection.erosionFrontIds.includes(card!.gamecardId);
-                          return (
-                            <motion.div
-                              key={`${card!.gamecardId}-${i}`}
-                              whileHover={{ y: -3 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => togglePaymentErosionFront(card!.gamecardId)}
-                              className={cn(
-                                "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
-                                isSelected ? "border-red-500 scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
-                              )}
-                            >
-                              <div className="relative h-full w-full">
-                                <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
-                                <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                                  {getOwnedCardLocationLabel(card!)}
-                                </div>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4 md:gap-6 mt-4 md:mt-8 w-full md:w-auto">
-                <button
-                  onClick={handleConfirmPlay}
-                  className="flex-1 md:flex-none px-10 md:px-20 py-3 md:py-4 bg-[#f27d26] text-black font-black italic uppercase tracking-widest rounded-xl hover:bg-[#f27d26]/80 transition-all shadow-2xl shadow-[#f27d26]/20"
-                >
-                  确认并使用
-                </button>
-                <button
-                  onClick={() => setPendingPlayCard(null)}
-                  className="flex-1 md:flex-none px-10 md:px-20 py-3 md:py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all border border-white/5"
-                >
-                  取消
-                </button>
+          <div className="flex w-full gap-3 md:gap-4">
+            <div className="hidden w-24 shrink-0 md:block">
+              <div className="overflow-hidden rounded-lg border-2 border-[#d7b45a] shadow-[0_0_28px_rgba(215,180,90,0.35)]">
+                <CardComponent card={pendingPlayCard} disableZoom displayMode="hand" cardBackUrl={cardBackUrl} effectiveAcValue={getEffectiveCardCost(pendingPlayCard)} />
               </div>
             </div>
-          </motion.div>
+            <div className="min-w-0 flex-1">
+              {renderPaymentTrayContent(getEffectiveCardCost(pendingPlayCard), pendingPlayCard.color, pendingPlayCard.gamecardId)}
+            </div>
+          </div>
         )}
-      </AnimatePresence>
+      </StandardPopup>
 
 
 
@@ -3067,6 +3192,7 @@ export const BattleField: React.FC = () => {
                   viewingZone={viewingZone}
                   setViewingZone={setViewingZone}
                   highlightedCardIds={highlightedCardIds}
+                  animatingCardIds={animatingCardIds}
                   onShowLogs={handleToggleLogs}
                   onOpenRulebook={() => setIsRulebookOpen(true)}
                   onSurrender={() => {
@@ -3093,6 +3219,7 @@ export const BattleField: React.FC = () => {
                   canConfront={canConfront}
                   isConfrontPromptActive={
                     !isSpectator &&
+                    !isBattleAnimationBlockingUi &&
                     game.phase === 'BATTLE_FREE' &&
                     !!game.battleState?.askConfront &&
                     (
@@ -3108,8 +3235,10 @@ export const BattleField: React.FC = () => {
                     !game.isResolvingStack &&
                     !game.currentProcessingItem
                   }
+                  isCounteringPromptWaiting={confrontationPromptWaiting}
                   isDefensePromptActive={
                     !isSpectator &&
+                    !isBattleAnimationBlockingUi &&
                     game.phase === 'DEFENSE_DECLARATION' &&
                     !me.isTurn &&
                     !game.pendingQuery &&
@@ -3137,6 +3266,7 @@ export const BattleField: React.FC = () => {
                   handEffectsEnabled={handEffectsEnabled}
                   sandboxEditMode={isDebugEnabled}
                   onSandboxZoneClick={openDebugTarget}
+                  onHoverPreview={setHoverPreviewCard}
 
                   showPhaseMenu={showPhaseMenu}
                   isAnyPopupOpen={
@@ -3144,13 +3274,13 @@ export const BattleField: React.FC = () => {
                     !!viewingZone ||
                     isRulebookOpen ||
                     (!isSpectator && (
-                      !!game.pendingQuery ||
+                      (!isBattleAnimationBlockingUi && !!game.pendingQuery) ||
                       game.phase === 'EROSION' ||
                       game.phase === 'DISCARD' ||
                       game.phase === 'END' ||
                       !!pendingPlayCard ||
-                      !!effectSelection ||
-                      !!effectConfirmation ||
+                      (!isBattleAnimationBlockingUi && !!effectSelection) ||
+                      (!isBattleAnimationBlockingUi && !!effectConfirmation) ||
                       !!allianceConfirmation ||
                       showPhaseMenu
                     )) ||
@@ -3160,6 +3290,12 @@ export const BattleField: React.FC = () => {
                   }
                 />
               )}
+              <BattleAnimationLayer
+                events={battleAnimations.events}
+                enabled={battleAnimationsEnabled}
+                onEventComplete={battleAnimations.dismiss}
+                hoverPreview={hoverPreviewCard}
+              />
             </div>
           </div>
         </div>
@@ -3174,104 +3310,6 @@ export const BattleField: React.FC = () => {
         )}
 
         <AnimatePresence>
-          {game.currentProcessingItem && (
-            <motion.div
-              initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
-              animate={{ opacity: 1, backdropFilter: "blur(12px)" }}
-              exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
-              className="fixed inset-0 z-[600] bg-black/40 flex items-center justify-center pointer-events-auto"
-            >
-              <div className="flex flex-col items-center gap-12">
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  className="flex flex-col items-center gap-4"
-                >
-                  <div className="flex items-center gap-4 text-red-500">
-                    <Zap className="w-5 h-5 md:w-8 md:h-8 animate-pulse text-red-500/50" />
-                    <h2 className="text-lg md:text-3xl font-black italic uppercase tracking-tighter text-white/90">
-                      效果结算中
-                    </h2>
-                    <Zap className="w-5 h-5 md:w-8 md:h-8 animate-pulse text-red-500/50" />
-                  </div>
-                  <div className="h-1 w-48 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
-                </motion.div>
-
-                <motion.div
-                  initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
-                  animate={{ scale: 1, opacity: 1, rotateY: 0 }}
-                  exit={{ scale: 1.5, opacity: 0, filter: "brightness(2)" }}
-                  transition={{ type: "spring", damping: 15 }}
-                  className="relative"
-                >
-                  <div className="absolute -inset-8 bg-red-600/10 blur-[40px] rounded-full animate-pulse" />
-                  <div className="w-48 md:w-56 relative z-10 transition-all">
-                    {game.currentProcessingItem.card ? (
-                      <div className="relative group">
-                        <CardComponent
-                          card={game.currentProcessingItem.card}
-                          isExhausted={false}
-                          disableZoom
-                          cardBackUrl={cardBackUrl}
-                          ignoreSkin={shouldIgnoreSkinForCard(game.currentProcessingItem.card, { ownerUid: game.currentProcessingItem.ownerUid })}
-                        />
-                        <div className="absolute -inset-0.5 bg-gradient-to-t from-red-600/50 to-transparent opacity-50 rounded-2xl" />
-
-                        {/* UL/UR Labels for Resolving Card */}
-                        <div className={cn(
-                          "absolute -top-2 -left-2 px-3 py-1 rounded-full text-[10px] font-black uppercase italic shadow-lg z-[20] border border-white/20",
-                          game.currentProcessingItem.ownerUid === myUid ? "bg-blue-600 text-white" : "bg-red-600 text-white"
-                        )}>
-                          {game.currentProcessingItem.ownerUid === myUid ? "我方" : "对方"}
-                        </div>
-                        <div className="absolute -top-2 -right-2 px-3 py-1 bg-black/80 rounded-full text-[10px] font-bold text-white uppercase z-[20] border border-white/20">
-                          {getCardIdentity(game, game.currentProcessingItem.ownerUid, game.currentProcessingItem.card).split('|')[1].replace(']', '')}
-                        </div>
-                      </div>
-                    ) : game.currentProcessingItem.type === 'PHASE_END' ? (
-                      <PhaseRequestCard item={game.currentProcessingItem} className="shadow-2xl" />
-                    ) : game.currentProcessingItem.type === 'ATTACK' ? (
-                      <AttackRequestCard item={game.currentProcessingItem} className="shadow-2xl" />
-                    ) : (
-                      <div className="aspect-[3/4] bg-zinc-900 border-2 border-red-500/30 rounded-2xl flex flex-col items-center justify-center p-8 text-center shadow-2xl">
-                        <Sword className="w-20 h-20 text-red-500/40 mb-6" />
-                        <span className="text-2xl font-black text-white uppercase tracking-widest leading-none">
-                          {getActionTypeLabel(game.currentProcessingItem.type)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Link Badge */}
-                  <div className="absolute -top-6 -left-6 w-20 h-20 bg-red-600 rounded-full border-4 border-zinc-900 flex items-center justify-center shadow-2xl z-20">
-                    <span className="text-2xl font-black italic text-white uppercase tracking-tighter">连锁</span>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex flex-col items-center gap-2"
-                >
-                  <span className="text-white/40 text-[10px] font-black uppercase tracking-[0.5em]">发起方</span>
-                  <span className={cn(
-                    "px-6 py-2 rounded-full border text-xs font-black uppercase tracking-widest italic shadow-lg flex items-center gap-3",
-                    game.currentProcessingItem.ownerUid === myUid ? "bg-blue-600/20 border-blue-500/50 text-blue-400" : "bg-red-600/20 border-red-500/50 text-red-400"
-                  )}>
-                    {game.currentProcessingItem.ownerUid === myUid ? "我方" : "对方"}
-                    {game.currentProcessingItem.card && (
-                      <span className="opacity-60 text-[10px] border-l border-current pl-3 ml-2">
-                        {getCardIdentity(game, game.currentProcessingItem.ownerUid, game.currentProcessingItem.card).split('|')[1].replace(']', '')}
-                      </span>
-                    )}
-                  </span>
-                </motion.div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
           {!isSpectator && game.phase === 'COUNTERING' && (game.priorityPlayerId !== myUid || game.isResolvingStack) && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -3282,7 +3320,7 @@ export const BattleField: React.FC = () => {
               <div className="bg-zinc-900/90 border border-red-500/50 px-8 py-4 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.3)] backdrop-blur-sm flex items-center gap-4">
                 <Loader2 className="w-5 h-5 text-red-500 animate-spin" />
                 <span className="text-white font-black italic uppercase tracking-widest text-sm">
-                  {game.isResolvingStack ? "正在结算连锁..." : `等待 ${game.players[game.priorityPlayerId!]?.displayName || '对手'} 响应...`}
+                  {game.isResolvingStack ? "正在结算对抗..." : `等待 ${game.players[game.priorityPlayerId!]?.displayName || '对手'} 对抗...`}
                 </span>
               </div>
             </motion.div>
@@ -3321,6 +3359,8 @@ export const BattleField: React.FC = () => {
           title="请选择弃牌"
           description={`你的手牌超过 6 张，请选择要弃置的卡牌（当前：${me.hand.length}，需弃置：${me.hand.length - 6}）`}
           mode="card_selection"
+          presentation="duel-bottom"
+          optionLayout="row"
           cards={me.hand}
           selectedIds={discardSelection}
           minSelections={me.hand.length - 6}
@@ -3335,6 +3375,7 @@ export const BattleField: React.FC = () => {
             });
           }}
           onSelectionComplete={async () => {
+            setIsPopupHidden(true);
             for (const id of discardSelection) {
               await handleDiscardCard(id);
             }
@@ -3376,7 +3417,7 @@ export const BattleField: React.FC = () => {
       {/* Card Action Menu */}
       {/* Unified Card Action Menu */}
       <AnimatePresence>
-        {cardMenu && (
+        {!isBattleAnimationBlockingUi && cardMenu && (
           <>
             <div className="fixed inset-0 z-[1990]" onClick={() => setCardMenu(null)}></div>
             <motion.div
@@ -3396,7 +3437,7 @@ export const BattleField: React.FC = () => {
             >
               <div className="md:hidden w-12 h-1 bg-white/20 rounded-full mb-2 shrink-0" />
               <div className="md:hidden text-[10px] font-black text-white/40 tracking-[0.2em] mb-2 shrink-0">操作</div>
-              {isPopupHidden && isSelectCardPendingQuery && game.pendingQuery?.playerUid === myUid && (() => {
+              {canShowPendingInteraction && isPopupHidden && isSelectCardPendingQuery && game.pendingQuery?.playerUid === myUid && (() => {
                 const optionId = cardMenu.card.gamecardId || cardMenu.card.id;
                 if (!selectablePendingQueryCardIds.has(optionId)) return null;
                 const isSelected = selectedQueryIds.includes(optionId);
@@ -3423,7 +3464,7 @@ export const BattleField: React.FC = () => {
                   </motion.button>
                 );
               })()}
-              {isPopupHidden && game.pendingQuery?.playerUid === myUid && (
+              {canShowPendingInteraction && isPopupHidden && game.pendingQuery?.playerUid === myUid && (
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-black bg-[#f27d26] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
@@ -3435,7 +3476,7 @@ export const BattleField: React.FC = () => {
                   展开窗口
                 </motion.button>
               )}
-              {isPopupHidden && isSelectCardPendingQuery && game.pendingQuery?.playerUid === myUid && selectedQueryIds.length >= (game.pendingQuery?.minSelections || 0) && (
+              {canShowPendingInteraction && isPopupHidden && isSelectCardPendingQuery && game.pendingQuery?.playerUid === myUid && selectedQueryIds.length >= (game.pendingQuery?.minSelections || 0) && (
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   className="px-4 py-3 md:py-1.5 text-[12px] md:text-[10px] font-bold text-white bg-[#22c55e] rounded-full shadow-lg border border-white/20 flex items-center justify-center w-full"
@@ -3705,7 +3746,7 @@ export const BattleField: React.FC = () => {
 
       {/* Effect Selection Modal */}
       <AnimatePresence>
-        {effectSelection && (
+        {canShowPendingInteraction && effectSelection && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: isPopupHidden ? 0 : 1 }}
@@ -3777,7 +3818,7 @@ export const BattleField: React.FC = () => {
 
       {/* Effect Confirmation Modal */}
       <AnimatePresence>
-        {effectConfirmation && (
+        {canShowPendingInteraction && effectConfirmation && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: isPopupHidden ? 0 : 1 }}
@@ -3848,114 +3889,6 @@ export const BattleField: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Global Confrontation Chain Overlay (Above Popups) */}
-      <AnimatePresence>
-        {!isSpectator && ((game.phase === 'BATTLE_FREE' && game.battleState?.askConfront) || game.phase === 'COUNTERING' || isConfronting) && 
-         (game.counterStack.length > 0 || game.battleState?.attackerCardId) && (
-          <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed inset-x-0 top-12 z-[1100] flex flex-col items-center pointer-events-none"
-          >
-            <div className="flex flex-col items-center gap-4 bg-black/60 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 shadow-2xl">
-              <div className="flex items-center gap-2 text-zinc-400 text-[10px] font-black uppercase tracking-widest mb-2">
-                <Layers className="w-4 h-4 text-red-500" />
-                完整对抗连锁
-              </div>
-              
-              <div className="flex items-center gap-4">
-                {/* Battle Context (The "Root" of the confrontation) */}
-                {game.battleState?.attackerCardId && (
-                  <>
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-16 md:w-24 aspect-[3/4] rounded-xl overflow-hidden border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] relative">
-                        {(() => {
-                          const attackerUid = (game.battleState as any).attackerUid || game.playerIds[game.currentTurnPlayer];
-                          const attacker = [...(game.players[attackerUid]?.unitZone || []), ...(game.players[attackerUid]?.itemZone || [])].find(c => c?.gamecardId === game.battleState!.attackerCardId);
-                          return attacker ? <CardComponent card={attacker} disableZoom cardBackUrl={cardBackUrl} /> : <div className="w-full h-full bg-zinc-800" />;
-                        })()}
-                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-red-600 rounded text-[8px] font-black italic text-white z-10 shadow-lg">
-                          攻击者
-                        </div>
-                      </div>
-                      <span className="text-[8px] font-bold text-red-400 uppercase">
-                        {((game.battleState as any).attackerUid || game.playerIds[game.currentTurnPlayer]) === myUid ? "我方" : isSpectator ? "攻击方" : "对方"}
-                      </span>
-                    </div>
-
-                    {game.battleState.defenderCardId && (
-                      <div className="flex items-center gap-4">
-                        <Sword className="w-4 h-4 text-zinc-500 animate-pulse" />
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="w-16 md:w-24 aspect-[3/4] rounded-xl overflow-hidden border-2 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.3)] relative">
-                            {(() => {
-                              const defenderUid = (game.battleState as any).defenderUid || game.playerIds[game.currentTurnPlayer === 0 ? 1 : 0];
-                              const defender = [...(game.players[defenderUid]?.unitZone || [])].find(c => c?.gamecardId === game.battleState!.defenderCardId);
-                              return defender ? <CardComponent card={defender} disableZoom cardBackUrl={cardBackUrl} /> : <div className="w-full h-full bg-zinc-800" />;
-                            })()}
-                            <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-blue-600 rounded text-[8px] font-black italic text-white z-10 shadow-lg">
-                              防御者
-                            </div>
-                          </div>
-                          <span className="text-[8px] font-bold text-blue-400 uppercase">
-                            {((game.battleState as any).defenderUid || game.playerIds[game.currentTurnPlayer === 0 ? 1 : 0]) === myUid ? "我方" : isSpectator ? "防御方" : "对方"}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {(game.counterStack.length > 0) && (
-                      <div className="h-12 w-px bg-white/10 mx-2" />
-                    )}
-                  </>
-                )}
-
-                {/* Counter Stack */}
-                {game.counterStack.map((item, idx) => (
-                  <div key={`${idx}-${item.timestamp}`} className="flex items-center gap-4">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-16 md:w-24 aspect-[3/4] rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl relative">
-                        {item.card
-                          ? <CardComponent card={item.card} disableZoom cardBackUrl={cardBackUrl} />
-                          : item.type === 'PHASE_END'
-                            ? <PhaseRequestCard item={item} />
-                            : item.type === 'ATTACK'
-                              ? <AttackRequestCard item={item} />
-                            : <div className="w-full h-full bg-zinc-800" />}
-                        <div className={cn(
-                          "absolute top-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-black italic text-white z-10 shadow-lg",
-                          item.ownerUid === myUid ? "bg-blue-600" : "bg-red-600"
-                        )}>
-                          L{idx + 1}
-                        </div>
-                      </div>
-                      <span className={cn(
-                        "text-[8px] font-bold uppercase",
-                        item.ownerUid === myUid ? "text-blue-400" : "text-red-400"
-                      )}>
-                        {item.ownerUid === myUid ? "我方" : "对方"}
-                      </span>
-                    </div>
-                    {idx < game.counterStack.length - 1 && (
-                      <ChevronRight className="w-4 h-4 text-zinc-700" />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {isConfronting && (
-                <div className="mt-4 px-6 py-2 bg-red-600/20 border border-red-500/50 rounded-full animate-pulse">
-                  <span className="text-red-400 text-xs font-black italic uppercase tracking-widest">
-                    请点击卡牌来发动对抗
-                  </span>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Standardized Surrender Confirmation Popup */}
       <StandardPopup
         isOpen={!isSpectator && showSurrenderConfirm}
@@ -3973,12 +3906,13 @@ export const BattleField: React.FC = () => {
         cardBackUrl={cardBackUrl}
         onHide={() => setIsPopupHidden(true)}
         isHidden={isPopupHidden}
+        instant={true}
       />
 
 
       {/* Waiting for Opponent Query Overlay */}
       <AnimatePresence>
-        {!isSpectator && game.pendingQuery && game.pendingQuery.playerUid !== myUid && (
+        {canShowPendingInteraction && !isSpectator && game.pendingQuery && game.pendingQuery.playerUid !== myUid && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -3997,11 +3931,14 @@ export const BattleField: React.FC = () => {
 
       {/* Standardized My Pending Query Popup */}
       <StandardPopup
-        key={`${game.pendingQuery?.id || 'no-query'}-${pendingQueryPopupMode}`}
-        isOpen={!!(!isSpectator && game.pendingQuery && game.pendingQuery.playerUid === myUid)}
-        title={game.pendingQuery?.title || ''}
-        description={game.pendingQuery?.description || ''}
+        key={`${displayedPendingQuery?.id || 'no-query'}-${pendingQueryPopupMode}`}
+        isOpen={!!(canShowPendingInteraction && !isSpectator && displayedPendingQuery && displayedPendingQuery.playerUid === myUid)}
+        title={pendingQueryTitle}
+        description={pendingQueryDescription}
         mode={pendingQueryPopupMode}
+        presentation={pendingQueryPresentation}
+        optionLayout="row"
+        selectionStatusPlacement={pendingQuerySelectionStatusPlacement}
         options={
           normalizedPendingQueryType === 'ASK_TRIGGER' || normalizedPendingQueryType === 'SELECT_CHOICE' || normalizedPendingQueryType === 'SELECT_CARD'
             ? pendingQueryOptions
@@ -4034,148 +3971,60 @@ export const BattleField: React.FC = () => {
             })
         )}
         selectedIds={selectedQueryIds}
-        minSelections={game.pendingQuery?.minSelections}
-        maxSelections={game.pendingQuery?.maxSelections}
+        minSelections={displayedPendingQuery?.minSelections}
+        maxSelections={displayedPendingQuery?.maxSelections}
         onCardClick={(card) => {
           const optionId = card.gamecardId || card.id;
-          const option = pendingQueryOptions.find(o => getPendingOptionId(o) === optionId);
+          const option = pendingQueryOptions.find(o =>
+            getPendingOptionId(o) === optionId ||
+            o.card?.gamecardId === optionId ||
+            o.card?.id === optionId
+          );
           if (option?.disabled) return;
+          const selectedOptionId = option ? getPendingOptionId(option) : optionId;
 
           setSelectedQueryIds(prev => {
-            const alreadySelected = prev.includes(optionId);
-            if (alreadySelected) return prev.filter(id => id !== optionId);
-            if (prev.length >= (game.pendingQuery?.maxSelections || 1)) {
-              if (game.pendingQuery?.maxSelections === 1) return [optionId];
+            const alreadySelected = prev.includes(selectedOptionId);
+            if (alreadySelected) return prev.filter(id => id !== selectedOptionId);
+            if (prev.length >= (displayedPendingQuery?.maxSelections || 1)) {
+              if (displayedPendingQuery?.maxSelections === 1) return [selectedOptionId];
               return prev;
             }
-            return [...prev, optionId];
+            return [...prev, selectedOptionId];
           });
         }}
         onSelectionComplete={handleQuerySubmit}
-        paymentCost={game.pendingQuery?.paymentCost}
+        paymentCost={displayedPendingQuery?.paymentCost}
         paymentCurrent={
-          (game.pendingQuery?.paymentCost || 0) > 0
-            ? formatSelectedPaymentValue(game.pendingQuery?.paymentCost || 0, game.pendingQuery?.paymentColor)
+          (displayedPendingQuery?.paymentCost || 0) > 0
+            ? formatSelectedPaymentValue(displayedPendingQuery?.paymentCost || 0, displayedPendingQuery?.paymentColor)
             : paymentSelection.erosionFrontIds.length
         }
         squarePanel={normalizedPendingQueryType === 'ASK_TRIGGER'}
-        confirmText={pendingQueryPopupMode === 'double_selection' ? binaryConfirmText : querySubmitLabel}
-        cancelText={binaryCancelText}
-        onConfirm={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryConfirmOption) || 'YES'])}
-        onCancel={() => GameService.submitQueryChoice(gameId!, game.pendingQuery!.id, [getPendingOptionId(binaryCancelOption) || 'NO'])}
+        confirmText={isQueryHandoffWaiting ? '处理中' : (pendingQueryPopupMode === 'double_selection' ? binaryConfirmText : querySubmitLabel)}
+        cancelText={isQueryHandoffWaiting ? '处理中' : binaryCancelText}
+        confirmDisabled={isQueryHandoffWaiting}
+        hidePaymentCancel={isEffectPaymentQuery}
+        compactOverlay={normalizedPendingQueryType === 'ASK_TRIGGER'}
+        onConfirm={() => {
+          if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+          const submittingQuery = displayedPendingQuery;
+          setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
+          GameService.submitQueryChoice(gameId, submittingQuery.id, [getPendingOptionId(binaryConfirmOption) || 'YES']);
+        }}
+        onCancel={() => {
+          if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+          const submittingQuery = displayedPendingQuery;
+          setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
+          GameService.submitQueryChoice(gameId, submittingQuery.id, [getPendingOptionId(binaryCancelOption) || 'NO']);
+        }}
         cardBackUrl={cardBackUrl}
         onHide={() => setIsPopupHidden(true)}
         isHidden={isPopupHidden}
+        instant
       >
-        {normalizedPendingQueryType === 'SELECT_PAYMENT' && (
-          <div className="flex flex-col gap-8 w-full max-w-4xl max-h-[50vh] overflow-y-auto p-4 custom-scrollbar">
-            {/* Hand Replacement Section */}
-            {(game.pendingQuery!.paymentCost || 0) > 0 && getHandPaymentOptions(game.pendingQuery?.paymentColor, game.pendingQuery?.paymentCost).length > 0 && (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2 text-blue-400 font-black uppercase italic tracking-widest text-sm">
-                  <Zap className="w-4 h-4" />
-                  手牌代替支付
-                </div>
-                <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
-                  {getHandPaymentOptions(game.pendingQuery?.paymentColor, game.pendingQuery?.paymentCost).map((card, i) => {
-                    const isSelected = paymentSelection.useFeijing.includes(card.gamecardId);
-                    return (
-                      <motion.div
-                        key={`${card.gamecardId}-${i}`}
-                        whileHover={{ y: -3 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => togglePaymentFeijing(card.gamecardId)}
-                        className={cn(
-                          "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
-                          isSelected ? "border-blue-500 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
-                        )}
-                      >
-                        <div className="relative h-full w-full">
-                          <CardComponent card={card} disableZoom displayMode="hand" cardBackUrl={cardBackUrl} effectiveAcValue={getEffectiveCardCost(card)} />
-                          <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                            {getOwnedCardLocationLabel(card)}
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Exhaust Section */}
-            {(game.pendingQuery!.paymentCost || 0) > 0 && me.unitZone.some(c => canCardBeExhausted(c) && !getPaymentExcludedExhaustIds().includes(c.gamecardId)) && (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2 text-green-400 font-black uppercase italic tracking-widest text-sm">
-                  <Sword className="w-4 h-4" />
-                  横置支付（按单位ACCESS值）
-                </div>
-                <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
-                  {me.unitZone.filter(c => canCardBeExhausted(c) && !getPaymentExcludedExhaustIds().includes(c!.gamecardId)).map((card, i) => {
-                    const isSelected = paymentSelection.exhaustIds.includes(card!.gamecardId);
-                    const accessValue = getAccessPaymentLabel(card, game.pendingQuery?.paymentColor);
-                    return (
-                      <motion.div
-                        key={`${card!.gamecardId}-${i}`}
-                        whileHover={{ y: -3 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => togglePaymentExhaust(card!.gamecardId)}
-                        className={cn(
-                          "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
-                          isSelected ? "border-green-500 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
-                        )}
-                      >
-                        <div className="relative h-full w-full">
-                          <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
-                          <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                            {getOwnedCardLocationLabel(card!)} · {accessValue}
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Erosion Front Section (Horizontal Units) - Only for negative costs */}
-            {(game.pendingQuery!.paymentCost || 0) < 0 && me.erosionFront.some(c => c && c.displayState === 'FRONT_UPRIGHT') && (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2 text-red-400 font-black uppercase italic tracking-widest text-sm">
-                  <Layers className="w-4 h-4" />
-                  水平支付（费用 -1）
-                </div>
-                <div className="grid grid-cols-2 gap-3 pb-2 pt-2 justify-items-center">
-                  {me.erosionFront.filter(c => c && c.displayState === 'FRONT_UPRIGHT').map((card, i) => {
-                    const isSelected = paymentSelection.erosionFrontIds.includes(card!.gamecardId);
-                    return (
-                      <motion.div
-                        key={`${card!.gamecardId}-${i}`}
-                        whileHover={{ y: -3 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => togglePaymentErosionFront(card!.gamecardId)}
-                        className={cn(
-                          "aspect-[3/4] w-full max-w-[10.8rem] cursor-pointer transition-all rounded-lg overflow-hidden border-2 md:max-w-none",
-                          isSelected ? "border-red-500 scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "border-white/5 opacity-60 hover:opacity-100"
-                        )}
-                      >
-                        <div className="relative h-full w-full">
-                          <CardComponent card={card!} disableZoom cardBackUrl={cardBackUrl} />
-                          <div className="absolute left-2 top-2 rounded-lg bg-black/75 px-2 py-1 text-[10px] font-black text-white shadow-lg">
-                            {getOwnedCardLocationLabel(card!)}
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <p className="text-zinc-500 text-xs italic text-center px-8">
-              提示：剩余费用将自动以侵蚀伤害的形式从你的牌库中扣除。
-            </p>
-          </div>
+        {normalizedPendingQueryType === 'SELECT_PAYMENT' && !isQueryHandoffWaiting && displayedPendingQuery && (
+          renderPaymentTrayContent(displayedPendingQuery.paymentCost || 0, displayedPendingQuery.paymentColor)
         )}
 
       </StandardPopup>
@@ -4196,16 +4045,18 @@ export const BattleField: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: isPopupHidden ? 0 : 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0 }}
             className={cn(
-              "fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-6 backdrop-blur-md transition-all duration-300",
+              "fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-6 backdrop-blur-md",
               isPopupHidden ? "pointer-events-none invisible" : "pointer-events-auto visible"
             )}
             onClick={() => setShowPhaseMenu(false)}
           >
             <motion.div
-              initial={{ scale: 0.8, opacity: 0, y: 40 }}
+              initial={{ scale: 1, opacity: 1, y: 0 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.8, opacity: 0, y: 40 }}
+              exit={{ scale: 1, opacity: 0, y: 0 }}
+              transition={{ duration: 0 }}
               className="bg-zinc-900 border border-white/10 p-12 rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.8),0_0_50px_rgba(242,125,38,0.1)] flex flex-col items-center gap-10 max-w-sm w-full relative overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >

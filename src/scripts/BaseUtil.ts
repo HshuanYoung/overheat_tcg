@@ -9,12 +9,15 @@ const VIRTUAL_GOD_MARK_IDS = new Set(['105000472', '105000473']);
 
 export type ChoiceOptionInput = {
   id?: string;
+  selectionId?: string;
   value?: string;
   sourceCardNo?: string;
   optionCode?: string;
   label?: string;
   icon?: string;
   detail?: string;
+  card?: Card;
+  cardWidth?: 'default' | 'card';
   disabled?: boolean;
   disabledReason?: string;
 };
@@ -624,6 +627,7 @@ export const standardizeChoiceOptions = (
     return {
       ...option,
       id: `${sourceCardNo}_option_${optionCode}`,
+      selectionId: option.selectionId || option.id,
       value: String(value),
       sourceCardNo,
       optionCode

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, PlayerOngoingEffect, PlayerState, StackItem, GameState, SandboxEditableZone, SandboxPlayerKey } from '../types/game';
 import { CardComponent } from './Card';
@@ -7,9 +7,11 @@ import { KeywordBadges } from './KeywordBadges';
 import { CardEffectList } from './CardEffectList';
 import { GameService } from '../services/gameService';
 import { ArrowDown, Shield, Sword, Zap, Flag, BookOpen, Play, X, LogOut, Coins, Sparkles } from 'lucide-react';
-import { cn, getCardImageUrl } from '../lib/utils';
+import { cn } from '../lib/utils';
 import { getPlayerWealthCount } from '../lib/wealth';
 import { getPlayerOngoingEffects } from '../lib/playerOngoingEffects';
+
+export const AnimatingCardsContext = createContext<Set<string> | undefined>(undefined);
 
 interface PlayFieldProps {
   player: PlayerState;
@@ -40,6 +42,7 @@ interface PlayFieldProps {
   isConfrontPromptActive?: boolean;
   isCounteringPromptActive?: boolean;
   isDefensePromptActive?: boolean;
+  isCounteringPromptWaiting?: boolean;
   onStartConfront?: () => void;
   onDeclineConfront?: () => void;
   onDeclineDefense?: () => void;
@@ -54,6 +57,8 @@ interface PlayFieldProps {
   sandboxEditMode?: boolean;
   onSandboxZoneClick?: (target: { playerKey: SandboxPlayerKey; zone: SandboxEditableZone; index?: number; card?: Card | null }) => void;
   sandboxCenterControls?: React.ReactNode;
+  onHoverPreview?: (card: Card | null) => void;
+  animatingCardIds?: Set<string>;
 }
 
 type HandDragState = {
@@ -88,7 +93,11 @@ const CardSlot: React.FC<{
   isHighlighted?: boolean;
   allowFaceDownHover?: boolean;
   ignoreSkin?: boolean;
+  animationAnchor?: string;
 }> = ({ card, label, onClick, onPreview, onHover, className, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent, isAllianceInitiator, displayMode, slotLabel, cardBackUrl, isHighlighted, allowFaceDownHover = false, ignoreSkin = false }) => {
+  const animatingCardIds = useContext(AnimatingCardsContext);
+  const isAnimating = !!(card && animatingCardIds?.has(card.gamecardId));
+
   // Dynamic height scaling for stack areas (Deck, Grave, Exile)
   const isStackArea = isDeck || label === '墓地' || label === '放逐';
   const numericCount = typeof count === 'number' ? count : 0;
@@ -106,6 +115,8 @@ const CardSlot: React.FC<{
       style={{ transform: `scaleY(${heightScale})`, transformOrigin: isOpponent ? 'top' : 'bottom' }}
     >
       <div
+        data-animation-anchor={animationAnchor}
+        data-animation-card-id={card?.gamecardId}
         className={cn(
           "relative h-full w-full rounded-md border border-white/10 transition-all flex items-center justify-center group overflow-hidden cursor-pointer",
           (card || isDeck || count > 0) ? "bg-black/40 shadow-lg" : "bg-white/5",
@@ -113,6 +124,7 @@ const CardSlot: React.FC<{
           isAllianceInitiator ? "z-10 shadow-[0_0_20px_rgba(220,38,38,0.8)] ring-2 ring-red-600" : "",
           isHighlighted ? "z-20 !border-yellow-400 ring-2 ring-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.95)]" : "",
           (isAttacking || isDefending) ? "z-10" : "",
+          isAnimating && "opacity-0 pointer-events-none",
           className
         )}
         onClick={(e) => {
@@ -403,6 +415,9 @@ const withEffectiveCostInfluence = (gameState: GameState | undefined, player: Pl
   return { effectiveAcValue, card: { ...card, influencingEffects } };
 };
 
+const animationZoneAnchor = (uid: string, zone: string) => `player:${uid}:${zone}`;
+const animationUnitAnchor = (uid: string, index: number) => `player:${uid}:unit:${index}`;
+
 const PlayerHalf: React.FC<{
   player: PlayerState;
   isOpponent?: boolean;
@@ -508,9 +523,23 @@ const PlayerHalf: React.FC<{
 
   return (
     <div className={cn(
-      "flex-1 md:grid md:grid-cols-[100px_1fr_100px] grid grid-cols-5 gap-0.5 md:gap-2 p-0.5 md:p-2 relative h-full min-h-0 perspective-[1000px]",
-      isOpponent ? "bg-red-500/5 items-start" : "bg-blue-500/5 items-end"
+      "flex-1 md:grid md:grid-cols-[100px_1fr_100px] grid grid-cols-5 gap-0.5 md:gap-2 p-0.5 md:p-2 relative h-full min-h-0 perspective-[1000px] overflow-hidden",
+      isOpponent ? "bg-red-500/5 items-start" : "bg-blue-500/5 items-end",
+      player.isGoddessMode && (isOpponent
+        ? "shadow-[inset_0_0_44px_rgba(242,125,38,0.24)]"
+        : "shadow-[inset_0_0_44px_rgba(251,191,36,0.24)]")
     )}>
+      {player.isGoddessMode && (
+        <motion.div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 z-[2] h-1 bg-gradient-to-r from-transparent via-amber-200 to-transparent",
+            isOpponent ? "bottom-0" : "top-0"
+          )}
+          initial={false}
+          animate={{ opacity: [0.35, 1, 0.35], scaleX: [0.85, 1, 0.85] }}
+          transition={{ duration: 2.1, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
 
       {/* SIDEBAR 1: Left Columns */}
       <div className="flex flex-col gap-1 md:gap-4 h-full justify-center">
@@ -521,6 +550,7 @@ const PlayerHalf: React.FC<{
               card={null} isDeck label="牌库" count={player.deck?.length || 0}
               className="border-white/20 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onClick={() => clickSandboxZone('deck')}
+              animationAnchor={animationZoneAnchor(player.uid, 'deck')}
             />
             <CardSlot
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
@@ -529,6 +559,7 @@ const PlayerHalf: React.FC<{
               onClick={() => clickSandboxZone('grave', Math.max(0, (player.grave?.length || 1) - 1), player.grave?.[player.grave.length - 1] || null) || setViewingZone?.({ title: '墓地', type: 'grave', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={true} isOpponent={isOpponent} displayMode="erosion_item" ignoreSkin={ignoreCardSkins}
+              animationAnchor={animationZoneAnchor(player.uid, 'grave')}
             />
             <CardSlot
               card={player.exile?.length > 0 ? player.exile[player.exile.length - 1] : null}
@@ -540,6 +571,7 @@ const PlayerHalf: React.FC<{
               isOpponent={isOpponent}
               displayMode="erosion_item"
               ignoreSkin={ignoreCardSkins}
+              animationAnchor={animationZoneAnchor(player.uid, 'exile')}
             />
           </>
         ) : (
@@ -555,6 +587,7 @@ const PlayerHalf: React.FC<{
               isExhausted={!!(player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined)?.isExhausted}
               isHighlighted={highlightedCardIds?.has((player.itemZone?.filter(Boolean).slice(-1)[0] as Card | undefined)?.gamecardId || '')}
               displayMode="erosion_item"
+              animationAnchor={animationZoneAnchor(player.uid, 'item')}
             />
             <div className="flex justify-center">
               <OngoingEffectButton
@@ -579,11 +612,13 @@ const PlayerHalf: React.FC<{
               isFaceUp={player.erosionFront?.some(c => c !== null)}
               isHighlighted={highlightedCardIds?.has((player.erosionFront?.filter(Boolean).slice(-1)[0] || null)?.gamecardId || '')}
               displayMode="erosion_item"
+              animationAnchor={animationZoneAnchor(player.uid, 'erosion')}
             />
             <CardSlot
               card={(player.playZone?.length || 0) > 0 ? player.playZone[player.playZone.length - 1] : null}
               label="出牌区" count={player.playZone?.length || 0}
               className="border-yellow-500/30 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
+              animationAnchor={animationZoneAnchor(player.uid, 'play')}
             />
           </>
         )}
@@ -605,6 +640,7 @@ const PlayerHalf: React.FC<{
                 )}
                 onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
               >
+              <div data-animation-anchor={animationZoneAnchor(player.uid, 'hand')} className="flex-1 h-14 md:h-20 flex items-center justify-center gap-1 overflow-x-auto bg-black/20 rounded-lg border border-white/5 custom-scrollbar">
                 {shouldRenderHandSlot ? (
                   <HandZoneSlot
                     count={player.hand?.length || 0}
@@ -620,6 +656,10 @@ const PlayerHalf: React.FC<{
                         key={card.gamecardId || i}
                         className="w-10 md:w-[76.8px] shrink-0 cursor-pointer shadow-lg drop-shadow-md transition-all hover:-translate-y-1"
                         onClick={(e) => clickSandboxZone('hand', i, costDisplay.card) || onCardClick?.(costDisplay.card, 'hand', i, e)}
+                        data-animation-anchor={`card:${card.gamecardId}`}
+                        data-animation-card-id={card.gamecardId}
+                        className="w-10 md:w-[76.8px] shrink-0 cursor-pointer shadow-lg drop-shadow-md transition-all"
+                        onClick={(e) => onCardClick?.(costDisplay.card, 'hand', i, e)}
                         onMouseEnter={() => onHoverCard?.(costDisplay.card)}
                         onMouseLeave={() => onHoverCard?.(null)}
                       >
@@ -631,6 +671,8 @@ const PlayerHalf: React.FC<{
                   player.hand?.map((card, i) => (
                     <div
                       key={i}
+                      data-animation-anchor={`card:${card.gamecardId}`}
+                      data-animation-card-id={card.gamecardId}
                       className={cn(
                         "w-10 md:w-[76.8px] aspect-[3/4] -ml-4 md:-ml-[38.4px] first:ml-0 shadow-lg drop-shadow-md transition-all shrink-0",
                         isOpponent && "rotate-180"
@@ -658,7 +700,7 @@ const PlayerHalf: React.FC<{
                   return (
                     <div key={i} className="flex flex-col gap-1 items-center">
                       <span className="text-[10px] font-black text-white/30">{num}</span>
-                      <div className="relative aspect-[3/4] w-full">
+                      <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
                         {displayCard ? (
                           <CardSlot
                             card={displayCard} isFaceUp={displayCard.isFaceUp} onPreview={displayCard.isFaceUp ? onPreviewCard : undefined}
@@ -683,7 +725,7 @@ const PlayerHalf: React.FC<{
             </div>
 
             {/* Opponent Unit Zone */}
-            <div className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 translate-y-2 md:translate-y-[60px] transition-transform duration-700", unitZoneOffsetClass)} style={{ transform: 'translateZ(-100px) rotateX(-5deg)' }}>
+            <div data-animation-anchor={animationZoneAnchor(player.uid, 'unit-row')} className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 translate-y-2 md:translate-y-[60px] transition-transform duration-700", unitZoneOffsetClass)} style={{ transform: 'translateZ(-100px) rotateX(-5deg)' }}>
               {Array.from({ length: 6 }).map((_, i) => {
                 const unit = player.unitZone?.[i];
                 return (
@@ -698,6 +740,7 @@ const PlayerHalf: React.FC<{
                     isDefending={unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId || game?.battleState?.unitTargetId === unit.gamecardId) : false}
                     isHighlighted={unit ? highlightedCardIds?.has(unit.gamecardId) : false}
                     showCount={false} isOpponent={isOpponent} displayMode="unit" slotLabel={`${6 - i}`} cardBackUrl={cardBackUrl} ignoreSkin={ignoreCardSkins}
+                    animationAnchor={animationUnitAnchor(player.uid, i)}
                   />
                 );
               })}
@@ -706,7 +749,7 @@ const PlayerHalf: React.FC<{
         ) : (
           <>
             {/* Player Unit Zone */}
-            <div className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 -translate-y-4 md:-translate-y-[60px] transition-transform duration-700", unitZoneOffsetClass)} style={{ transform: 'translateZ(-100px) rotateX(5deg)' }}>
+            <div data-animation-anchor={animationZoneAnchor(player.uid, 'unit-row')} className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 -translate-y-4 md:-translate-y-[60px] transition-transform duration-700", unitZoneOffsetClass)} style={{ transform: 'translateZ(-100px) rotateX(5deg)' }}>
               {Array.from({ length: 6 }).map((_, i) => {
                 const unit = player.unitZone?.[i];
                 return (
@@ -722,6 +765,7 @@ const PlayerHalf: React.FC<{
                     isAllianceInitiator={unit && allianceInitiator === unit.gamecardId}
                     isHighlighted={unit ? highlightedCardIds?.has(unit.gamecardId) : false}
                     showCount={false} displayMode="unit" slotLabel={`${i + 1}`} cardBackUrl={cardBackUrl}
+                    animationAnchor={animationUnitAnchor(player.uid, i)}
                   />
                 );
               })}
@@ -741,7 +785,7 @@ const PlayerHalf: React.FC<{
                   const displayCard = allCards[i];
                   return (
                     <div key={i} className="flex flex-col gap-1 items-center">
-                      <div className="relative aspect-[3/4] w-full">
+                      <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
                         {displayCard ? (
                           <CardSlot
                             card={displayCard}
@@ -780,6 +824,8 @@ const PlayerHalf: React.FC<{
                 onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
               >
                 {shouldCollapseOwnHand ? (
+              <div data-animation-anchor={animationZoneAnchor(player.uid, 'hand')} className="flex-1 h-16 md:h-36 flex items-center justify-center gap-0.5 overflow-visible bg-black/20 rounded-lg border border-white/5 relative">
+                {shouldUseHandSlot ? (
                   <HandZoneSlot count={player.hand?.length || 0} onClick={openHandZone} />
                 ) : player.hand?.map((card, i) => {
                   const costDisplay = getCardCostDisplay(card);
@@ -841,12 +887,11 @@ const PlayerHalf: React.FC<{
 
                   return (
                     <div
-                      key={cardKey}
-                      className={cn(
-                        "absolute transition-all duration-300 cursor-pointer",
-                        handEffectsActive ? "cursor-grab active:cursor-grabbing" : "w-[38.4px] md:w-[115.2px]"
-                      )}
-                      style={handEffectsActive ? getHandEffectStyle(i, total, cardKey) : {
+                      key={card.gamecardId || i}
+                      data-animation-anchor={`card:${card.gamecardId}`}
+                      data-animation-card-id={card.gamecardId}
+                      className="absolute w-[38.4px] md:w-[115.2px] transition-all duration-300 cursor-pointer"
+                      style={{
                         transform: `translateX(${xPos}px) ${isFeijingSelected ? 'translateY(-10px) md:translateY(-50px) scale(1.1)' : ''}`,
                         zIndex: isFeijingSelected ? 100 : i,
                         bottom: isMobileViewport ? '10px' : '0px'
@@ -907,6 +952,7 @@ const PlayerHalf: React.FC<{
               onPreview={onPreviewCard} isOpponent={isOpponent}
               ignoreSkin={ignoreCardSkins}
               onHover={onHoverCard}
+              animationAnchor={animationZoneAnchor(player.uid, 'play')}
             />
             <CardSlot
               card={player.erosionFront?.filter(Boolean).slice(-1)[0] || player.erosionBack?.filter(Boolean).slice(-1)[0] || null}
@@ -925,6 +971,7 @@ const PlayerHalf: React.FC<{
               isOpponent={isOpponent}
               ignoreSkin={ignoreCardSkins}
               displayMode="erosion_item"
+              animationAnchor={animationZoneAnchor(player.uid, 'erosion')}
             />
             <CardSlot
               card={player.itemZone?.filter(Boolean).slice(-1)[0] || null}
@@ -938,6 +985,7 @@ const PlayerHalf: React.FC<{
               isOpponent={isOpponent}
               ignoreSkin={ignoreCardSkins}
               displayMode="erosion_item"
+              animationAnchor={animationZoneAnchor(player.uid, 'item')}
             />
             <div className={cn("flex justify-center", isOpponent && "rotate-180")}>
               <OngoingEffectButton
@@ -959,6 +1007,7 @@ const PlayerHalf: React.FC<{
               onHover={onHoverCard}
               isFaceUp={player.exile?.length > 0 ? player.exile[player.exile.length - 1]?.displayState !== 'FRONT_FACEDOWN' : true}
               displayMode="erosion_item"
+              animationAnchor={animationZoneAnchor(player.uid, 'exile')}
             />
             <CardSlot
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
@@ -967,11 +1016,13 @@ const PlayerHalf: React.FC<{
               onClick={() => clickSandboxZone('grave', Math.max(0, (player.grave?.length || 1) - 1), player.grave?.[player.grave.length - 1] || null) || setViewingZone?.({ title: '墓地', type: 'grave', isOpponentZone: !!isOpponent })}
               onHover={onHoverCard}
               isFaceUp={true} displayMode="erosion_item"
+              animationAnchor={animationZoneAnchor(player.uid, 'grave')}
             />
             <CardSlot
               card={null} isDeck label="牌库" count={player.deck?.length || 0}
               className="border-white/20 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
               onClick={() => clickSandboxZone('deck')}
+              animationAnchor={animationZoneAnchor(player.uid, 'deck')}
             />
           </>
         )}
@@ -982,7 +1033,7 @@ const PlayerHalf: React.FC<{
 
 export const PlayField: React.FC<PlayFieldProps> = ({
   player, opponent, game, onCardClick, onPreviewCard, onPlayCard,
-  paymentSelection, pendingPlayCard, stack, myUid, selectedAttackers,
+  paymentSelection, pendingPlayCard, myUid, selectedAttackers,
   selectedDefender, allianceInitiator, timer, cardBackUrl, viewingZone,
   setViewingZone, highlightedCardIds, onShowLogs, onOpenRulebook,
   onSurrender, onPhaseClick, confrontationStrategy, onUpdateStrategy,
@@ -990,20 +1041,10 @@ export const PlayField: React.FC<PlayFieldProps> = ({
   showPhaseMenu, isAnyPopupOpen, isPopupHidden, onHidePopup, onExpand, isSpectator,
   ignoreOpponentCardSkins = false, handEffectsEnabled = true, sandboxEditMode, onSandboxZoneClick, sandboxCenterControls
 }) => {
-  const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
-  const [isDesktop, setIsDesktop] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
   const [ongoingEffectsPopup, setOngoingEffectsPopup] = useState<{
     title: string;
     effects: PlayerOngoingEffect[];
   } | null>(null);
-
-  useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
   if (!player || !opponent || !game) return null;
   const isCurrentPlayer = !isSpectator && game.playerIds[game.currentTurnPlayer] === myUid;
   const wealthContext = { turnCount: game.turnCount };
@@ -1011,6 +1052,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
   const opponentWealth = getPlayerWealthCount(opponent, wealthContext);
   const playerOngoingEffects = getPlayerOngoingEffects(game, player.uid);
   const opponentOngoingEffects = getPlayerOngoingEffects(game, opponent.uid);
+  const isCounteringChainPromptWaiting = !!isCounteringPromptActive && !!isCounteringPromptWaiting;
   const openOngoingEffects = (targetPlayer: PlayerState, isOpponentTarget?: boolean) => {
     setOngoingEffectsPopup({
       title: isSpectator
@@ -1025,8 +1067,6 @@ export const PlayField: React.FC<PlayFieldProps> = ({
         game.phase === 'BATTLE_DECLARATION' ? '战斗宣言' :
           game.phase === 'DEFENSE_DECLARATION' ? '防御宣言' :
             game.phase === 'BATTLE_FREE' ? (isCurrentPlayer ? '结束战斗自由' : '战斗自由') : game.phase;
-  const getPreviewFullImage = (card: Card) =>
-    card.fullImageUrl || getCardImageUrl(card.id, card.rarity, false, card.availableRarities);
   const viewingZoneOwner = viewingZone?.isOpponentZone ? opponent : player;
   const viewingZoneCards = !viewingZone ? [] : (
     viewingZone.type === 'item' ? ((viewingZoneOwner.itemZone?.filter(Boolean) as Card[]) || []) :
@@ -1047,7 +1087,8 @@ export const PlayField: React.FC<PlayFieldProps> = ({
     ? viewingZoneCards.map(card => withEffectiveCostInfluence(game, viewingZoneOwner, card).card)
     : viewingZoneCards;
   return (
-    <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-y md:border-2 border-[#1a1a1a] md:rounded-xl shadow-2xl font-sans text-white select-none flex flex-col">
+    <AnimatingCardsContext.Provider value={animatingCardIds}>
+      <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-y md:border-2 border-[#1a1a1a] md:rounded-xl shadow-2xl font-sans text-white select-none flex flex-col">
       {/* Background Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-blue-500/5 pointer-events-none" />
 
@@ -1203,7 +1244,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           onOpenOngoingEffects={openOngoingEffects}
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
-          onHoverCard={setHoveredCard}
+          onHoverCard={onHoverPreview}
           game={game}
           selectedAttackers={selectedAttackers}
           selectedDefender={selectedDefender}
@@ -1297,20 +1338,21 @@ export const PlayField: React.FC<PlayFieldProps> = ({
             >
               {(isConfrontPromptActive || isCounteringPromptActive || isDefensePromptActive) ? (
                 <button
-                  disabled={isPopupHidden}
+                  disabled={isPopupHidden || isCounteringChainPromptWaiting}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (isDefensePromptActive) {
                       onDeclineDefense?.();
                       return;
                     }
+                    if (isCounteringChainPromptWaiting) return;
                     onDeclineConfront?.();
                   }}
                   className="absolute inset-[-0.15rem] z-10 flex min-w-[132px] items-center justify-center gap-1.5 rounded-xl border border-sky-400/60 bg-sky-500/25 px-3 py-1.5 text-sky-100 shadow-[0_0_26px_rgba(56,189,248,0.42)] transition-all hover:bg-sky-500/35 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-sky-500/25 md:inset-[-0.25rem] md:min-w-[156px] md:gap-2 md:px-4 md:py-2"
                 >
                   {isDefensePromptActive ? <Shield className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
                   <span className="text-xs font-black italic tracking-widest md:text-sm">
-                    {isDefensePromptActive ? '放弃防御' : '忽略对抗'}
+                    {isCounteringChainPromptWaiting ? '对抗链' : isDefensePromptActive ? '放弃防御' : '放弃对抗'}
                   </span>
                 </button>
               ) : (
@@ -1394,7 +1436,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           onOpenOngoingEffects={openOngoingEffects}
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
-          onHoverCard={setHoveredCard}
+          onHoverCard={onHoverPreview}
           onPlayCard={onPlayCard}
           paymentSelection={paymentSelection}
           pendingPlayCard={pendingPlayCard}
@@ -1424,6 +1466,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           border-radius: 10px;
         }
       `}</style>
-    </div>
+      </div>
+    </AnimatingCardsContext.Provider>
   );
 };

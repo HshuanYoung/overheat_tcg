@@ -1,15 +1,16 @@
-import React from 'react';
+import { clearAuthSession, getAuthUser, setAuthToken, setAuthUser, socket } from '../socket';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Settings, Image, Layout, Heart, Save, Loader2, X, Search, LogOut, ArrowLeft } from 'lucide-react';
+import { Settings, Layout, Heart, Save, Loader2, X, Search, LogOut, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { RAY_CARDS, CARD_BACKS } from '../data/customization';
 import { readJsonResponse } from '../lib/http';
 import { useCardSkinSettings } from '../hooks/useCardSkinSettings';
-import { ArrowLeft, Sparkles } from 'lucide-react';
 import { useBattleAnimationPreference } from '../hooks/useBattleAnimations';
 
 export const Profile: React.FC = () => {
+  const user = getAuthUser();
   const navigate = useNavigate();
   const [nickname, setNickname] = useState(user?.displayName || '玩家');
   const [favoriteCardId, setFavoriteCardId] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export const Profile: React.FC = () => {
     handEffectsEnabled,
     setHandEffectsEnabled
   } = useCardSkinSettings();
+  const [battleAnimationsEnabled, setBattleAnimationsEnabled] = useBattleAnimationPreference();
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -186,61 +188,128 @@ export const Profile: React.FC = () => {
                 checked={showOpponentCardSkins}
                 onChange={setShowOpponentCardSkins}
               />
+              <PreferenceToggleRow
+                title="战斗动画"
+                description={battleAnimationsEnabled ? '显示卡牌移动、伤害和宣言等战斗动画' : '关闭对局中的战斗动画展示'}
+                checked={battleAnimationsEnabled}
+                onChange={setBattleAnimationsEnabled}
+              />
             </PreferenceSettingsCard>
-  const [battleAnimationsEnabled, setBattleAnimationsEnabled] = useBattleAnimationPreference();
-
-  return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-8 md:px-8 md:py-12">
-        <div className="mb-10 flex items-center gap-4 pt-12 md:pt-16">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-zinc-900 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
-            aria-label="返回"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black tracking-tight md:text-3xl">设置</h1>
-            <p className="mt-1 text-sm text-zinc-500">调整本机对战显示偏好</p>
           </div>
         </div>
-
-        <section className="rounded-lg border border-white/10 bg-zinc-950/80">
-          <div className="flex items-center justify-between gap-4 p-5 md:p-6">
-            <div className="flex min-w-0 items-center gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#f27d26]/15 text-[#f27d26]">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base font-bold text-white">战斗动画</h2>
-                <p className="mt-1 text-sm text-zinc-500">显示卡牌移动、伤害和宣言等战斗动画</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={battleAnimationsEnabled}
-              onClick={() => setBattleAnimationsEnabled(!battleAnimationsEnabled)}
-              className={[
-                'relative h-8 w-14 shrink-0 rounded-full border transition-colors',
-                battleAnimationsEnabled
-                  ? 'border-[#f27d26]/50 bg-[#f27d26]'
-                  : 'border-white/10 bg-zinc-800'
-              ].join(' ')}
-            >
-              <span
-                className={[
-                  'absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform',
-                  battleAnimationsEnabled ? 'translate-x-6' : 'translate-x-1'
-                ].join(' ')}
-              />
-            </button>
-          </div>
-        </section>
       </div>
+
+      {/* Card Selection Modal */}
+      <AnimatePresence>
+        {isSelectingCard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 md:p-8"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-4 flex-1">
+                  <h2 className="text-lg md:text-2xl font-black italic tracking-tighter shrink-0">选择背景</h2>
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                    <input
+                      className="w-full bg-black border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs md:text-sm focus:outline-none focus:border-red-600 transition-all"
+                      placeholder="搜索..."
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <button onClick={() => setIsSelectingCard(false)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+                {RAY_CARDS.filter(c => c.name.includes(searchTerm)).map((card, index) => (
+                  <div
+                    key={card.id || `ray-${index}`}
+                    onClick={() => { setFavoriteCardId(card.id); setIsSelectingCard(false); }}
+                    className={cn(
+                      "cursor-pointer transition-all hover:scale-[1.02] group relative rounded-2xl overflow-hidden border-2",
+                      favoriteCardId === card.id ? "border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.3)]" : "border-zinc-800 hover:border-zinc-600"
+                    )}
+                  >
+                    <div className="aspect-video">
+                      <img src={card.url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-4">
+                      <p className="font-black italic tracking-tighter text-lg">{card.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Card Back Selection Modal */}
+      <AnimatePresence>
+        {isSelectingBack && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 md:p-8"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl h-[90vh] md:h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-4 flex-1">
+                  <h2 className="text-lg md:text-2xl font-black italic tracking-tighter shrink-0">选择卡背</h2>
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                    <input
+                      className="w-full bg-black border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs md:text-sm focus:outline-none focus:border-red-600 transition-all"
+                      placeholder="搜索..."
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <button onClick={() => setIsSelectingBack(false)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+                {CARD_BACKS.filter(b => b.name.includes(searchTerm)).map((back, index) => (
+                  <div
+                    key={back.id || `back-${index}`}
+                    onClick={() => { setFavoriteBackId(back.id); setIsSelectingBack(false); }}
+                    className={cn(
+                      "cursor-pointer transition-all hover:scale-[1.02] group relative rounded-2xl overflow-hidden border-2",
+                      favoriteBackId === back.id ? "border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.3)]" : "border-zinc-800 hover:border-zinc-600"
+                    )}
+                  >
+                    <div className="aspect-video relative">
+                      <img src={back.url} className="w-full h-full object-contain bg-zinc-800 group-hover:scale-105 transition-transform duration-500" />
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-4">
+                      <p className="font-black italic tracking-tighter text-lg">{back.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

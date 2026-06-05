@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
-import { GameState, PlayerState, Card, StackItem, CardEffect, TriggerLocation, GAME_TIMEOUTS, SandboxEditableZone, SandboxPlayerKey } from '../types/game';
+import { GameState, PlayerState, Card, StackItem, CardEffect, EffectQuery, TriggerLocation, GAME_TIMEOUTS, SandboxEditableZone, SandboxPlayerKey } from '../types/game';
 import { socket, getAuthUser, onceAuthenticated, isSocketAuthenticated } from '../socket';
 
 import { GameService } from '../services/gameService';

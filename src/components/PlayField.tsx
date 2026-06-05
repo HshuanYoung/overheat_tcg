@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, PlayerOngoingEffect, PlayerState, StackItem, GameState, SandboxEditableZone, SandboxPlayerKey } from '../types/game';
 import { CardComponent } from './Card';
@@ -7,7 +7,7 @@ import { KeywordBadges } from './KeywordBadges';
 import { CardEffectList } from './CardEffectList';
 import { GameService } from '../services/gameService';
 import { ArrowDown, Shield, Sword, Zap, Flag, BookOpen, Play, X, LogOut, Coins, Sparkles } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, getCardImageUrl } from '../lib/utils';
 import { getPlayerWealthCount } from '../lib/wealth';
 import { getPlayerOngoingEffects } from '../lib/playerOngoingEffects';
 
@@ -94,7 +94,7 @@ const CardSlot: React.FC<{
   allowFaceDownHover?: boolean;
   ignoreSkin?: boolean;
   animationAnchor?: string;
-}> = ({ card, label, onClick, onPreview, onHover, className, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent, isAllianceInitiator, displayMode, slotLabel, cardBackUrl, isHighlighted, allowFaceDownHover = false, ignoreSkin = false }) => {
+}> = ({ card, label, onClick, onPreview, onHover, className, isFaceUp = true, isExhausted, isSelectedForPayment, isDeck, count = 0, showCount = true, isAttacking, isDefending, isOpponent, isAllianceInitiator, displayMode, slotLabel, cardBackUrl, isHighlighted, allowFaceDownHover = false, ignoreSkin = false, animationAnchor }) => {
   const animatingCardIds = useContext(AnimatingCardsContext);
   const isAnimating = !!(card && animatingCardIds?.has(card.gamecardId));
 
@@ -639,8 +639,8 @@ const PlayerHalf: React.FC<{
                   sandboxEditMode && (player.hand?.length || 0) === 0 && "cursor-pointer hover:border-red-500/40"
                 )}
                 onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
+                data-animation-anchor={animationZoneAnchor(player.uid, 'hand')}
               >
-              <div data-animation-anchor={animationZoneAnchor(player.uid, 'hand')} className="flex-1 h-14 md:h-20 flex items-center justify-center gap-1 overflow-x-auto bg-black/20 rounded-lg border border-white/5 custom-scrollbar">
                 {shouldRenderHandSlot ? (
                   <HandZoneSlot
                     count={player.hand?.length || 0}
@@ -654,12 +654,10 @@ const PlayerHalf: React.FC<{
                     return (
                       <div
                         key={card.gamecardId || i}
-                        className="w-10 md:w-[76.8px] shrink-0 cursor-pointer shadow-lg drop-shadow-md transition-all hover:-translate-y-1"
-                        onClick={(e) => clickSandboxZone('hand', i, costDisplay.card) || onCardClick?.(costDisplay.card, 'hand', i, e)}
                         data-animation-anchor={`card:${card.gamecardId}`}
                         data-animation-card-id={card.gamecardId}
-                        className="w-10 md:w-[76.8px] shrink-0 cursor-pointer shadow-lg drop-shadow-md transition-all"
-                        onClick={(e) => onCardClick?.(costDisplay.card, 'hand', i, e)}
+                        className="w-10 md:w-[76.8px] shrink-0 cursor-pointer shadow-lg drop-shadow-md transition-all hover:-translate-y-1"
+                        onClick={(e) => clickSandboxZone('hand', i, costDisplay.card) || onCardClick?.(costDisplay.card, 'hand', i, e)}
                         onMouseEnter={() => onHoverCard?.(costDisplay.card)}
                         onMouseLeave={() => onHoverCard?.(null)}
                       >
@@ -822,9 +820,8 @@ const PlayerHalf: React.FC<{
                   sandboxEditMode && (player.hand?.length || 0) === 0 && "cursor-pointer hover:border-red-500/40"
                 )}
                 onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
+                data-animation-anchor={animationZoneAnchor(player.uid, 'hand')}
               >
-                {shouldCollapseOwnHand ? (
-              <div data-animation-anchor={animationZoneAnchor(player.uid, 'hand')} className="flex-1 h-16 md:h-36 flex items-center justify-center gap-0.5 overflow-visible bg-black/20 rounded-lg border border-white/5 relative">
                 {shouldUseHandSlot ? (
                   <HandZoneSlot count={player.hand?.length || 0} onClick={openHandZone} />
                 ) : player.hand?.map((card, i) => {
@@ -887,11 +884,14 @@ const PlayerHalf: React.FC<{
 
                   return (
                     <div
-                      key={card.gamecardId || i}
+                      key={cardKey}
                       data-animation-anchor={`card:${card.gamecardId}`}
                       data-animation-card-id={card.gamecardId}
-                      className="absolute w-[38.4px] md:w-[115.2px] transition-all duration-300 cursor-pointer"
-                      style={{
+                      className={cn(
+                        "absolute transition-all duration-300 cursor-pointer",
+                        handEffectsActive ? "cursor-grab active:cursor-grabbing" : "w-[38.4px] md:w-[115.2px]"
+                      )}
+                      style={handEffectsActive ? getHandEffectStyle(i, total, cardKey) : {
                         transform: `translateX(${xPos}px) ${isFeijingSelected ? 'translateY(-10px) md:translateY(-50px) scale(1.1)' : ''}`,
                         zIndex: isFeijingSelected ? 100 : i,
                         bottom: isMobileViewport ? '10px' : '0px'
@@ -1037,14 +1037,26 @@ export const PlayField: React.FC<PlayFieldProps> = ({
   selectedDefender, allianceInitiator, timer, cardBackUrl, viewingZone,
   setViewingZone, highlightedCardIds, onShowLogs, onOpenRulebook,
   onSurrender, onPhaseClick, confrontationStrategy, onUpdateStrategy,
-  canConfront, isConfrontPromptActive, isCounteringPromptActive, isDefensePromptActive, onStartConfront, onDeclineConfront, onDeclineDefense,
+  canConfront, isConfrontPromptActive, isCounteringPromptActive, isDefensePromptActive, isCounteringPromptWaiting, onStartConfront, onDeclineConfront, onDeclineDefense,
   showPhaseMenu, isAnyPopupOpen, isPopupHidden, onHidePopup, onExpand, isSpectator,
-  ignoreOpponentCardSkins = false, handEffectsEnabled = true, sandboxEditMode, onSandboxZoneClick, sandboxCenterControls
+  ignoreOpponentCardSkins = false, handEffectsEnabled = true, sandboxEditMode, onSandboxZoneClick, sandboxCenterControls,
+  onHoverPreview, animatingCardIds
 }) => {
   const [ongoingEffectsPopup, setOngoingEffectsPopup] = useState<{
     title: string;
     effects: PlayerOngoingEffect[];
   } | null>(null);
+  const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const updateIsDesktop = () => setIsDesktop(window.innerWidth >= 1024);
+    updateIsDesktop();
+    window.addEventListener('resize', updateIsDesktop);
+    return () => window.removeEventListener('resize', updateIsDesktop);
+  }, []);
+
   if (!player || !opponent || !game) return null;
   const isCurrentPlayer = !isSpectator && game.playerIds[game.currentTurnPlayer] === myUid;
   const wealthContext = { turnCount: game.turnCount };
@@ -1086,6 +1098,11 @@ export const PlayField: React.FC<PlayFieldProps> = ({
   const viewingZoneDisplayCards = viewingZone?.type === 'hand'
     ? viewingZoneCards.map(card => withEffectiveCostInfluence(game, viewingZoneOwner, card).card)
     : viewingZoneCards;
+  const getPreviewFullImage = (card: Card) => card.fullImageUrl || card.imageUrl || getCardImageUrl(card.id, card.rarity, false, card.availableRarities);
+  const handleHoverPreview = (card: Card | null) => {
+    setHoveredCard(card);
+    onHoverPreview?.(card);
+  };
   return (
     <AnimatingCardsContext.Provider value={animatingCardIds}>
       <div className="relative w-full h-full max-w-full lg:max-w-7xl mx-auto bg-[#0a0a0a] border-y md:border-2 border-[#1a1a1a] md:rounded-xl shadow-2xl font-sans text-white select-none flex flex-col">
@@ -1244,7 +1261,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           onOpenOngoingEffects={openOngoingEffects}
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
-          onHoverCard={onHoverPreview}
+          onHoverCard={handleHoverPreview}
           game={game}
           selectedAttackers={selectedAttackers}
           selectedDefender={selectedDefender}
@@ -1436,7 +1453,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           onOpenOngoingEffects={openOngoingEffects}
           onCardClick={onCardClick}
           onPreviewCard={onPreviewCard}
-          onHoverCard={onHoverPreview}
+          onHoverCard={handleHoverPreview}
           onPlayCard={onPlayCard}
           paymentSelection={paymentSelection}
           pendingPlayCard={pendingPlayCard}

@@ -7741,28 +7741,12 @@ export const ServerGameService = {
       return;
     }
 
-    // Check effects at DRAW phase (TODO)
-    if (player.deck.length > 0) {
-      const selected = ServerGameService.chooseHardAiDrawCard(gameState, player.uid, {
-        source: 'DRAW_PHASE',
-        drawIndex: 0,
-        drawCount: 1,
-      });
-      const selectedIndex = selected ? player.deck.findIndex(card => card.gamecardId === selected.gamecardId) : -1;
-      const card = selectedIndex !== -1 ? player.deck.splice(selectedIndex, 1)[0] : player.deck.pop();
-      if (card) {
-        card.cardlocation = 'HAND';
-        player.hand.push(card);
-        gameState.logs.push(`${player.displayName} 鎶戒簡涓€寮犲崱`);
-        EventEngine.dispatchEvent(gameState, {
-          type: 'CARD_DRAWN',
-          playerUid: player.uid,
-          data: { cardId: card.gamecardId }
-        });
-        await ServerGameService.checkTriggeredEffects(gameState);
-      }
-    } else {
-    const drawnCard = player.deck[player.deck.length - 1];
+    const selected = ServerGameService.chooseHardAiDrawCard(gameState, player.uid, {
+      source: 'DRAW_PHASE',
+      drawIndex: 0,
+      drawCount: 1,
+    });
+    const drawnCard = selected || player.deck[player.deck.length - 1];
     if (!drawnCard) {
       // 1. During the card drawing stage, there are no cards available for drawing
       gameState.logs.push(`[游戏结束] ${player.displayName} 在抽牌阶段卡组已空，判负。`);
@@ -7770,6 +7754,17 @@ export const ServerGameService = {
       gameState.winReason = 'DECK_OUT_DRAW';
       gameState.winnerId = gameState.playerIds.find(id => id !== player.uid);
       return; // Stop processing further phases
+    }
+
+    if (!onUpdate || ServerGameService.shouldSkipVisualDelay(gameState)) {
+      gameState.drawAnimationResume = {
+        playerUid: player.uid,
+        cardId: drawnCard.gamecardId,
+        card: { ...drawnCard, cardlocation: 'HAND' },
+        resumeAt: Date.now()
+      };
+      await ServerGameService.completeDrawAnimationResume(gameState, player, onUpdate);
+      return;
     }
 
     gameState.animationUntil = Date.now() + 2000;

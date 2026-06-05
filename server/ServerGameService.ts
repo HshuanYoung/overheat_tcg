@@ -35,7 +35,7 @@ import {
   scorePlayableCard,
   scorePaymentSacrificeValue
 } from './ai/hardStrategy';
-import { ADVENTURER_GUILD_CARD_IDS, describeAdventurerGuildAttack, describeAdventurerGuildDefense, describeAdventurerGuildPlayableCard, describeAdventurerGuildQueryOption, getAdventurerGuildRouteAdvice, scoreAdventurerGuildDevelopmentPriority } from './ai/decks/adventurerGuildStrategy';
+import { ADVENTURER_GUILD_DEFAULT_OPENING_CARD_IDS, ADVENTURER_GUILD_PROFILE_ID, describeAdventurerGuildAttack, describeAdventurerGuildDefense, describeAdventurerGuildPlayableCard, describeAdventurerGuildQueryOption, getAdventurerGuildRouteAdvice, scoreAdventurerGuildDevelopmentPriority } from './ai/decks/adventurerGuildStrategy';
 
 type PaymentSummary = {
   success: boolean;
@@ -45,12 +45,9 @@ type PaymentSummary = {
   feijingCard?: { id: string; name: string; destination: TriggerLocation };
 };
 
-export const HARD_AI_DEFAULT_OPENING_CARD_IDS = [
-  ADVENTURER_GUILD_CARD_IDS.albert,
-  ADVENTURER_GUILD_CARD_IDS.association,
-  ADVENTURER_GUILD_CARD_IDS.xiaoting,
-  ADVENTURER_GUILD_CARD_IDS.foxMerchant,
-] as const;
+export function getHardAiOpeningCardIds(profileId?: string | null) {
+  return profileId === ADVENTURER_GUILD_PROFILE_ID ? ADVENTURER_GUILD_DEFAULT_OPENING_CARD_IDS : undefined;
+}
 
 export const ServerGameService = {
   shouldSkipVisualDelay(gameState: GameState) {
@@ -1117,7 +1114,9 @@ export const ServerGameService = {
       }
     };
     if (!record.effect.description) {
-      if (record.virtualTriggerType === 'RETURN_TO_EXILE_AT_END') {
+      if (record.virtualTriggerType === 'RETURN_TO_OWNER_FIELD_AT_END') {
+        record.effect.description = `[${sourceName}] 回合结束时将 [${record.card?.fullName || '目标'}] 放回持有者战场。`;
+      } else if (record.virtualTriggerType === 'RETURN_TO_EXILE_AT_END') {
         record.effect.description = `[${sourceName}] 回合结束时将 [${record.card?.fullName || '目标'}] 放逐。`;
       } else if (record.virtualTriggerType === 'RETURN_TO_DECK_BOTTOM_AT_END') {
         record.effect.description = `[${sourceName}] 回合结束时将 [${record.card?.fullName || '目标'}] 放置到卡组底。`;
@@ -1135,6 +1134,45 @@ export const ServerGameService = {
     const sourceName = payload.sourceName || record.card?.fullName || '卡牌效果';
     const sourceCardId = payload.sourceCardId;
     const targetCardId = payload.targetCardId || record.card?.gamecardId;
+
+    if (record.virtualTriggerType === 'RETURN_TO_OWNER_FIELD_AT_END') {
+      const live = ServerGameService.findCardLocation(state, targetCardId);
+      if (!live || live.zone !== 'EXILE' || live.ownerUid !== (payload.ownerUid || live.ownerUid)) return;
+      const target = live.card;
+      const ownerUid = payload.ownerUid || live.ownerUid;
+      const owner = state.players[ownerUid];
+      if (!owner) return;
+      const returnZone: TriggerLocation = target.type === 'ITEM' || target.isEquip ? 'ITEM' : 'UNIT';
+      const hasOpenSlot = returnZone === 'ITEM'
+        ? owner.itemZone.some(slot => slot === null)
+        : owner.unitZone.some(slot => slot === null);
+      const hasSpecialNameConflict = !!target.specialName && (
+        returnZone === 'ITEM'
+          ? owner.itemZone.some(card => card?.specialName === target.specialName)
+          : owner.unitZone.some(card => card?.specialName === target.specialName)
+      );
+      const data = (target as any).data || {};
+      delete data.returnToOwnerFieldAtTurnEndSourceName;
+      delete data.returnToOwnerFieldAtTurnEndOwnerUid;
+      delete data.returnToOwnerFieldAtTurnEndSourceCardId;
+      if (!hasOpenSlot || hasSpecialNameConflict) {
+        state.logs.push(`[${sourceName}] [${target.fullName}] 因没有可用区域或同名专用卡冲突，无法在回合结束时回到战场。`);
+        return;
+      }
+      ServerGameService.moveCard(state, ownerUid, 'EXILE', ownerUid, returnZone, target.gamecardId, {
+        isEffect: true,
+        faceDown: false,
+        effectSourcePlayerUid: payload.effectOwnerUid || ownerUid,
+        effectSourceCardId: sourceCardId
+      });
+      const returned = ServerGameService.findCardById(state, targetCardId);
+      if (returned) {
+        returned.isExhausted = false;
+        returned.displayState = 'FRONT_UPRIGHT';
+      }
+      state.logs.push(`[${sourceName}] 回合结束时将 [${target.fullName}] 放回持有者战场。`);
+      return;
+    }
 
     if (record.virtualTriggerType === 'RETURN_TO_EXILE_AT_END') {
       const live = ServerGameService.findCardLocation(state, targetCardId);
@@ -6572,6 +6610,44 @@ export const ServerGameService = {
       });
     });
 
+    Object.entries(gameState.players).forEach(([uid, player]) => {
+      player.exile.forEach(card => {
+        if (!card || !(card as any).data?.returnToOwnerFieldAtTurnEndSourceName) return;
+        const sourceName = (card as any).data.returnToOwnerFieldAtTurnEndSourceName || '卡牌效果';
+        const sourceCardId = (card as any).data.returnToOwnerFieldAtTurnEndSourceCardId;
+        const ownerUid = (card as any).data.returnToOwnerFieldAtTurnEndOwnerUid || uid;
+        const effectOwnerUid = sourceCardId
+          ? ServerGameService.findCardLocation(gameState, sourceCardId)?.ownerUid
+          : ownerUid;
+        const queueId = `return_owner_field_${card.gamecardId}_${gameState.turnCount}`;
+        enqueue({
+          queueId,
+          card,
+          sourceCard: sourceCardId ? ServerGameService.findCardById(gameState, sourceCardId) : undefined,
+          playerUid: effectOwnerUid || ownerUid,
+          effectIndex: -1,
+          virtualTriggerType: 'RETURN_TO_OWNER_FIELD_AT_END',
+          virtualPayload: {
+            targetCardId: card.gamecardId,
+            sourceCardId,
+            sourceName,
+            ownerUid,
+            effectOwnerUid: effectOwnerUid || ownerUid,
+            turnCount: gameState.turnCount
+          },
+          event: { type: 'TURN_END' as any, playerUid: turnPlayerUid },
+          effect: {
+            id: queueId,
+            type: 'TRIGGER',
+            triggerEvent: 'TURN_END' as any,
+            triggerLocation: ['EXILE'],
+            isMandatory: true,
+            description: `[${sourceName}] 回合结束时将 [${card.fullName}] 放回持有者战场。`
+          }
+        });
+      });
+    });
+
     if (gameState.pendingResolutions && gameState.pendingResolutions.length > 0) {
       const resolutions = [...gameState.pendingResolutions];
       gameState.pendingResolutions = [];
@@ -7914,7 +7990,7 @@ export const ServerGameService = {
     ServerGameService.drawInitialHand(
       botState,
       4,
-      botDifficulty === 'hard' ? HARD_AI_DEFAULT_OPENING_CARD_IDS : undefined
+      undefined
     );
 
     // Random first player
@@ -10735,7 +10811,7 @@ export const ServerGameService = {
     ServerGameService.drawInitialHand(
       botState,
       4,
-      botDifficulty === 'hard' ? HARD_AI_DEFAULT_OPENING_CARD_IDS : undefined
+      botDifficulty === 'hard' ? getHardAiOpeningCardIds(botDeckProfileId) : undefined
     );
 
     const gameState: GameState = {

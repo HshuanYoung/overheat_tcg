@@ -4,21 +4,24 @@ import {
   addContinuousKeyword,
   addContinuousPower,
   canPutUnitOntoBattlefield,
-  nameContains,
   putUnitOntoField
 } from './BaseUtil';
+
+const PUPPET_BLUEPRINT_CARD_ID = '305110083';
+
+const isPuppetBlueprintSource = (card?: Card) =>
+  !!card && card.id === PUPPET_BLUEPRINT_CARD_ID;
 
 const enteredByBlueprintOrOwnEffect = (gameState: any, instance: Card) => {
   const data = (instance as any).data || {};
   const source = AtomicEffectExecutor.findCardById(gameState, data.lastMoveEffectSourceCardId);
   return !!data.placedByBlueprintSourceCardId ||
+    !!data.placedByBlueprintSourceName ||
     !!data.placedByOwnRevealEffect ||
     (
-      data.placedByBlueprintEffectTurn !== undefined &&
-      data.lastMovedByEffectTurn === data.placedByBlueprintEffectTurn &&
+      data.lastMovedByEffectTurn !== undefined &&
       data.lastMovedToZone === 'UNIT' &&
-      !!source &&
-      nameContains(source, '蓝图')
+      isPuppetBlueprintSource(source)
     );
 };
 

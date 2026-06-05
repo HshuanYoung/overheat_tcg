@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, PlayerOngoingEffect, PlayerState, StackItem, GameState, SandboxEditableZone, SandboxPlayerKey } from '../types/game';
 import { CardComponent } from './Card';
@@ -50,10 +50,20 @@ interface PlayFieldProps {
   onExpand?: () => void;
   isSpectator?: boolean;
   ignoreOpponentCardSkins?: boolean;
+  handEffectsEnabled?: boolean;
   sandboxEditMode?: boolean;
   onSandboxZoneClick?: (target: { playerKey: SandboxPlayerKey; zone: SandboxEditableZone; index?: number; card?: Card | null }) => void;
   sandboxCenterControls?: React.ReactNode;
 }
+
+type HandDragState = {
+  cardId: string;
+  startX: number;
+  startY: number;
+  dx: number;
+  dy: number;
+  moved: boolean;
+};
 
 const CardSlot: React.FC<{
   card: Card | null;
@@ -417,7 +427,12 @@ const PlayerHalf: React.FC<{
   sandboxEditMode?: boolean;
   onSandboxZoneClick?: (target: { playerKey: SandboxPlayerKey; zone: SandboxEditableZone; index?: number; card?: Card | null }) => void;
   ignoreCardSkins?: boolean;
-}> = ({ player, isOpponent, wealthValue = 0, ongoingEffects = [], onOpenOngoingEffects, onCardClick, onPreviewCard, onHoverCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone, highlightedCardIds, isSpectator, sandboxEditMode, onSandboxZoneClick, ignoreCardSkins = false }) => {
+  handEffectsEnabled?: boolean;
+}> = ({ player, isOpponent, wealthValue = 0, ongoingEffects = [], onOpenOngoingEffects, onCardClick, onPreviewCard, onHoverCard, onPlayCard, paymentSelection, pendingPlayCard, selectedAttackers, selectedDefender, game, allianceInitiator, cardBackUrl, viewingZone, setViewingZone, highlightedCardIds, isSpectator, sandboxEditMode, onSandboxZoneClick, ignoreCardSkins = false, handEffectsEnabled = true }) => {
+  const [hoveredHandCardId, setHoveredHandCardId] = useState<string | null>(null);
+  const [draggingHandCard, setDraggingHandCard] = useState<HandDragState | null>(null);
+  const suppressHandClickUntilRef = useRef(0);
+
   if (!player) return null;
   const sandboxPlayerKey: SandboxPlayerKey = isOpponent ? 'opponent' : 'player';
   const clickSandboxZone = (zone: SandboxEditableZone, index?: number, card?: Card | null) => {
@@ -436,6 +451,10 @@ const PlayerHalf: React.FC<{
   };
   const erosionSlotLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
   const shouldUseHandSlot = (player.hand?.length || 0) > 9;
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
+  const isMobileViewport = viewportWidth < 768;
+  const handEffectsActive = !!handEffectsEnabled && !isOpponent && !isSpectator && !pendingPlayCard && !sandboxEditMode;
+  const shouldCollapseOwnHand = shouldUseHandSlot && !handEffectsActive;
   const canViewHand = isSpectator || !isOpponent || !!player.isHandPublic;
   const shouldRenderHandSlot = shouldUseHandSlot || (!isSpectator && !!player.isHandPublic);
   const openHandZone = () => {
@@ -446,6 +465,44 @@ const PlayerHalf: React.FC<{
       type: 'hand',
       isOpponentZone: !!isOpponent
     });
+  };
+  const getHandEffectStyle = (index: number, total: number, cardId: string): React.CSSProperties => {
+    const count = Math.max(total, 1);
+    const cardWidth = Math.max(
+      isMobileViewport ? 82 : 108,
+      Math.min(isMobileViewport ? viewportWidth * 0.27 : viewportWidth * 0.12, isMobileViewport ? 118 : 156)
+    );
+    const maxHandWidth = viewportWidth * (isMobileViewport ? 0.94 : 0.76);
+    const spacing = count > 1
+      ? Math.max(isMobileViewport ? 22 : 52, Math.min(cardWidth * 0.72, (maxHandWidth - cardWidth) / (count - 1)))
+      : 0;
+    const center = (count - 1) / 2;
+    const offset = index - center;
+    const normalized = center === 0 ? 0 : offset / center;
+    const baseX = offset * spacing;
+    const baseDrop = Math.pow(normalized, 2) * Math.min(isMobileViewport ? 26 : 44, cardWidth * 0.24 + count * 0.5);
+    const rotate = normalized * Math.min(18, 8 + count * 0.55);
+    const drag = draggingHandCard?.cardId === cardId ? draggingHandCard : null;
+    const hovered = hoveredHandCardId === cardId;
+    const isActive = hovered || !!drag;
+    const hoverLift = hovered ? -(cardWidth * (isMobileViewport ? 0.62 : 0.72)) : 0;
+    const dragX = drag?.dx || 0;
+    const dragY = drag?.dy || 0;
+    const scale = drag ? 1.15 : hovered ? 1.75 : 1;
+    const y = (isMobileViewport ? 8 : 10) + baseDrop + hoverLift + dragY;
+
+    return {
+      left: '50%',
+      bottom: isMobileViewport ? '-12px' : '-4px',
+      width: `${cardWidth}px`,
+      transform: `translateX(calc(-50% + ${baseX + dragX}px)) translateY(${y}px) rotate(${isActive ? 0 : rotate}deg) scale(${scale})`,
+      transformOrigin: 'bottom center',
+      zIndex: drag ? 5000 : hovered ? 4200 : 100 + index,
+      transition: drag ? 'none' : 'transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 260ms ease',
+      touchAction: 'none',
+      userSelect: 'none',
+      willChange: 'transform'
+    };
   };
 
 
@@ -722,34 +779,109 @@ const PlayerHalf: React.FC<{
                 )}
                 onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
               >
-                {shouldUseHandSlot ? (
+                {shouldCollapseOwnHand ? (
                   <HandZoneSlot count={player.hand?.length || 0} onClick={openHandZone} />
                 ) : player.hand?.map((card, i) => {
                   const costDisplay = getCardCostDisplay(card);
                   const total = player.hand.length;
                   const middle = (total - 1) / 2;
                   const offset = i - middle;
-                  const xPos = offset * (window.innerWidth < 768 ? 36 : 96);
+                  const xPos = offset * (isMobileViewport ? 36 : 96);
                   const isFeijingSelected = paymentSelection?.useFeijing?.includes(card.gamecardId);
+                  const cardKey = card.gamecardId || `${card.id || card.uniqueId || 'hand'}-${i}`;
+                  const handDragState = draggingHandCard?.cardId === cardKey ? draggingHandCard : null;
+                  const handleHandPointerDown = handEffectsActive
+                    ? (e: React.PointerEvent<HTMLDivElement>) => {
+                        if (e.button !== 0) return;
+                        e.currentTarget.setPointerCapture?.(e.pointerId);
+                        setHoveredHandCardId(cardKey);
+                        setDraggingHandCard({
+                          cardId: cardKey,
+                          startX: e.clientX,
+                          startY: e.clientY,
+                          dx: 0,
+                          dy: 0,
+                          moved: false
+                        });
+                      }
+                    : undefined;
+                  const handleHandPointerMove = handEffectsActive
+                    ? (e: React.PointerEvent<HTMLDivElement>) => {
+                        if (!handDragState) return;
+                        const dx = e.clientX - handDragState.startX;
+                        const dy = e.clientY - handDragState.startY;
+                        const moved = handDragState.moved || Math.abs(dx) > 3 || Math.abs(dy) > 3;
+                        if (moved && e.cancelable) e.preventDefault();
+                        setDraggingHandCard({ ...handDragState, dx, dy, moved });
+                      }
+                    : undefined;
+                  const handleHandPointerUp = handEffectsActive
+                    ? (e: React.PointerEvent<HTMLDivElement>) => {
+                        if (!handDragState) return;
+                        const cardHeight = e.currentTarget.getBoundingClientRect().height || 140;
+                        const finalDx = e.clientX - handDragState.startX;
+                        const finalDy = e.clientY - handDragState.startY;
+                        const moved = handDragState.moved || Math.abs(finalDx) > 3 || Math.abs(finalDy) > 3;
+                        const shouldPlay = moved && finalDy < -(cardHeight * 0.3);
+                        setDraggingHandCard(null);
+                        if (moved) {
+                          suppressHandClickUntilRef.current = Date.now() + 180;
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }
+                        if (!shouldPlay) return;
+                        onPlayCard?.(costDisplay.card);
+                      }
+                    : undefined;
+                  const handleHandPointerCancel = handEffectsActive
+                    ? () => {
+                        if (handDragState) setDraggingHandCard(null);
+                      }
+                    : undefined;
 
                   return (
                     <div
-                      key={card.gamecardId || i}
-                      className="absolute w-[38.4px] md:w-[115.2px] transition-all duration-300 cursor-pointer"
-                      style={{
+                      key={cardKey}
+                      className={cn(
+                        "absolute transition-all duration-300 cursor-pointer",
+                        handEffectsActive ? "cursor-grab active:cursor-grabbing" : "w-[38.4px] md:w-[115.2px]"
+                      )}
+                      style={handEffectsActive ? getHandEffectStyle(i, total, cardKey) : {
                         transform: `translateX(${xPos}px) ${isFeijingSelected ? 'translateY(-10px) md:translateY(-50px) scale(1.1)' : ''}`,
                         zIndex: isFeijingSelected ? 100 : i,
-                        bottom: window.innerWidth < 768 ? '10px' : '0px'
+                        bottom: isMobileViewport ? '10px' : '0px'
                       }}
-                        onClick={(e) => clickSandboxZone('hand', i, costDisplay.card) || onCardClick?.(costDisplay.card, 'hand', i, e)}
-                      onMouseEnter={() => onHoverCard?.(costDisplay.card)}
-                      onMouseLeave={() => onHoverCard?.(null)}
+                      onPointerDown={handleHandPointerDown}
+                      onPointerMove={handleHandPointerMove}
+                      onPointerUp={handleHandPointerUp}
+                      onPointerCancel={handleHandPointerCancel}
+                      onClick={(e) => {
+                        if (Date.now() < suppressHandClickUntilRef.current) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return;
+                        }
+                        clickSandboxZone('hand', i, costDisplay.card) || onCardClick?.(costDisplay.card, 'hand', i, e);
+                      }}
+                      onMouseEnter={() => {
+                        if (handEffectsActive) setHoveredHandCardId(cardKey);
+                        onHoverCard?.(costDisplay.card);
+                      }}
+                      onMouseLeave={() => {
+                        if (handEffectsActive && draggingHandCard?.cardId !== cardKey) setHoveredHandCardId(null);
+                        onHoverCard?.(null);
+                      }}
                     >
                       <CardComponent
                         card={costDisplay.card} disableZoom displayMode="hand" cardBackUrl={cardBackUrl}
                         effectiveAcValue={costDisplay.effectiveAcValue}
                         isHighlighted={highlightedCardIds?.has(card.gamecardId)}
-                        className={cn("shadow-2xl transition-all duration-300", isFeijingSelected && "shadow-[#f27d26]/60 ring-2 ring-[#f27d26]")}
+                        className={cn(
+                          "shadow-2xl transition-all duration-300",
+                          handEffectsActive && hoveredHandCardId === cardKey && "drop-shadow-[0_24px_42px_rgba(0,0,0,0.68)]",
+                          handDragState && "drop-shadow-[0_28px_50px_rgba(0,0,0,0.72)]",
+                          isFeijingSelected && "shadow-[#f27d26]/60 ring-2 ring-[#f27d26]"
+                        )}
                       />
                     </div>
                   );
@@ -856,7 +988,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
   onSurrender, onPhaseClick, confrontationStrategy, onUpdateStrategy,
   canConfront, isConfrontPromptActive, isCounteringPromptActive, isDefensePromptActive, onStartConfront, onDeclineConfront, onDeclineDefense,
   showPhaseMenu, isAnyPopupOpen, isPopupHidden, onHidePopup, onExpand, isSpectator,
-  ignoreOpponentCardSkins = false, sandboxEditMode, onSandboxZoneClick, sandboxCenterControls
+  ignoreOpponentCardSkins = false, handEffectsEnabled = true, sandboxEditMode, onSandboxZoneClick, sandboxCenterControls
 }) => {
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [isDesktop, setIsDesktop] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
@@ -1276,6 +1408,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
           isSpectator={isSpectator}
           sandboxEditMode={sandboxEditMode}
           onSandboxZoneClick={onSandboxZoneClick}
+          handEffectsEnabled={handEffectsEnabled}
         />
       </div>
 

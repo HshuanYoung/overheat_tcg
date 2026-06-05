@@ -74,7 +74,16 @@ const cardEffects: CardEffect[] = [{
     if (context?.step !== 'PUT_UNIT') return;
     const target = selections[0] ? AtomicEffectExecutor.findCardById(gameState, selections[0]) : undefined;
     if (!target || !deckTargets(playerState).some(card => card.gamecardId === target.gamecardId)) return;
-    putUnitOntoField(gameState, playerState.uid, target, instance);
+    if (!putUnitOntoField(gameState, playerState.uid, target, instance)) return;
+    const moved = AtomicEffectExecutor.findCardById(gameState, target.gamecardId);
+    if (moved) {
+      (moved as any).data = {
+        ...((moved as any).data || {}),
+        placedByBlueprintEffectTurn: gameState.turnCount,
+        placedByBlueprintSourceCardId: instance.gamecardId,
+        placedByBlueprintSourceName: instance.fullName
+      };
+    }
   }
 }];
 

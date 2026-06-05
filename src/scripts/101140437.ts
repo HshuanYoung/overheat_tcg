@@ -94,6 +94,8 @@ const cardEffects: CardEffect[] = [{
       if (exiled) {
         const data = ensureData(exiled);
         data.returnToOwnerFieldAtTurnEndSourceName = instance.fullName;
+        data.returnToOwnerFieldAtTurnEndSourceCardId = instance.gamecardId;
+        data.returnToOwnerFieldAtTurnEndOwnerUid = ownerUid;
         addInfluence(exiled, instance, '回合结束时回到持有者战场');
       }
       appendEndResolution(gameState, playerState.uid, instance, '101140437_return', async (_source, state) => {
@@ -134,6 +136,8 @@ const cardEffects: CardEffect[] = [{
     if (exiled) {
       const data = ensureData(exiled);
       data.returnToOwnerFieldAtTurnEndSourceName = instance.fullName;
+      data.returnToOwnerFieldAtTurnEndSourceCardId = instance.gamecardId;
+      data.returnToOwnerFieldAtTurnEndOwnerUid = ownerUid;
       addInfluence(exiled, instance, '回合结束时回到持有者战场');
     }
     appendEndResolution(gameState, playerState.uid, instance, '101140437_return', async (_source, state) => {

@@ -20,7 +20,12 @@ export const Profile: React.FC = () => {
   const [isSelectingCard, setIsSelectingCard] = useState(false);
   const [isSelectingBack, setIsSelectingBack] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const { showOpponentCardSkins, setShowOpponentCardSkins } = useCardSkinSettings();
+  const {
+    showOpponentCardSkins,
+    setShowOpponentCardSkins,
+    handEffectsEnabled,
+    setHandEffectsEnabled
+  } = useCardSkinSettings();
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -169,13 +174,20 @@ export const Profile: React.FC = () => {
                 description={favoriteBack ? `当前: ${favoriteBack.name}` : "在对战中展示你的个性化卡背"} 
               />
             </div>
-            <PreferenceToggleCard
-              title="显示对手卡牌皮肤"
-              icon={<Settings className="w-6 h-6" />}
-              description={showOpponentCardSkins ? '对局中显示对手使用的卡牌皮肤' : '对局中忽略对手卡牌皮肤，仅显示原卡图'}
-              checked={showOpponentCardSkins}
-              onChange={setShowOpponentCardSkins}
-            />
+            <PreferenceSettingsCard>
+              <PreferenceToggleRow
+                title="手牌特效"
+                description={handEffectsEnabled ? '己方手牌使用扇形排列、悬停放大，并可向上拖动打出卡牌' : '关闭后恢复原本手牌布局和点击行为'}
+                checked={handEffectsEnabled}
+                onChange={setHandEffectsEnabled}
+              />
+              <PreferenceToggleRow
+                title="显示对手卡牌皮肤"
+                description={showOpponentCardSkins ? '对局中显示对手使用的卡牌皮肤' : '对局中忽略对手卡牌皮肤，仅显示原卡图'}
+                checked={showOpponentCardSkins}
+                onChange={setShowOpponentCardSkins}
+              />
+            </PreferenceSettingsCard>
           </div>
         </div>
       </div>
@@ -308,29 +320,41 @@ const SettingCard = ({ title, icon, description }: any) => (
   </motion.div>
 );
 
-const PreferenceToggleCard = ({
+const PreferenceSettingsCard = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    whileHover={{ scale: 1.01 }}
+    className="p-6 rounded-2xl bg-zinc-900/60 backdrop-blur-sm border border-zinc-800 hover:border-red-500/50 transition-all group md:col-span-2"
+  >
+    <div className="flex items-center gap-4 mb-5">
+      <div className="p-3 rounded-xl bg-black/60 group-hover:bg-red-600 transition-colors">
+        <Settings className="w-6 h-6" />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold italic tracking-tighter">偏好设置</h2>
+        <p className="text-zinc-500 text-sm">管理对局显示和手牌交互偏好</p>
+      </div>
+    </div>
+    <div className="grid gap-3">
+      {children}
+    </div>
+  </motion.div>
+);
+
+const PreferenceToggleRow = ({
   title,
-  icon,
   description,
   checked,
   onChange
 }: {
   title: string;
-  icon: React.ReactNode;
   description: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) => (
-  <motion.div
-    whileHover={{ scale: 1.02 }}
-    className="p-6 rounded-2xl bg-zinc-900/60 backdrop-blur-sm border border-zinc-800 hover:border-red-500/50 transition-all group"
-  >
+  <div className="rounded-xl border border-white/5 bg-black/30 px-4 py-3">
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <div className="flex items-center gap-4 mb-3">
-          <div className="p-3 rounded-xl bg-black/60 group-hover:bg-red-600 transition-colors">{icon}</div>
-          <h2 className="text-lg font-bold italic tracking-tighter">{title}</h2>
-        </div>
+        <h3 className="text-sm font-bold tracking-tight text-white">{title}</h3>
         <p className="text-zinc-500 text-sm">{description}</p>
       </div>
       <button
@@ -342,7 +366,7 @@ const PreferenceToggleCard = ({
           'relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors',
           checked ? 'border-red-400/50 bg-red-600' : 'border-zinc-600 bg-zinc-900'
         )}
-        title={checked ? '关闭后将忽略对手卡牌皮肤' : '开启后将显示对手卡牌皮肤'}
+        title={checked ? `关闭${title}` : `开启${title}`}
       >
         <span
           className={cn(
@@ -352,5 +376,5 @@ const PreferenceToggleCard = ({
         />
       </button>
     </div>
-  </motion.div>
+  </div>
 );

@@ -26,7 +26,7 @@ import {
     validatePassword,
     validateUsername
 } from './registration';
-import { HARD_AI_DEFAULT_OPENING_CARD_IDS, ServerGameService } from './ServerGameService';
+import { getHardAiOpeningCardIds, ServerGameService } from './ServerGameService';
 import { PlayerState, Card, GAME_TIMEOUTS, GameState, BattleLogEntry, SandboxFile, SandboxPlayerKey, SandboxPlayerSetup, SandboxCardSetup, GamePhase, TriggerLocation } from '../src/types/game';
 import { EventEngine } from '../src/services/EventEngine';
 import { addBattleLog, battleLogText, normalizeBattleLogs } from '../src/lib/battleLog';
@@ -5028,7 +5028,7 @@ io.on('connection', (socket) => {
                                     '机器人',
                                     !isFirst,
                                     gameState.turnTimerLimit,
-                                    gameState.botDifficulty === 'hard' ? HARD_AI_DEFAULT_OPENING_CARD_IDS : undefined
+                                    gameState.botDifficulty === 'hard' ? getHardAiOpeningCardIds(gameState.botDeckProfiles?.BOT_PLAYER) : undefined
                                 );
                                 botPlayer.uid = 'BOT_PLAYER';
                                 botPlayer.mulliganDone = true;

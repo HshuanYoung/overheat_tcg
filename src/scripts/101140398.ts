@@ -77,7 +77,10 @@ const cardEffects: CardEffect[] = [{
     moveCard(gameState, targetOwnerUid, target, 'EXILE', instance);
     const exiled = AtomicEffectExecutor.findCardById(gameState, targetId);
     if (exiled) {
-      ensureData(exiled).returnToOwnerFieldAtTurnEndSourceName = instance.fullName;
+      const data = ensureData(exiled);
+      data.returnToOwnerFieldAtTurnEndSourceName = instance.fullName;
+      data.returnToOwnerFieldAtTurnEndSourceCardId = instance.gamecardId;
+      data.returnToOwnerFieldAtTurnEndOwnerUid = targetOwnerUid;
     }
     appendEndResolution(gameState, playerState.uid, instance, '101140398_return_exiled_unit', async (_source, state) => {
       returnExiledUnit(state, targetId, targetOwnerUid, instance);

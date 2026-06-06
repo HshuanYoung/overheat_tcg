@@ -24,6 +24,7 @@ import { getCardSkinUrl } from '../data/cardSkins';
 import { useCardSkinSettings } from '../hooks/useCardSkinSettings';
 import { BattleAnimationLayer, battleAnimationGroupDuration, getBattleAnimationPlaybackGroup } from './BattleAnimationLayer';
 import { useBattleAnimationPreference, useBattleAnimations } from '../hooks/useBattleAnimations';
+import { CardHoverPreviewPortal } from './CardHoverPreviewPortal';
 
 const EFFECT_TYPE_LABELS: Record<string, string> = {
   ACTIVATE: '主动',
@@ -2075,6 +2076,7 @@ export const BattleField: React.FC = () => {
     if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
     const submittingQuery = displayedPendingQuery;
     const chosenSelections = overrideSelections || selectedQueryIds;
+    setHoverPreviewCard(null);
     setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
     setIsPopupHidden(false);
 
@@ -2810,6 +2812,8 @@ export const BattleField: React.FC = () => {
               <div key={`${card.gamecardId}-${i}`} className="flex flex-col items-center gap-2 md:gap-4 shrink-0">
                 <motion.div
                   whileHover={{ y: -10 }}
+                  onMouseEnter={() => setHoverPreviewCard(card)}
+                  onMouseLeave={() => setHoverPreviewCard(null)}
                   onClick={(e) => {
                     e.stopPropagation();
                     setCardMenu({ card, zone: 'hand', index: i, x: e.clientX, y: e.clientY });
@@ -2950,6 +2954,7 @@ export const BattleField: React.FC = () => {
           cardBackUrl={cardBackUrl}
           onPreview={setPreviewCard}
         />
+        <CardHoverPreviewPortal card={hoverPreviewCard} />
       </div>
     );
   }
@@ -3517,7 +3522,6 @@ export const BattleField: React.FC = () => {
                   handEffectsEnabled={handEffectsEnabled}
                   sandboxEditMode={isDebugEnabled}
                   onSandboxZoneClick={openDebugTarget}
-                  onHoverPreview={setHoverPreviewCard}
 
                   showPhaseMenu={showPhaseMenu}
                   isAnyPopupOpen={
@@ -3545,8 +3549,8 @@ export const BattleField: React.FC = () => {
                 events={battleAnimations.events}
                 enabled={battleAnimationsEnabled}
                 onEventComplete={battleAnimations.dismiss}
-                hoverPreview={hoverPreviewCard}
               />
+              <CardHoverPreviewPortal card={hoverPreviewCard} />
             </div>
           </div>
         </div>
@@ -3616,6 +3620,7 @@ export const BattleField: React.FC = () => {
           selectedIds={discardSelection}
           minSelections={me.hand.length - 6}
           maxSelections={me.hand.length - 6}
+          onCardHover={setHoverPreviewCard}
           onCardClick={(card) => {
             const id = card.gamecardId;
             const required = me.hand.length - 6;
@@ -3627,6 +3632,7 @@ export const BattleField: React.FC = () => {
           }}
           onSelectionComplete={async () => {
             setIsPopupHidden(true);
+            setHoverPreviewCard(null);
             for (const id of discardSelection) {
               await handleDiscardCard(id);
             }
@@ -3961,12 +3967,17 @@ export const BattleField: React.FC = () => {
         confirmText="确认宣告"
         cancelText="取消"
         onSelectionComplete={() => {
+          setHoverPreviewCard(null);
           if (allianceConfirmation) {
             handleDeclareAttack([allianceConfirmation.attacker1.gamecardId, allianceConfirmation.attacker2.gamecardId], true);
             setAllianceConfirmation(null);
           }
         }}
-        onCancel={() => setAllianceConfirmation(null)}
+        onCancel={() => {
+          setHoverPreviewCard(null);
+          setAllianceConfirmation(null);
+        }}
+        onCardHover={setHoverPreviewCard}
         cardBackUrl={cardBackUrl}
         onHide={() => setIsPopupHidden(true)}
         isHidden={isPopupHidden}
@@ -4311,14 +4322,17 @@ export const BattleField: React.FC = () => {
         confirmDisabled={isQueryHandoffWaiting}
         hidePaymentCancel={isEffectPaymentQuery}
         compactOverlay={normalizedPendingQueryType === 'ASK_TRIGGER'}
+        onCardHover={setHoverPreviewCard}
         onConfirm={() => {
           if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+          setHoverPreviewCard(null);
           const submittingQuery = displayedPendingQuery;
           setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
           GameService.submitQueryChoice(gameId, submittingQuery.id, [getPendingOptionId(binaryConfirmOption) || 'YES']);
         }}
         onCancel={() => {
           if (!gameId || !displayedPendingQuery || isQueryHandoffWaiting) return;
+          setHoverPreviewCard(null);
           const submittingQuery = displayedPendingQuery;
           setQueryHandoff({ query: submittingQuery, clearAt: Date.now() + 650 });
           GameService.submitQueryChoice(gameId, submittingQuery.id, [getPendingOptionId(binaryCancelOption) || 'NO']);

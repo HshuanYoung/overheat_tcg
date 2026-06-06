@@ -1200,7 +1200,7 @@ export const PlayField: React.FC<PlayFieldProps> = ({
             onPreviewCard?.(card);
           }
         }}
-        onCardHover={setHoveredCard}
+        onCardHover={handleHoverPreview}
         cardBackUrl={cardBackUrl}
         selectedIds={selectedTargetCardIds || Array.from(selectedTargetIds || [])}
         highlightedIds={Array.from(highlightedCardIds || [])}

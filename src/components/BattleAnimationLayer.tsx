@@ -1,9 +1,8 @@
 import React, { RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Play, RefreshCw, Shield, Sparkles, Swords, Trophy, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { Card, CardType, Rarity } from '../types/game';
+import type { CardType, Rarity } from '../types/game';
 
 export type BattleAnimationType =
   | 'card-played'
@@ -53,7 +52,6 @@ interface BattleAnimationLayerProps {
   events: BattleAnimationEvent[];
   enabled: boolean;
   onEventComplete: (eventId: string) => void;
-  hoverPreview?: Card | null;
 }
 
 const DISPLAY_MS: Record<BattleAnimationType, number> = {
@@ -166,8 +164,7 @@ const ParallelEventPlayer: React.FC<{
 export const BattleAnimationLayer: React.FC<BattleAnimationLayerProps> = ({
   events,
   enabled,
-  onEventComplete,
-  hoverPreview
+  onEventComplete
 }) => {
   const layerRef = useRef<HTMLDivElement>(null);
 
@@ -193,7 +190,6 @@ export const BattleAnimationLayer: React.FC<BattleAnimationLayerProps> = ({
           enabled={enabled}
         />
       ))}
-      <CardHoverPreviewPortal enabled={enabled} card={hoverPreview} />
     </div>
   );
 };
@@ -860,52 +856,3 @@ const ImpactRing: React.FC<{ tone: string }> = ({ tone }) => (
     className={cn('absolute h-28 w-28 rounded-full border-4 bg-gradient-to-br opacity-70 blur-[1px] md:h-40 md:w-40', tone)}
   />
 );
-
-const CardHoverPreviewPortal: React.FC<{ enabled: boolean; card?: Card | null }> = ({ enabled, card }) => {
-  if (typeof document === 'undefined') return null;
-  return createPortal(
-    <AnimatePresence>
-      {enabled && card && (
-        <CardHoverPreview key={card.gamecardId || card.id} card={card} />
-      )}
-    </AnimatePresence>,
-    document.body
-  );
-};
-
-const CardHoverPreview: React.FC<{ card: Card }> = ({ card }) => {
-  const imageUrl = card.fullImageUrl || card.imageUrl;
-
-  if (!imageUrl) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 18, scale: 0.97 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 18, scale: 0.97 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
-      className="pointer-events-none fixed right-4 top-20 z-[2300] hidden w-[300px] rounded-2xl border border-white/10 bg-black/78 p-3 shadow-2xl backdrop-blur-md lg:block"
-    >
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
-        <img
-          src={imageUrl}
-          alt={card.fullName}
-          className="aspect-[3/4] w-full object-contain"
-          draggable={false}
-          referrerPolicy="no-referrer"
-        />
-      </div>
-      <div className="mt-3">
-        <div className="text-sm font-black text-white">{card.fullName}</div>
-        <div className="mt-1 text-[10px] font-bold tracking-widest text-white/45">
-          {card.id} · {card.type} · {card.color}
-        </div>
-        {card.description && (
-          <div className="mt-2 max-h-28 overflow-hidden text-xs leading-relaxed text-white/70">
-            {card.description}
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-};

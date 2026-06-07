@@ -2,10 +2,11 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BattleLogEntry, Card, GameState } from '../types/game';
 import { battleLogText, normalizeBattleLogEntry } from '../lib/battleLog';
 import { getCardImageUrl } from '../lib/utils';
+import { getPlayZoneProjection, getPlayZoneProjectionKind } from '../lib/playZoneProjection';
 import type { BattleAnimationEvent, BattleAnimationType } from '../components/BattleAnimationLayer';
 
 const STORAGE_KEY = 'battleAnimationsEnabled';
-const MAX_QUEUE_SIZE = 8;
+const MAX_QUEUE_SIZE = 12;
 
 export function useBattleAnimationPreference() {
   const [enabled, setEnabledState] = useState(() => {
@@ -35,7 +36,6 @@ function getCardLocations(game: GameState): Record<string, { zone: string; owner
       ['DECK', player.deck || []],
       ['GRAVE', player.grave || []],
       ['EXILE', player.exile || []],
-      ['PLAY', player.playZone || []],
       ['UNIT', (player.unitZone || []).filter((c): c is Card => c !== null)],
       ['ITEM', (player.itemZone || []).filter((c): c is Card => c !== null)],
       ['EROSION_FRONT', (player.erosionFront || []).filter((c): c is Card => c !== null)],
@@ -54,6 +54,17 @@ function getCardLocations(game: GameState): Record<string, { zone: string; owner
           locations[card.gamecardId] = { zone, ownerUid, card, slotIndex };
         }
       });
+    });
+
+    const playProjection = getPlayZoneProjection(player);
+    (player.playZone || []).forEach(card => {
+      if (!card?.gamecardId) return;
+      const projectionKind = getPlayZoneProjectionKind(card);
+      const zone = projectionKind === 'STORY' ? 'PLAY' : projectionKind;
+      const slotIndex = projectionKind === 'UNIT'
+        ? playProjection.projectedUnitSlotByCardId.get(card.gamecardId)
+        : undefined;
+      locations[card.gamecardId] = { zone, ownerUid, card, slotIndex };
     });
   });
 
@@ -328,7 +339,7 @@ export function useBattleAnimations(game: GameState | null, perspectiveUid?: str
             rarity: topPlayedCard.rarity,
             playerUid: player.uid,
             sourceAnchor: anchor(player.uid, 'hand'),
-            targetAnchor: anchor(player.uid, 'play')
+            targetAnchor: targetAnchorForPlayedCard(game, player.uid, topPlayedCard)
           });
         }
       }
@@ -377,7 +388,7 @@ function animationFromLog(
   const actorUid = log.actorUid || uidFromText(text, playersByName);
   const side = sideForUid(actorUid, perspectiveUid, game);
   const sourceCard = log.sourceCard;
-  const sourceCardName = sourceCard?.name || parseBracketName(text);
+  const sourceCardName = sourceCard?.name || parseEffectSourceName(text) || parseBracketName(text);
   const sourceCardId = sourceCard?.gamecardId;
   const sourceCardDetails = findCardByLogRef(game, sourceCardId, sourceCard?.cardId, sourceCardName);
   const imageUrl = sourceCardDetails ? getCardPreviewImage(sourceCardDetails) : sourceCard?.cardId ? getCardImageUrl(sourceCard.cardId, 'C', false) : undefined;
@@ -391,12 +402,29 @@ function animationFromLog(
       rarity: sourceCardDetails?.rarity,
       playerUid: actorUid,
       sourceAnchor: actorUid ? anchor(actorUid, 'hand') : undefined,
-      targetAnchor: actorUid ? anchor(actorUid, 'play') : undefined
+      targetAnchor: actorUid ? targetAnchorForPlayedCard(game, actorUid, sourceCardDetails || (sourceCardId ? ({ gamecardId: sourceCardId } as Card) : undefined)) : undefined
     });
   }
 
   if (log.category === 'CONFRONTATION' || text.startsWith('link') || text.includes('对抗')) {
     return null;
+  }
+
+  if (isEffectActivationLog(log, text)) {
+    const effectOwnerUid = sourceCard?.ownerUid || actorUid;
+    const effectKind = log.category === 'TRIGGERED_EFFECT' || ['TRIGGER', 'TRIGGERED'].includes(String(log.metadata?.effectType || ''))
+      ? 'triggered'
+      : 'activated';
+    return buildEvent(log, 'effect-activated', sideForUid(effectOwnerUid || actorUid, perspectiveUid, game), effectKind === 'triggered' ? '诱发效果' : '发动效果', {
+      subtitle: effectSummary(log, text),
+      cardName: sourceCardName || sourceCardDetails?.fullName,
+      cardImageUrl: imageUrl,
+      sourceCardId,
+      playerUid: effectOwnerUid || actorUid,
+      sourceAnchor: sourceAnchorForLog(game, sourceCard, effectOwnerUid || actorUid),
+      durationMs: 900,
+      effectKind
+    });
   }
 
   if (text.includes('宣告了攻击') || text.includes('[攻击宣言]')) {
@@ -465,6 +493,25 @@ function anchor(uid: string, zone: string) {
   return `player:${uid}:${zone}`;
 }
 
+function targetAnchorForPlayedCard(game: GameState, ownerUid: string, card?: Card | null) {
+  const liveLocation = card?.gamecardId ? getCardLocations(game)[card.gamecardId] : undefined;
+  return getAnchorForZone(ownerUid, liveLocation?.zone || 'PLAY', liveLocation?.slotIndex);
+}
+
+function sourceAnchorForLog(game: GameState, sourceCard: BattleLogEntry['sourceCard'], fallbackUid?: string) {
+  const liveLocation = sourceCard?.gamecardId ? getCardLocations(game)[sourceCard.gamecardId] : undefined;
+  const ownerUid = sourceCard?.ownerUid || liveLocation?.ownerUid || fallbackUid;
+  const loggedZone = String(sourceCard?.zone || '');
+  const zone = loggedZone === 'PLAY' && liveLocation?.zone
+    ? liveLocation.zone
+    : String(sourceCard?.zone || liveLocation?.zone || '');
+  const slotIndex = typeof sourceCard?.slotNumber === 'number'
+    ? Math.max(0, sourceCard.slotNumber - 1)
+    : liveLocation?.slotIndex;
+  if (!ownerUid || !zone) return undefined;
+  return getAnchorForZone(ownerUid, zone, slotIndex);
+}
+
 function findCardByLogRef(game: GameState, gamecardId?: string, cardId?: string, cardName?: string) {
   const candidates: Card[] = [];
   Object.values(game.players || {}).forEach(player => {
@@ -516,6 +563,62 @@ function parseDamageAmount(text: string, metadata?: Record<string, any>) {
 
 function parseBracketName(text: string) {
   return text.match(/[［\[]([^［\]\[\]]+)[\]］]/)?.[1];
+}
+
+function parseEffectSourceName(text: string) {
+  const triggered = text.match(/【诱发效果】\s*[［\[]([^［\]\[\]]+)[\]］]\s*发动/);
+  if (triggered?.[1]) return triggered[1].trim();
+
+  const activated = text.match(/发动了\s+(?:[［\[][^［\]\[\]]+[\]］]\s*)?(.+?)\s+的效果[:：]/);
+  return activated?.[1]?.trim();
+}
+
+function parseEffectDescriptionFromText(text: string) {
+  const afterColon = text.match(/的效果[:：]\s*(.+)$/);
+  if (afterColon?.[1]) return afterColon[1];
+
+  const bracketMatches = Array.from(text.matchAll(/[［\[]([^［\]\[\]]+)[\]］]/g)).map(match => match[1]);
+  if (text.includes('诱发效果') && bracketMatches.length >= 2) return bracketMatches[1];
+
+  const activatedBracket = text.match(/发动了\s*[［\[]([^［\]\[\]]+)[\]］]/);
+  return activatedBracket?.[1];
+}
+
+function isEffectCompletionLog(log: BattleLogEntry, text: string) {
+  if (text.includes('发动')) return false;
+  if (text.includes('诱发效果结算完成')) return true;
+  if (text.includes('结算完成')) return true;
+  return log.category === 'TRIGGERED_EFFECT' && /完成[。.]?$/.test(text.trim());
+}
+
+function isEffectActivationLog(log: BattleLogEntry, text: string) {
+  if (isEffectCompletionLog(log, text)) return false;
+  if (log.category !== 'EFFECT_ACTIVATED' && log.category !== 'TRIGGERED_EFFECT') return false;
+
+  const hasEffectMetadata =
+    log.metadata?.effectDescription !== undefined ||
+    log.metadata?.effectIndex !== undefined ||
+    log.metadata?.effectId !== undefined;
+  const textLooksLikeActivation = text.includes('发动') && text.includes('效果');
+
+  if (log.category === 'TRIGGERED_EFFECT') {
+    return textLooksLikeActivation || (hasEffectMetadata && text.includes('诱发'));
+  }
+
+  return textLooksLikeActivation || hasEffectMetadata;
+}
+
+function effectSummary(log: BattleLogEntry, text: string) {
+  const raw = String(log.metadata?.effectDescription || parseEffectDescriptionFromText(text) || compactText(text));
+  return compactEffectText(raw);
+}
+
+function compactEffectText(text: string) {
+  return text
+    .replace(/^[【\[]?(?:启|起|主动|诱发|强制诱发|可选诱发|永续)效果[】\]]?[，,:：\s]*/u, '')
+    .replace(/[。\s]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 48);
 }
 
 function compactText(text: string) {

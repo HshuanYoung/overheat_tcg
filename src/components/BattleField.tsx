@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { StandardPopup } from './StandardPopup';
 import { Flag, Trophy, Frown, Home, Sword, Shield, Zap, LogOut, BookOpen, Send, Loader2, Trash2, X, Play, Search, ChevronRight, ShieldCheck, Layers, Sparkles, Flame, AlertTriangle, PackagePlus, Scissors, Circle, FileText, Wrench, Shuffle, RotateCcw, MoveRight } from 'lucide-react';
 import { cn, getCardColorHanzi, getCardColorLabel, getCardImageUrl, getCardIdentity, getCardTypeLabel, getEffectiveCardColors, getLocationLabel, getPhaseLabel } from '../lib/utils';
+import { getPlayZoneProjectionKind } from '../lib/playZoneProjection';
 import { KeywordBadges } from './KeywordBadges';
 import { CardEffectList } from './CardEffectList';
 import { BattleLogPanel } from './BattleLogPanel';
@@ -205,7 +206,6 @@ const getBattleAnimationCardLocations = (state?: GameState | null): Record<strin
       ['DECK', player.deck],
       ['GRAVE', player.grave],
       ['EXILE', player.exile],
-      ['PLAY', player.playZone],
       ['UNIT', player.unitZone],
       ['ITEM', player.itemZone],
       ['EROSION_FRONT', player.erosionFront],
@@ -218,6 +218,13 @@ const getBattleAnimationCardLocations = (state?: GameState | null): Record<strin
           locations[card.gamecardId] = { zone, ownerUid };
         }
       });
+    });
+
+    player.playZone?.forEach(card => {
+      if (!card?.gamecardId) return;
+      const projectionKind = getPlayZoneProjectionKind(card);
+      const zone = projectionKind === 'STORY' ? 'PLAY' : projectionKind;
+      locations[card.gamecardId] = { zone, ownerUid };
     });
   });
 
@@ -2125,6 +2132,11 @@ export const BattleField: React.FC = () => {
   const handleCardClick = (card: Card, zone: string, index?: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
+    if (zone === 'play') {
+      setPreviewCard(card);
+      return;
+    }
+
     if (isDebugEnabled) {
       const zoneMap: Record<string, SandboxEditableZone> = {
         hand: 'hand',
@@ -2997,26 +3009,53 @@ export const BattleField: React.FC = () => {
       className="battle-field h-screen pt-0 md:pt-16 bg-[#050505] flex flex-col overflow-hidden select-none font-sans relative safe-area-inset pb-[calc(env(safe-area-inset-bottom)+8px)] md:pb-0"
       onClick={() => setCardMenu(null)}
     >
-      {canControlDebug && (
+      <div className="fixed right-3 top-3 z-[2200] flex max-w-[calc(100vw-1.5rem)] flex-wrap items-center justify-end gap-1.5 rounded-2xl border border-white/10 bg-black/55 p-1 shadow-2xl backdrop-blur-xl md:right-5 md:top-5 md:max-w-[calc(100vw-2.5rem)] md:flex-nowrap md:gap-2 md:rounded-full">
         <button
           type="button"
           onClick={event => {
             event.stopPropagation();
-            toggleDebugMode();
+            setIsPopupHidden(false);
+            setIsRulebookOpen(true);
           }}
-          disabled={!isDebugIdle}
-          className={cn(
-            "fixed right-3 top-3 z-[2200] flex items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-black tracking-widest shadow-2xl backdrop-blur-xl transition-all disabled:cursor-not-allowed disabled:opacity-35 md:right-5 md:top-5 md:px-4 md:py-2.5",
-            isDebugEnabled
-              ? "border-cyan-300/60 bg-cyan-400/25 text-cyan-50 shadow-cyan-950/40 hover:bg-cyan-400/35"
-              : "border-white/10 bg-black/55 text-white/65 hover:bg-white/10 hover:text-white"
-          )}
-          title={isDebugIdle ? '切换调试模式' : '当前有待处理操作，暂不能切换调试'}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition-all hover:bg-white/10 hover:text-white md:h-9 md:w-9"
+          title="规则书"
         >
-          <Wrench className="h-3.5 w-3.5 md:h-4 md:w-4" />
-          调试{isDebugEnabled ? '开' : '关'}
+          <BookOpen className="h-4 w-4 md:h-5 md:w-5" />
         </button>
-      )}
+        <button
+          type="button"
+          onClick={event => {
+            event.stopPropagation();
+            setIsPopupHidden(false);
+            handleToggleLogs();
+          }}
+          className="flex h-8 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 text-[9px] font-black tracking-widest text-white/70 transition-all hover:bg-[#f27d26]/20 hover:text-[#f27d26] md:h-9 md:px-3.5 md:text-[10px]"
+          title="战斗日志"
+        >
+          <Layers className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          LOG
+        </button>
+        {canControlDebug && (
+          <button
+            type="button"
+            onClick={event => {
+              event.stopPropagation();
+              toggleDebugMode();
+            }}
+            disabled={!isDebugIdle}
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-full border px-3 text-[10px] font-black tracking-widest transition-all disabled:cursor-not-allowed disabled:opacity-35 md:h-9 md:px-3.5",
+              isDebugEnabled
+                ? "border-cyan-300/60 bg-cyan-400/25 text-cyan-50 shadow-cyan-950/40 hover:bg-cyan-400/35"
+                : "border-white/10 bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"
+            )}
+            title={isDebugIdle ? '切换调试模式' : '当前有待处理操作，暂不能切换调试'}
+          >
+            <Wrench className="h-3.5 w-3.5 md:h-4 md:w-4" />
+            调试{isDebugEnabled ? '开' : '关'}
+          </button>
+        )}
+      </div>
 
       <AnimatePresence>
         {isDebugEnabled && debugTarget && debugTargetOwner && (
@@ -3412,8 +3451,6 @@ export const BattleField: React.FC = () => {
                   selectedTargetIds={visibleSelectedTargetIds}
                   selectedTargetCardIds={visibleSelectedTargetCardIds}
                   animatingCardIds={animatingCardIds}
-                  onShowLogs={handleToggleLogs}
-                  onOpenRulebook={() => setIsRulebookOpen(true)}
                   onSurrender={() => {
                     if (isSpectator) {
                       handleSpectatorExit();

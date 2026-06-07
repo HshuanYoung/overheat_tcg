@@ -24,11 +24,10 @@ const StackOrderBadge: React.FC<{ order?: number; className?: string }> = ({ ord
       "pointer-events-none absolute inset-0 z-50 flex items-center justify-center",
       className
     )}>
-      <div className="relative isolate flex aspect-square h-[42%] min-h-8 max-h-14 items-center justify-center rounded-full bg-[conic-gradient(from_150deg,#67e8f9_0deg,#f8fafc_58deg,#f59e0b_122deg,#0f172a_205deg,#22d3ee_292deg,#67e8f9_360deg)] p-[2px] shadow-[0_0_22px_rgba(34,211,238,0.62),0_12px_26px_rgba(0,0,0,0.7)] ring-1 ring-cyan-100/70 motion-safe:animate-[stack-order-pulse_1.8s_ease-in-out_infinite] motion-reduce:animate-none">
-        <div className="absolute inset-[-14%] -z-10 rounded-full bg-cyan-300/30 blur-md" />
-        <div className="absolute inset-[12%] -z-10 rounded-full bg-amber-200/25 blur-sm" />
-        <div className="relative flex h-full w-full items-center justify-center rounded-full border border-cyan-50/70 bg-[radial-gradient(circle_at_35%_25%,rgba(255,255,255,0.28),transparent_34%),linear-gradient(145deg,rgba(2,6,23,0.96),rgba(8,47,73,0.96)_54%,rgba(15,23,42,0.96))] text-cyan-50 shadow-[inset_0_1px_5px_rgba(255,255,255,0.26),inset_0_-5px_12px_rgba(8,47,73,0.78)] backdrop-blur-sm">
-          <span className="text-lg font-black leading-none tabular-nums drop-shadow-[0_0_8px_rgba(103,232,249,0.95)] md:text-2xl">{order}</span>
+      <div className="relative isolate flex aspect-square h-[28%] min-h-6 max-h-9 items-center justify-center rounded-full border border-sky-100/70 bg-sky-950/35 p-[2px] shadow-[0_7px_18px_rgba(0,0,0,0.5),0_0_14px_rgba(56,189,248,0.28),inset_0_1px_5px_rgba(255,255,255,0.22)] ring-1 ring-amber-200/20 backdrop-blur-md">
+        <div className="absolute inset-[-3px] -z-10 rounded-full bg-sky-400/18 blur-[4px]" />
+        <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/20 bg-[radial-gradient(circle_at_32%_18%,rgba(255,255,255,0.34),transparent_34%),radial-gradient(circle_at_72%_76%,rgba(251,191,36,0.26),transparent_38%),linear-gradient(145deg,rgba(14,116,144,0.72),rgba(12,74,110,0.64)_48%,rgba(9,9,11,0.78))] text-sky-50 shadow-[inset_0_1px_5px_rgba(255,255,255,0.28),inset_0_-3px_7px_rgba(2,132,199,0.32)]">
+          <span className="text-sm font-black leading-none tabular-nums md:text-base">{order}</span>
         </div>
       </div>
     </div>
@@ -452,6 +451,32 @@ const withEffectiveCostInfluence = (gameState: GameState | undefined, player: Pl
 
 const animationZoneAnchor = (uid: string, zone: string) => `player:${uid}:${zone}`;
 const animationUnitAnchor = (uid: string, index: number) => `player:${uid}:unit:${index}`;
+const MIRRORED_UNIT_ROW_OFFSET_CLASS = {
+  opponent: "translate-y-0",
+  player: "translate-y-0"
+} as const;
+const MIRRORED_BATTLEFIELD_GROUP_CLASS = "flex flex-col gap-8 md:gap-12";
+const MIRRORED_DESKTOP_EROSION_ROW_CLASS = "hidden md:grid grid-cols-10 gap-1 h-16 scale-90";
+const MIRRORED_EROSION_EDGE_ALIGNMENT_CLASS = {
+  opponent: "-translate-y-[90%]",
+  player: "translate-y-0"
+} as const;
+const MIRRORED_HAND_WRAPPER_CLASS = {
+  opponent: "flex items-center justify-center px-1 md:px-0 -translate-y-1 md:-translate-y-2",
+  player: "flex items-center justify-center px-1 md:px-0 translate-y-1 md:translate-y-2"
+} as const;
+const MIRRORED_STACK_SIDEBAR_CLASS = {
+  opponent: "flex flex-col gap-1 md:gap-4 h-full justify-start",
+  player: "flex flex-col gap-1 md:gap-4 h-full justify-start"
+} as const;
+const MIRRORED_DECK_EDGE_CLASS = {
+  opponent: "border-white/20 scale-[0.8] md:scale-100 -translate-y-1 md:-translate-y-2",
+  player: "border-white/20 scale-[0.8] md:scale-100 translate-y-1 md:translate-y-2"
+} as const;
+const MIRRORED_AUX_SIDEBAR_CLASS = {
+  opponent: "flex flex-col gap-1 md:gap-4 h-full justify-end",
+  player: "flex flex-col gap-1 md:gap-4 h-full justify-start"
+} as const;
 
 const CentralStoryPlayPile: React.FC<{
   player: PlayerState;
@@ -474,8 +499,8 @@ const CentralStoryPlayPile: React.FC<{
       className={cn(
         "absolute left-1/2 top-1/2",
         isOpponent
-          ? "-translate-x-1/2 -translate-y-[6.25rem] md:-translate-y-[7.25rem]"
-          : "-translate-x-1/2 translate-y-[2.5rem] md:translate-y-[3.25rem]",
+          ? "-translate-x-1/2 translate-y-[calc(-6.25rem-120px)] md:translate-y-[calc(-7.25rem-154.667px)] lg:translate-y-[calc(-7.25rem-173.333px)]"
+          : "-translate-x-1/2 translate-y-[6.25rem] md:translate-y-[7.25rem]",
         hasCards
           ? "pointer-events-auto flex items-center justify-center"
           : "pointer-events-none h-4 w-4 opacity-0"
@@ -596,7 +621,9 @@ const PlayerHalf: React.FC<{
   };
   const getCardCostDisplay = (card: Card) => withEffectiveCostInfluence(game, player, card);
   const ongoingEffectCount = ongoingEffects.filter(effect => effect.category !== 'WEALTH').length;
-  const unitZoneOffsetClass = ""; // Removed horizontal offset to prevent blocking exile area
+  const mirroredUnitRowOffsetClass = isOpponent
+    ? MIRRORED_UNIT_ROW_OFFSET_CLASS.opponent
+    : MIRRORED_UNIT_ROW_OFFSET_CLASS.player;
   const getMobileErosionCount = (playerState: PlayerState): number | string => {
     const frontCount = playerState.erosionFront?.filter(Boolean).length || 0;
     const backCount = playerState.erosionBack?.filter(Boolean).length || 0;
@@ -680,8 +707,8 @@ const PlayerHalf: React.FC<{
 
   return (
     <div className={cn(
-      "flex-1 md:grid md:grid-cols-[100px_1fr_100px] grid grid-cols-5 gap-0.5 md:gap-2 p-0.5 md:p-2 relative h-full min-h-0 perspective-[1000px] overflow-hidden",
-      isOpponent ? "bg-red-500/5 items-start" : "bg-blue-500/5 items-end",
+      "flex-1 md:grid md:grid-cols-[100px_1fr_100px] grid grid-cols-5 gap-0.5 md:gap-2 p-0.5 md:p-2 relative h-full min-h-0 items-stretch overflow-hidden",
+      isOpponent ? "bg-red-500/5" : "bg-blue-500/5",
       player.isGoddessMode && (isOpponent
         ? "shadow-[inset_0_0_44px_rgba(242,125,38,0.24)]"
         : "shadow-[inset_0_0_44px_rgba(251,191,36,0.24)]")
@@ -699,16 +726,18 @@ const PlayerHalf: React.FC<{
       )}
 
       {/* SIDEBAR 1: Left Columns */}
-      <div className="flex flex-col gap-1 md:gap-4 h-full justify-center">
+      <div className={isOpponent ? MIRRORED_STACK_SIDEBAR_CLASS.opponent : MIRRORED_AUX_SIDEBAR_CLASS.player}>
         {isOpponent ? (
           // Opponent Left: Deck, Grave, Exile
           <>
             <CardSlot
               card={null} isDeck label="牌库" count={player.deck?.length || 0}
-              className="border-white/20 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
+              className={MIRRORED_DECK_EDGE_CLASS.opponent} cardBackUrl={cardBackUrl}
+              isOpponent={isOpponent}
               onClick={() => clickSandboxZone('deck')}
               animationAnchor={animationZoneAnchor(player.uid, 'deck')}
             />
+            <div className="min-h-0 flex-1" />
             <CardSlot
               card={player.grave?.length > 0 ? player.grave[player.grave.length - 1] : null}
               label="墓地" count={player.grave?.length || 0}
@@ -793,13 +822,12 @@ const PlayerHalf: React.FC<{
 
       {/* CENTER COLUMN (3 COLUMNS ON MOBILE): HAND, UNIT, EROSION */}
       <div className={cn(
-        "col-span-3 md:col-span-1 flex flex-col min-h-0",
-        isOpponent ? "justify-end gap-1 md:gap-12" : "justify-end gap-1 md:gap-4"
+        "col-span-3 md:col-span-1 flex h-full min-h-0 flex-col gap-1 md:gap-4"
       )}>
         {isOpponent ? (
           <>
             {/* Opponent Hand Area */}
-            <div className="flex items-center justify-center px-1 md:px-0 mb-1 md:mb-2">
+            <div className={MIRRORED_HAND_WRAPPER_CLASS.opponent}>
               <div
                 className={cn(
                   "flex-1 h-14 md:h-20 flex items-center justify-center gap-1 overflow-x-auto bg-black/20 rounded-lg border border-white/5 custom-scrollbar",
@@ -851,162 +879,170 @@ const PlayerHalf: React.FC<{
               </div>
             </div>
 
-            {/* Opponent Erosion Zone (Desktop) */}
-            <div className="hidden md:grid grid-cols-10 gap-1 h-16 scale-90 origin-bottom mb-4">
-              {(() => {
-                const backCards = player.erosionBack?.filter(c => c !== null) || [];
-                const frontCards = player.erosionFront?.filter(c => c !== null) || [];
-                const allCards = [
-                  ...backCards.map(c => ({ ...c, isFaceUp: false })),
-                  ...frontCards.map(c => ({ ...c, isFaceUp: true }))
-                ];
+            <div className="min-h-0 flex-1" />
 
-                return erosionSlotLabels.map((num, i) => {
-                  const displayCard = allCards[i];
-                  return (
-                    <div key={i} className="flex flex-col gap-1 items-center">
-                      <span className="text-[10px] font-black text-white/30">{num}</span>
-                      <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
-                        {displayCard ? (
-                          <CardSlot
-                            card={displayCard} isFaceUp={displayCard.isFaceUp} onPreview={displayCard.isFaceUp ? onPreviewCard : undefined}
-                            onHover={onHoverCard}
-                            allowFaceDownHover={!displayCard.isFaceUp}
-                            onClick={(e) => clickSandboxZone(displayCard.isFaceUp ? 'erosionFront' : 'erosionBack', i, displayCard) || onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
-                            isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
-                            className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
-                            isHighlighted={displayCard.isFaceUp && highlightedCardIds?.has(displayCard.gamecardId)}
-                            isSelectedForQuery={isSelectedTargetCard(displayCard)}
-                            querySelectionOrder={getTargetSelectionOrder(displayCard)}
-                            showCount={false} isOpponent={isOpponent} displayMode="erosion_item" slotLabel={num} cardBackUrl={cardBackUrl} ignoreSkin={ignoreCardSkins}
-                          />
-                        ) : (
-                          <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
-                            <button type="button" onClick={() => clickSandboxZone('erosionBack', i)} className="h-full w-full text-[8px] opacity-20">{num}</button>
-                          </div>
-                        )}
+            <div className={cn(MIRRORED_BATTLEFIELD_GROUP_CLASS, "justify-end")}>
+              {/* Opponent Erosion Zone (Desktop) */}
+              <div className={cn(MIRRORED_DESKTOP_EROSION_ROW_CLASS, MIRRORED_EROSION_EDGE_ALIGNMENT_CLASS.opponent)}>
+                {(() => {
+                  const backCards = player.erosionBack?.filter(c => c !== null) || [];
+                  const frontCards = player.erosionFront?.filter(c => c !== null) || [];
+                  const allCards = [
+                    ...backCards.map(c => ({ ...c, isFaceUp: false })),
+                    ...frontCards.map(c => ({ ...c, isFaceUp: true }))
+                  ];
+
+                  return erosionSlotLabels.map((num, i) => {
+                    const displayCard = allCards[i];
+                    return (
+                      <div key={i} className="relative h-full">
+                        <span className="pointer-events-none absolute -top-4 left-1/2 z-20 -translate-x-1/2 text-[10px] font-black text-white/30">{num}</span>
+                        <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
+                          {displayCard ? (
+                            <CardSlot
+                              card={displayCard} isFaceUp={displayCard.isFaceUp} onPreview={displayCard.isFaceUp ? onPreviewCard : undefined}
+                              onHover={onHoverCard}
+                              allowFaceDownHover={!displayCard.isFaceUp}
+                              onClick={(e) => clickSandboxZone(displayCard.isFaceUp ? 'erosionFront' : 'erosionBack', i, displayCard) || onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
+                              isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
+                              className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
+                              isHighlighted={displayCard.isFaceUp && highlightedCardIds?.has(displayCard.gamecardId)}
+                              isSelectedForQuery={isSelectedTargetCard(displayCard)}
+                              querySelectionOrder={getTargetSelectionOrder(displayCard)}
+                              showCount={false} isOpponent={isOpponent} displayMode="erosion_item" slotLabel={num} cardBackUrl={cardBackUrl} ignoreSkin={ignoreCardSkins}
+                            />
+                          ) : (
+                            <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
+                              <button type="button" onClick={() => clickSandboxZone('erosionBack', i)} className="h-full w-full text-[8px] opacity-20">{num}</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
+                    );
+                  });
+                })()}
+              </div>
 
-            {/* Opponent Unit Zone */}
-            <div data-animation-anchor={animationZoneAnchor(player.uid, 'unit-row')} className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 translate-y-2 md:translate-y-[60px] transition-transform duration-700", unitZoneOffsetClass)} style={{ transform: 'translateZ(-100px) rotateX(-5deg)' }}>
-              {Array.from({ length: 6 }).map((_, i) => {
-                const unit = playProjection.unitZone?.[i];
-                const isProjectedUnit = !!unit && playProjection.projectedUnitIds.has(unit.gamecardId);
-                return (
-                  <CardSlot
-                    key={i} card={unit || null} label={`${6 - i}`}
-                    onPreview={onPreviewCard} onClick={(e) => {
-                      if (isProjectedUnit && unit) {
-                        onCardClick?.(unit, 'play', playProjection.playZoneIndexByCardId.get(unit.gamecardId), e);
-                        return;
-                      }
-                      clickSandboxZone('unitZone', i, unit || null) || (unit && onCardClick?.(unit, 'unit', i, e));
-                    }}
-                    onHover={onHoverCard}
-                    className="scale-[0.9] origin-center md:scale-100"
-                    isExhausted={!isProjectedUnit && unit ? unit.isExhausted : false}
-                    isSelectedForPayment={!isProjectedUnit && unit ? paymentSelection?.exhaustIds.includes(unit.gamecardId) : false}
-                    isAttacking={!isProjectedUnit && unit ? (selectedAttackers?.includes(unit.gamecardId) || game?.battleState?.attackers.includes(unit.gamecardId)) : false}
-                    isDefending={!isProjectedUnit && unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId || game?.battleState?.unitTargetId === unit.gamecardId) : false}
-                    isHighlighted={!isProjectedUnit && unit ? highlightedCardIds?.has(unit.gamecardId) : false}
-                    isSelectedForQuery={!isProjectedUnit && isSelectedTargetCard(unit)}
-                    querySelectionOrder={!isProjectedUnit ? getTargetSelectionOrder(unit) : undefined}
-                    showCount={false} isOpponent={isOpponent} displayMode="unit" slotLabel={`${6 - i}`} cardBackUrl={cardBackUrl} ignoreSkin={ignoreCardSkins}
-                    animationAnchor={animationUnitAnchor(player.uid, i)}
-                  />
-                );
-              })}
+              {/* Opponent Unit Zone */}
+              <div data-animation-anchor={animationZoneAnchor(player.uid, 'unit-row')} className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 transition-transform duration-700", mirroredUnitRowOffsetClass)}>
+                {Array.from({ length: 6 }).map((_, i) => {
+                  const unit = playProjection.unitZone?.[i];
+                  const isProjectedUnit = !!unit && playProjection.projectedUnitIds.has(unit.gamecardId);
+                  return (
+                    <CardSlot
+                      key={i} card={unit || null} label={`${6 - i}`}
+                      onPreview={onPreviewCard} onClick={(e) => {
+                        if (isProjectedUnit && unit) {
+                          onCardClick?.(unit, 'play', playProjection.playZoneIndexByCardId.get(unit.gamecardId), e);
+                          return;
+                        }
+                        clickSandboxZone('unitZone', i, unit || null) || (unit && onCardClick?.(unit, 'unit', i, e));
+                      }}
+                      onHover={onHoverCard}
+                      className="scale-[0.9] origin-center md:scale-100"
+                      isExhausted={!isProjectedUnit && unit ? unit.isExhausted : false}
+                      isSelectedForPayment={!isProjectedUnit && unit ? paymentSelection?.exhaustIds.includes(unit.gamecardId) : false}
+                      isAttacking={!isProjectedUnit && unit ? (selectedAttackers?.includes(unit.gamecardId) || game?.battleState?.attackers.includes(unit.gamecardId)) : false}
+                      isDefending={!isProjectedUnit && unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId || game?.battleState?.unitTargetId === unit.gamecardId) : false}
+                      isHighlighted={!isProjectedUnit && unit ? highlightedCardIds?.has(unit.gamecardId) : false}
+                      isSelectedForQuery={!isProjectedUnit && isSelectedTargetCard(unit)}
+                      querySelectionOrder={!isProjectedUnit ? getTargetSelectionOrder(unit) : undefined}
+                      showCount={false} isOpponent={isOpponent} displayMode="unit" slotLabel={`${6 - i}`} cardBackUrl={cardBackUrl} ignoreSkin={ignoreCardSkins}
+                      animationAnchor={animationUnitAnchor(player.uid, i)}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </>
         ) : (
           <>
-            {/* Player Unit Zone */}
-            <div data-animation-anchor={animationZoneAnchor(player.uid, 'unit-row')} className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 -translate-y-4 md:-translate-y-[60px] transition-transform duration-700", unitZoneOffsetClass)} style={{ transform: 'translateZ(-100px) rotateX(5deg)' }}>
-              {Array.from({ length: 6 }).map((_, i) => {
-                const unit = playProjection.unitZone?.[i];
-                const isProjectedUnit = !!unit && playProjection.projectedUnitIds.has(unit.gamecardId);
-                return (
-                  <CardSlot
-                    key={i} card={unit || null} label={`${i + 1}`}
-                    onPreview={onPreviewCard} onClick={(e) => {
-                      if (isProjectedUnit && unit) {
-                        onCardClick?.(unit, 'play', playProjection.playZoneIndexByCardId.get(unit.gamecardId), e);
-                        return;
-                      }
-                      clickSandboxZone('unitZone', i, unit || null) || (unit && onCardClick?.(unit, 'unit', i, e));
-                    }}
-                    onHover={onHoverCard}
-                    className="scale-[0.9] origin-center md:scale-100"
-                    isExhausted={!isProjectedUnit && unit ? unit.isExhausted : false}
-                    isSelectedForPayment={!isProjectedUnit && unit ? paymentSelection?.exhaustIds.includes(unit.gamecardId) : false}
-                    isAttacking={!isProjectedUnit && unit ? (selectedAttackers?.includes(unit.gamecardId) || game?.battleState?.attackers.includes(unit.gamecardId)) : false}
-                    isDefending={!isProjectedUnit && unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId || game?.battleState?.unitTargetId === unit.gamecardId) : false}
-                    isAllianceInitiator={!isProjectedUnit && unit && allianceInitiator === unit.gamecardId}
-                    isHighlighted={!isProjectedUnit && unit ? highlightedCardIds?.has(unit.gamecardId) : false}
-                    isSelectedForQuery={!isProjectedUnit && isSelectedTargetCard(unit)}
-                    querySelectionOrder={!isProjectedUnit ? getTargetSelectionOrder(unit) : undefined}
-                    showCount={false} displayMode="unit" slotLabel={`${i + 1}`} cardBackUrl={cardBackUrl}
-                    animationAnchor={animationUnitAnchor(player.uid, i)}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Player Erosion Zone (Desktop) */}
-            <div className="hidden md:grid grid-cols-10 gap-1 h-14 scale-90 origin-top mt-1 mb-2 -translate-y-[44px]" style={{ transform: 'translateZ(-50px) rotateX(2deg)' }}>
-              {(() => {
-                const backCards = player.erosionBack?.filter(c => c !== null) || [];
-                const frontCards = player.erosionFront?.filter(c => c !== null) || [];
-                const allCards = [
-                  ...backCards.map(c => ({ ...c, isFaceUp: false })),
-                  ...frontCards.map(c => ({ ...c, isFaceUp: true }))
-                ];
-
-                return erosionSlotLabels.map((num, i) => {
-                  const displayCard = allCards[i];
+            <div className={cn(MIRRORED_BATTLEFIELD_GROUP_CLASS, "justify-start")}>
+              {/* Player Unit Zone */}
+              <div data-animation-anchor={animationZoneAnchor(player.uid, 'unit-row')} className={cn("grid w-full grid-cols-3 md:grid-cols-6 gap-2 md:gap-2 items-center justify-items-center relative z-10 px-2 md:px-0 transition-transform duration-700", mirroredUnitRowOffsetClass)}>
+                {Array.from({ length: 6 }).map((_, i) => {
+                  const unit = playProjection.unitZone?.[i];
+                  const isProjectedUnit = !!unit && playProjection.projectedUnitIds.has(unit.gamecardId);
                   return (
-                    <div key={i} className="flex flex-col gap-1 items-center">
-                      <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
-                        {displayCard ? (
-                          <CardSlot
-                            card={displayCard}
-                            isFaceUp={displayCard.isFaceUp}
-                            onPreview={onPreviewCard}
-                            onHover={onHoverCard}
-                            allowFaceDownHover={!displayCard.isFaceUp}
-                            onClick={(e) => clickSandboxZone(displayCard.isFaceUp ? 'erosionFront' : 'erosionBack', i, displayCard) || onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
-                            isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
-                            className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
-                            isHighlighted={displayCard.isFaceUp && highlightedCardIds?.has(displayCard.gamecardId)}
-                            isSelectedForQuery={isSelectedTargetCard(displayCard)}
-                            querySelectionOrder={getTargetSelectionOrder(displayCard)}
-                            showCount={false}
-                            displayMode="erosion_item"
-                            slotLabel={num}
-                            cardBackUrl={cardBackUrl}
-                          />
-                        ) : (
-                          <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
-                            <button type="button" onClick={() => clickSandboxZone('erosionBack', i)} className="h-full w-full text-[8px] opacity-20">{num}</button>
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-black text-white/30">{num}</span>
-                    </div>
+                    <CardSlot
+                      key={i} card={unit || null} label={`${i + 1}`}
+                      onPreview={onPreviewCard} onClick={(e) => {
+                        if (isProjectedUnit && unit) {
+                          onCardClick?.(unit, 'play', playProjection.playZoneIndexByCardId.get(unit.gamecardId), e);
+                          return;
+                        }
+                        clickSandboxZone('unitZone', i, unit || null) || (unit && onCardClick?.(unit, 'unit', i, e));
+                      }}
+                      onHover={onHoverCard}
+                      className="scale-[0.9] origin-center md:scale-100"
+                      isExhausted={!isProjectedUnit && unit ? unit.isExhausted : false}
+                      isSelectedForPayment={!isProjectedUnit && unit ? paymentSelection?.exhaustIds.includes(unit.gamecardId) : false}
+                      isAttacking={!isProjectedUnit && unit ? (selectedAttackers?.includes(unit.gamecardId) || game?.battleState?.attackers.includes(unit.gamecardId)) : false}
+                      isDefending={!isProjectedUnit && unit ? (selectedDefender === unit.gamecardId || game?.battleState?.defender === unit.gamecardId || game?.battleState?.unitTargetId === unit.gamecardId) : false}
+                      isAllianceInitiator={!isProjectedUnit && unit && allianceInitiator === unit.gamecardId}
+                      isHighlighted={!isProjectedUnit && unit ? highlightedCardIds?.has(unit.gamecardId) : false}
+                      isSelectedForQuery={!isProjectedUnit && isSelectedTargetCard(unit)}
+                      querySelectionOrder={!isProjectedUnit ? getTargetSelectionOrder(unit) : undefined}
+                      showCount={false} displayMode="unit" slotLabel={`${i + 1}`} cardBackUrl={cardBackUrl}
+                      animationAnchor={animationUnitAnchor(player.uid, i)}
+                    />
                   );
-                });
-              })()}
+                })}
+              </div>
+
+              {/* Player Erosion Zone (Desktop) */}
+              <div className={cn(MIRRORED_DESKTOP_EROSION_ROW_CLASS, MIRRORED_EROSION_EDGE_ALIGNMENT_CLASS.player)}>
+                {(() => {
+                  const backCards = player.erosionBack?.filter(c => c !== null) || [];
+                  const frontCards = player.erosionFront?.filter(c => c !== null) || [];
+                  const allCards = [
+                    ...backCards.map(c => ({ ...c, isFaceUp: false })),
+                    ...frontCards.map(c => ({ ...c, isFaceUp: true }))
+                  ];
+
+                  return erosionSlotLabels.map((num, i) => {
+                    const displayCard = allCards[i];
+                    return (
+                      <div key={i} className="relative h-full">
+                        <div data-animation-anchor={i === 0 ? animationZoneAnchor(player.uid, 'erosion') : `player:${player.uid}:erosion:${i}`} className="relative aspect-[3/4] w-full">
+                          {displayCard ? (
+                            <CardSlot
+                              card={displayCard}
+                              isFaceUp={displayCard.isFaceUp}
+                              onPreview={onPreviewCard}
+                              onHover={onHoverCard}
+                              allowFaceDownHover={!displayCard.isFaceUp}
+                              onClick={(e) => clickSandboxZone(displayCard.isFaceUp ? 'erosionFront' : 'erosionBack', i, displayCard) || onCardClick?.(displayCard, displayCard.isFaceUp ? 'erosion_front' : 'erosion_back', i, e)}
+                              isSelectedForPayment={displayCard.isFaceUp && paymentSelection?.erosionFrontIds?.includes(displayCard.gamecardId)}
+                              className={displayCard.isFaceUp ? "border-red-600" : "border-red-900/50"}
+                              isHighlighted={displayCard.isFaceUp && highlightedCardIds?.has(displayCard.gamecardId)}
+                              isSelectedForQuery={isSelectedTargetCard(displayCard)}
+                              querySelectionOrder={getTargetSelectionOrder(displayCard)}
+                              showCount={false}
+                              displayMode="erosion_item"
+                              slotLabel={num}
+                              cardBackUrl={cardBackUrl}
+                            />
+                          ) : (
+                            <div className="h-full w-full rounded-md border border-dashed border-white/5 bg-white/5 flex items-center justify-center">
+                              <button type="button" onClick={() => clickSandboxZone('erosionBack', i)} className="h-full w-full text-[8px] opacity-20">{num}</button>
+                            </div>
+                          )}
+                        </div>
+                        <span className="pointer-events-none absolute -bottom-4 left-1/2 z-20 -translate-x-1/2 text-[10px] font-black text-white/30">{num}</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             </div>
 
-            <div className="flex items-center justify-center px-1 md:px-0 mt-0 -translate-y-2 md:mt-2 md:translate-y-0">
+            <div className="min-h-0 flex-1" />
+
+            <div className={MIRRORED_HAND_WRAPPER_CLASS.player}>
               <div
                 className={cn(
-                  "flex-1 h-16 md:h-36 flex items-center justify-center gap-0.5 overflow-visible bg-black/20 rounded-lg border border-white/5 relative",
+                  "flex-1 h-14 md:h-20 flex items-center justify-center gap-0.5 overflow-visible bg-black/20 rounded-lg border border-white/5 relative",
                   sandboxEditMode && (player.hand?.length || 0) === 0 && "cursor-pointer hover:border-red-500/40"
                 )}
                 onClick={sandboxEditMode && (player.hand?.length || 0) === 0 ? () => clickSandboxZone('hand') : undefined}
@@ -1129,10 +1165,7 @@ const PlayerHalf: React.FC<{
       </div>
 
       {/* SIDEBAR 2: Right Columns */}
-      <div className={cn(
-        "flex flex-col gap-1 md:gap-4 h-full",
-        isOpponent ? "justify-center" : "justify-end pb-4"
-      )}>
+      <div className={isOpponent ? MIRRORED_AUX_SIDEBAR_CLASS.opponent : MIRRORED_STACK_SIDEBAR_CLASS.player}>
         {isOpponent ? (
           // Opponent Right: Erosion, Item
           <>
@@ -1157,6 +1190,14 @@ const PlayerHalf: React.FC<{
               querySelectionOrder={getTargetSelectionOrder(player.erosionFront?.filter(Boolean).slice(-1)[0] || player.erosionBack?.filter(Boolean).slice(-1)[0] || null)}
               animationAnchor={animationZoneAnchor(player.uid, 'erosion')}
             />
+            <div className={cn("flex justify-center", isOpponent && "rotate-180")}>
+              <OngoingEffectButton
+                value={wealthValue}
+                effectCount={ongoingEffectCount}
+                isOpponent={isOpponent}
+                onClick={() => onOpenOngoingEffects?.(player, isOpponent)}
+              />
+            </div>
             <CardSlot
               card={topDisplayedItem}
               label="道具区" count={displayedItemCards.length}
@@ -1179,14 +1220,6 @@ const PlayerHalf: React.FC<{
               displayMode="erosion_item"
               animationAnchor={animationZoneAnchor(player.uid, 'item')}
             />
-            <div className={cn("flex justify-center", isOpponent && "rotate-180")}>
-              <OngoingEffectButton
-                value={wealthValue}
-                effectCount={ongoingEffectCount}
-                isOpponent={isOpponent}
-                onClick={() => onOpenOngoingEffects?.(player, isOpponent)}
-              />
-            </div>
           </>
         ) : (
           // Player Right: Exile, Grave, Deck
@@ -1216,9 +1249,10 @@ const PlayerHalf: React.FC<{
               querySelectionOrder={getTargetSelectionOrder(player.grave?.[player.grave.length - 1])}
               animationAnchor={animationZoneAnchor(player.uid, 'grave')}
             />
+            <div className="min-h-0 flex-1" />
             <CardSlot
               card={null} isDeck label="牌库" count={player.deck?.length || 0}
-              className="border-white/20 scale-[0.8] md:scale-100" cardBackUrl={cardBackUrl}
+              className={MIRRORED_DECK_EDGE_CLASS.player} cardBackUrl={cardBackUrl}
               onClick={() => clickSandboxZone('deck')}
               animationAnchor={animationZoneAnchor(player.uid, 'deck')}
             />
@@ -1710,14 +1744,6 @@ export const PlayField: React.FC<PlayFieldProps> = ({
       </div>
 
       <style>{`
-        @keyframes stack-order-pulse {
-          0%, 100% {
-            box-shadow: 0 0 14px rgba(34, 211, 238, 0.62), 0 8px 18px rgba(0, 0, 0, 0.55);
-          }
-          50% {
-            box-shadow: 0 0 24px rgba(34, 211, 238, 0.9), 0 0 12px rgba(245, 158, 11, 0.45), 0 8px 18px rgba(0, 0, 0, 0.55);
-          }
-        }
         .custom-scrollbar::-webkit-scrollbar {
           width: 2px;
         }

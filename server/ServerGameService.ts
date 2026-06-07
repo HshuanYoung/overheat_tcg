@@ -159,6 +159,85 @@ export const ServerGameService = {
     });
   },
 
+  async recoverBotPendingQueryFailure(
+    gameState: GameState,
+    playerUid: string,
+    query: any,
+    reason: string,
+    onUpdate?: (state: GameState) => Promise<void>
+  ) {
+    const activeQuery = gameState.pendingQuery;
+    const recoveryQuery = activeQuery?.id === query?.id ? activeQuery : query;
+    if (!recoveryQuery || recoveryQuery.playerUid !== playerUid) return false;
+
+    const callback = recoveryQuery.callbackKey || recoveryQuery.type || 'UNKNOWN_QUERY';
+    const options = recoveryQuery.options || [];
+    const canDecline = options.some((option: any) =>
+      option?.id === 'NO' ||
+      option?.selectionId === 'NO' ||
+      option?.value === 'NO'
+    );
+
+    if (canDecline) {
+      try {
+        gameState.pendingQuery = recoveryQuery;
+        gameState.logs.push(`[Bot recovery] ${callback} failed (${reason}); retrying as NO.`);
+        await ServerGameService.handleQueryChoice(gameState, playerUid, recoveryQuery.id, ['NO'], onUpdate);
+        await ServerGameService.finalizeBattleAfterPendingQuery(gameState, onUpdate);
+        return true;
+      } catch (fallbackErr: any) {
+        reason = `${reason}; NO fallback failed: ${fallbackErr?.message || fallbackErr}`;
+      }
+    }
+
+    if (gameState.pendingQuery && gameState.pendingQuery.id !== recoveryQuery.id) return false;
+    gameState.pendingQuery = undefined;
+    if (gameState.priorityPlayerId === playerUid) gameState.priorityPlayerId = undefined;
+
+    ServerGameService.recordAiDecision(gameState, playerUid, {
+      action: 'QUERY_RECOVERY',
+      subject: recoveryQuery.title || callback,
+      reason: `Bot query failed and was skipped to keep the game state moving: ${reason}`,
+      details: {
+        callback,
+        type: recoveryQuery.type,
+        phase: gameState.phase,
+        options: options.filter((option: any) => !option.disabled).length,
+      },
+    });
+    gameState.logs.push(`[Bot recovery] skipped ${callback}: ${reason}`);
+
+    if (gameState.isResolvingStack || gameState.phase === 'COUNTERING') {
+      if (gameState.counterStack.length > 0) {
+        await ServerGameService.resolveCounterStack(gameState, onUpdate);
+      } else {
+        await ServerGameService.finishCounteringStack(gameState, onUpdate);
+      }
+    } else if (!gameState.isCountering) {
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+    }
+
+    await ServerGameService.finalizeBattleAfterPendingQuery(gameState, onUpdate);
+
+    if (!gameState.pendingQuery && gameState.phase === 'DAMAGE_CALCULATION' && gameState.battleState) {
+      const attackerPlayerId = gameState.playerIds[gameState.currentTurnPlayer];
+      ServerGameService.clearBattleAndReturnMain(gameState, 'BOT_QUERY_RECOVERY', {
+        log: `[Bot recovery] battle was returned to MAIN after unresolved ${callback}.`
+      });
+      await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+      if (!gameState.pendingQuery) {
+        await ServerGameService.enterForcedAttackBattleIfNeeded(
+          gameState,
+          attackerPlayerId,
+          onUpdate,
+          'FORCED_ATTACK_CONTINUE'
+        );
+      }
+    }
+
+    return true;
+  },
+
   rememberBattleEndAfterPendingQuery(gameState: GameState, attackerPlayerId?: string) {
     if (!gameState.pendingQuery || !gameState.battleState || gameState.phase !== 'DAMAGE_CALCULATION') return;
     (gameState as any).pendingBattleEndAfterQuery = {
@@ -4079,6 +4158,7 @@ export const ServerGameService = {
             declaredTargets,
             declaredModeId: query.context?.modeId
           }, onUpdate);
+          await ServerGameService.finalizeBattleAfterPendingQuery(gameState, onUpdate);
           return gameState;
         }
 
@@ -4152,6 +4232,7 @@ export const ServerGameService = {
             declaredTargets,
             declaredModeId: modeId
           }, onUpdate);
+          await ServerGameService.finalizeBattleAfterPendingQuery(gameState, onUpdate);
           return gameState;
         }
       }
@@ -5578,7 +5659,10 @@ export const ServerGameService = {
             isAlliance: !!gameState.battleState.isAlliance
           }
         });
-        if (gameState.pendingQuery) return gameState;
+        if (gameState.pendingQuery) {
+          ServerGameService.rememberBattleEndAfterPendingQuery(gameState, attackerId);
+          return gameState;
+        }
       }
     } else {
       // Unit combat
@@ -9628,21 +9712,27 @@ export const ServerGameService = {
             options: (query.options || []).filter((option: any) => !option.disabled).length,
           },
         });
-        gameState.pendingQuery = undefined;
-        if (gameState.isResolvingStack || gameState.phase === 'COUNTERING') {
-          if (gameState.counterStack.length > 0) {
-            await ServerGameService.resolveCounterStack(gameState, onUpdate);
-          } else {
-            await ServerGameService.finishCounteringStack(gameState, onUpdate);
-          }
-        } else if (!gameState.isCountering) {
-          await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
-        }
-        gameState.logs.push(`[Bot错误] 自动处理效果失败：没有可选择的合法对象。`);
+        await ServerGameService.recoverBotPendingQueryFailure(
+          gameState,
+          playerUid,
+          query,
+          'no legal selections',
+          onUpdate
+        );
         return;
       }
 
-      await ServerGameService.handleQueryChoice(gameState, playerUid, query.id, selections, onUpdate);
+      try {
+        await ServerGameService.handleQueryChoice(gameState, playerUid, query.id, selections, onUpdate);
+      } catch (err: any) {
+        await ServerGameService.recoverBotPendingQueryFailure(
+          gameState,
+          playerUid,
+          query,
+          err?.message || String(err),
+          onUpdate
+        );
+      }
       return;
     }
 

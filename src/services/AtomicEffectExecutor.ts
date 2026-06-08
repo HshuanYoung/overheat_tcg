@@ -1182,6 +1182,7 @@ export class AtomicEffectExecutor {
       highAlchemyMaterialColors?: string[];
       highAlchemyMaterialCount?: number;
       onlySelfActivateSourceCardId?: string;
+      effectResolutionBatchKey?: string;
     }
   ) {
     const sourcePlayer = gameState.players[playerUid];
@@ -1448,7 +1449,10 @@ export class AtomicEffectExecutor {
         effectSourceCardId: options?.effectSourceCardId,
         previousSourceCardId,
         onlyLeftFieldEvent: true,
-        extraData: exileWhenLeavesFieldReplacementData
+        extraData: {
+          ...(exileWhenLeavesFieldReplacementData || {}),
+          ...(options?.effectResolutionBatchKey ? { effectResolutionBatchKey: options.effectResolutionBatchKey } : {})
+        }
       });
       clearBattlefieldState(card);
     }
@@ -1603,7 +1607,7 @@ export class AtomicEffectExecutor {
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
         effectSourceCardId: options?.effectSourceCardId,
         previousSourceCardId,
-        effectResolutionBatchKey: getCurrentEffectResolutionBatchKey(gameState)
+        effectResolutionBatchKey: options?.effectResolutionBatchKey || getCurrentEffectResolutionBatchKey(gameState)
       });
       EventEngine.dispatchMovementSubEvents(gameState, {
         card,
@@ -1615,7 +1619,10 @@ export class AtomicEffectExecutor {
         effectSourceCardId: options?.effectSourceCardId,
         previousSourceCardId,
         skipLeftFieldEvent: clearsBattlefieldState,
-        extraData: exileWhenLeavesFieldReplacementData
+        extraData: {
+          ...(exileWhenLeavesFieldReplacementData || {}),
+          ...(options?.effectResolutionBatchKey ? { effectResolutionBatchKey: options.effectResolutionBatchKey } : {})
+        }
       });
     } else {
       this.dispatchMovementEvents(gameState, playerUid, card, fromZone, toZone, isEffect, options);
@@ -1680,7 +1687,7 @@ export class AtomicEffectExecutor {
     from: TriggerLocation,
     to: TriggerLocation,
     isEffect?: boolean,
-    options?: { effectSourcePlayerUid?: string; effectSourceCardId?: string }
+    options?: { effectSourcePlayerUid?: string; effectSourceCardId?: string; effectResolutionBatchKey?: string }
   ) {
     // Use centralized EventEngine handlers for movement events to avoid double dispatches
     if (from !== to) {
@@ -1693,7 +1700,7 @@ export class AtomicEffectExecutor {
         targetZone: to,
         effectSourcePlayerUid: options?.effectSourcePlayerUid,
         effectSourceCardId: options?.effectSourceCardId,
-        effectResolutionBatchKey: getCurrentEffectResolutionBatchKey(gameState)
+        effectResolutionBatchKey: options?.effectResolutionBatchKey || getCurrentEffectResolutionBatchKey(gameState)
       });
     }
 
@@ -1704,7 +1711,8 @@ export class AtomicEffectExecutor {
       toZone: to,
       isEffect,
       effectSourcePlayerUid: options?.effectSourcePlayerUid,
-      effectSourceCardId: options?.effectSourceCardId
+      effectSourceCardId: options?.effectSourceCardId,
+      extraData: options?.effectResolutionBatchKey ? { effectResolutionBatchKey: options.effectResolutionBatchKey } : undefined
     });
   }
 

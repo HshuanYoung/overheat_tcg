@@ -19,16 +19,16 @@ const IRODORI_CARD_IDS = new Set([
   '105110284'
 ]);
 
-const hasIrodoriByText = (card: Card) =>
-  IRODORI_CARD_IDS.has(String(card.id)) ||
-  card.effects?.some(effect =>
-    effect.id?.toLowerCase().includes('irodori') ||
-    effect.description?.includes('异彩')
-  );
-
 const hasIrodori = (card: Card) =>
   IRODORI_CARD_IDS.has(String(card.id)) ||
-  card.effects?.some(effect => effect.id?.toLowerCase().includes('irodori'));
+  (
+    card.type === 'UNIT' &&
+    card.effects?.some(effect =>
+      effect.type === 'ACTIVATE' &&
+      effect.triggerLocation?.includes('HAND') &&
+      effect.id?.toLowerCase().includes('irodori')
+    )
+  );
 
 const addTemporaryColor = (card: Card, color: string) => {
   (card as any).temporaryExtraColors = Array.from(new Set([

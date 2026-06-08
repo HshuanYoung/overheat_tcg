@@ -25,6 +25,22 @@ export type ChoiceOptionInput = {
 export const getOpponentUid = (gameState: GameState, playerUid: string) =>
   Object.keys(gameState.players).find(uid => uid !== playerUid)!;
 
+export const isSelfLeftFieldByBattleOrOwnEffect = (event: GameEvent | undefined, instance: Card, ownerUid: string) => {
+  const isSelfLeave =
+    event?.sourceCard === instance ||
+    event?.sourceCardId === instance.gamecardId ||
+    event?.data?.previousSourceCardId === instance.gamecardId ||
+    (
+      !!event?.sourceCard?.runtimeFingerprint &&
+      event.sourceCard.runtimeFingerprint === instance.runtimeFingerprint
+    );
+  if (!isSelfLeave) return false;
+  if (event?.type !== 'CARD_LEFT_FIELD' || event.data?.sourceZone !== 'UNIT') return false;
+  const leftByOwnEffect = !!event.data?.isEffect && event.data?.effectSourcePlayerUid === ownerUid;
+  const leftByBattle = !event.data?.isEffect && event.data?.targetZone === 'GRAVE';
+  return leftByOwnEffect || leftByBattle;
+};
+
 export const getCurrentEffectResolutionBatchKey = (gameState: GameState) => {
   const currentItem = gameState.currentProcessingItem as any;
   if (!currentItem) return undefined;

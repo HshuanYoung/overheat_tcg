@@ -1,5 +1,6 @@
 import { Card, CardEffect, GameEvent, GameState, PlayerState } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
+import { getCurrentEffectResolutionBatchKey } from './BaseUtil';
 
 const getErosionCount = (player: PlayerState) => {
   const front = player.erosionFront.filter(c => c !== null).length;
@@ -130,16 +131,26 @@ const activate_104030459_swap: CardEffect = {
     if (context?.step === 'PAYMENT') {
       const sourcePlayer = gameState.players[playerState.uid];
       const sourceUnitIndex = sourcePlayer.unitZone.findIndex(c => c?.gamecardId === instance.gamecardId);
+      const effectResolutionBatchKey = getCurrentEffectResolutionBatchKey(gameState);
       if (sourceUnitIndex < 0) {
         gameState.logs.push(`[${instance.fullName}] 结算时已不在单位区，效果失败。`);
         return;
       }
 
-      await AtomicEffectExecutor.execute(gameState, playerState.uid, {
-        type: 'MOVE_FROM_FIELD',
-        destinationZone: 'EROSION_FRONT',
-        targetFilter: { gamecardId: instance.gamecardId }
-      }, instance);
+      AtomicEffectExecutor.moveCard(
+        gameState,
+        playerState.uid,
+        'UNIT',
+        playerState.uid,
+        'EROSION_FRONT',
+        instance.gamecardId,
+        true,
+        {
+          effectSourcePlayerUid: playerState.uid,
+          effectSourceCardId: instance.gamecardId,
+          effectResolutionBatchKey
+        }
+      );
 
       const movedSelf = sourcePlayer.erosionFront.find(c => c?.gamecardId === instance.gamecardId);
       if (movedSelf) {
@@ -171,7 +182,8 @@ const activate_104030459_swap: CardEffect = {
           sourceCardId: instance.gamecardId,
           effectIndex: 1,
           step: 'SELECT_SWAP_TARGET',
-          sourceUnitIndex
+          sourceUnitIndex,
+          effectResolutionBatchKey
         }
       };
       return;
@@ -201,7 +213,8 @@ const activate_104030459_swap: CardEffect = {
         {
           effectSourcePlayerUid: playerState.uid,
           effectSourceCardId: instance.gamecardId,
-          targetIndex: context?.sourceUnitIndex
+          targetIndex: context?.sourceUnitIndex,
+          effectResolutionBatchKey: context?.effectResolutionBatchKey || getCurrentEffectResolutionBatchKey(gameState)
         }
       );
 

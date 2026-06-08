@@ -1,6 +1,6 @@
 import { Card, CardEffect } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
-import { addTempDamage, addTempPower, createSelectCardQuery, destroyByEffect, ownUnits, ownerUidOf } from './BaseUtil';
+import { addTempDamage, addTempPower, createSelectCardQuery, destroyByEffect, isSelfLeftFieldByBattleOrOwnEffect, ownUnits, ownerUidOf } from './BaseUtil';
 
 const isSeisoUnit = (card: Card) =>
   card.type === 'UNIT' && (card.fullName.includes('清霜') || !!card.specialName?.includes('清霜'));
@@ -74,19 +74,7 @@ const effect_103000299_leave_army_boost: CardEffect = {
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
   description: '同名1回合1次：这张卡由于战斗或自己的卡牌效果离开战场时，己方ACCESS 3单位本回合伤害+1、力量+1000。',
   condition: (_gameState, playerState, instance, event) => {
-    const isSelfLeave =
-      event?.sourceCard === instance ||
-      event?.sourceCardId === instance.gamecardId ||
-      event?.data?.previousSourceCardId === instance.gamecardId ||
-      (
-        !!event?.sourceCard?.runtimeFingerprint &&
-        event.sourceCard.runtimeFingerprint === instance.runtimeFingerprint
-      );
-    if (!isSelfLeave) return false;
-    if (event.data?.sourceZone !== 'UNIT') return false;
-    const leftByOwnEffect = !!event.data?.isEffect && event.data?.effectSourcePlayerUid === playerState.uid;
-    const leftByBattle = !event.data?.isEffect && event.data?.targetZone === 'GRAVE';
-    return (leftByOwnEffect || leftByBattle) && ownUnits(playerState).some(isAccessThree);
+    return isSelfLeftFieldByBattleOrOwnEffect(event, instance, playerState.uid) && ownUnits(playerState).some(isAccessThree);
   },
   execute: async (instance, _gameState, playerState) => {
     ownUnits(playerState)

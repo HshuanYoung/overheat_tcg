@@ -31,6 +31,10 @@ import bt07B08 from '../src/scripts/204000092';
 import bt07B09 from '../src/scripts/304020050';
 import bt07B10 from '../src/scripts/304010051';
 import bt07B11 from '../src/scripts/104020310';
+import bt04Wen from '../src/scripts/104030450';
+import bt04Xiaoting from '../src/scripts/104030451';
+import bt04Batra from '../src/scripts/104030453';
+import bt04Kathy from '../src/scripts/104030459';
 import bt07G01 from '../src/scripts/103090311';
 import bt07G02 from '../src/scripts/103080312';
 import bt07G03 from '../src/scripts/103080313';
@@ -68,6 +72,7 @@ import bt07Y09 from '../src/scripts/305000062';
 import bt07Y10 from '../src/scripts/305000063';
 import bt07Y11 from '../src/scripts/105110386';
 import bt08G05 from '../src/scripts/103000419';
+import sp03B01 from '../src/scripts/104000297';
 import bt03R03 from '../src/scripts/102060192';
 import bt03R04 from '../src/scripts/102060193';
 import bt03R07 from '../src/scripts/102060196';
@@ -237,6 +242,12 @@ async function processTurnEndDelayedEffects(state: any, playerUid = 'BOT') {
   ServerGameService.enqueueMandatoryEndTurnDelayedEffects(state, playerUid);
   await ServerGameService.checkTriggeredEffects(state);
   await ServerGameService.checkTriggeredEffects(state);
+}
+
+async function passIfCountering(state: any) {
+  if (state.phase === 'COUNTERING') {
+    await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+  }
 }
 
 function optionIdByValue(state: any, value: string): string {
@@ -1045,6 +1056,127 @@ async function testPrFantasyStories(): Promise<ScenarioResult> {
   return snowResolved && otherworldResolved && deepSeaResolved && thoughtsResolved && thoughtsDraw
     ? pass(name, `snow=${snowResolved}, otherworld=${otherworldResolved}, deep=${deepSeaResolved}, thoughts=${thoughtsResolved}/${thoughtsDraw}`)
     : fail(name, `snow=${snowResolved}, otherworld=${otherworldResolved}, deep=${deepSeaResolved}, thoughts=${thoughtsResolved}/${thoughtsDraw}`);
+}
+
+function markDeepSeaLock(state: any, deepSea: Card) {
+  const opponent = state.players.P1 as any;
+  opponent.ownEffectPlacedUnitsEnterExhaustedSilencedTurn = state.turnCount;
+  opponent.ownEffectPlacedUnitsEnterExhaustedSilencedSourceName = deepSea.fullName;
+  opponent.ownEffectPlacedUnitsEnterExhaustedSilencedSourceCardId = deepSea.gamecardId;
+  opponent.ownEffectPlacedUnitsEnterExhaustedSilencedControllerUid = 'BOT';
+}
+
+function pendingDeepSeaDrawCount(state: any) {
+  let count = 0;
+  if (state.pendingQuery?.context?.effectId === '204000115_lock_draw') count += 1;
+  count += (state.triggeredEffectsQueue || []).filter((item: any) => item.effect?.id === '204000115_lock_draw').length;
+  return count;
+}
+
+async function triggerDeepSeaDrawCheck(state: any) {
+  await ServerGameService.checkTriggeredEffects(state);
+  return pendingDeepSeaDrawCount(state);
+}
+
+async function testDeepSeaFantasyDedupeAdventurerSwitches(): Promise<ScenarioResult> {
+  const name = 'PR Deep Sea Fantasy dedupes Adventurer switch entries';
+  const switchers = [
+    { label: 'wen', source: bt04Wen as Card, effectIndex: 1 },
+    { label: 'batra', source: bt04Batra as Card, effectIndex: 1 },
+    { label: 'kathy', source: bt04Kathy as Card, effectIndex: 1 },
+  ];
+  const details: string[] = [];
+
+  for (const switcher of switchers) {
+    const deepSea = cloneScriptCard(prDeepSeaFantasy as Card, 'PLAY', { gamecardId: `DEEP_${switcher.label}` });
+    const source = cloneScriptCard(switcher.source, 'UNIT', { gamecardId: `SWITCH_SOURCE_${switcher.label}` });
+    const target = cloneScriptCard(bt04Xiaoting as Card, 'EROSION_FRONT', { gamecardId: `SWITCH_TARGET_${switcher.label}` });
+    const payer = testCard({ id: `SWITCH_PAYER_${switcher.label}`, fullName: `Switch Payer ${switcher.label}`, color: 'BLUE', cardlocation: 'UNIT' });
+    const filler = deckCards(3, `SWITCH_EROSION_${switcher.label}`, 'BLUE').map(card => ({ ...card, cardlocation: 'EROSION_FRONT' as any }));
+    const state = game({
+      playZone: [deepSea],
+    }, {
+      unitZone: [source, payer, null, null, null, null],
+      erosionFront: [target, ...filler],
+      erosionBack: deckCards(3, `SWITCH_BACK_${switcher.label}`, 'BLUE').map(card => ({ ...card, cardlocation: 'EROSION_BACK' as any })),
+      isTurn: true,
+    }, { currentTurnPlayer: 1 });
+    markDeepSeaLock(state, deepSea);
+    await ServerGameService.activateEffect(state, 'P1', source.gamecardId, switcher.effectIndex);
+    if (state.pendingQuery?.type === 'SELECT_PAYMENT') {
+      await answerPendingQuery(state, 'P1', [JSON.stringify({ exhaustUnitIds: [payer.gamecardId] })]);
+    }
+    await passIfCountering(state);
+    if (state.pendingQuery?.type === 'SELECT_PAYMENT') {
+      await answerPendingQuery(state, 'P1', [JSON.stringify({ exhaustUnitIds: [payer.gamecardId] })]);
+    }
+    if (state.pendingQuery?.context?.step === 2 || state.pendingQuery?.context?.step === 'SELECT_SWAP_TARGET') {
+      await answerPendingQuery(state, 'P1', [target.gamecardId]);
+    }
+    const drawCount = await triggerDeepSeaDrawCheck(state);
+    details.push(`${switcher.label}:${drawCount}`);
+    if (drawCount !== 1) return fail(name, details.join(','));
+  }
+
+  const xiaotingDeepSea = cloneScriptCard(prDeepSeaFantasy as Card, 'PLAY', { gamecardId: 'DEEP_XIAOTING' });
+  const xiaoting = cloneScriptCard(bt04Xiaoting as Card, 'UNIT', { gamecardId: 'DEEP_XIAOTING_SOURCE' });
+  const fieldTarget = cloneScriptCard(bt04Batra as Card, 'UNIT', { gamecardId: 'DEEP_XIAOTING_FIELD' });
+  const erosionTarget = cloneScriptCard(bt04Wen as Card, 'EROSION_FRONT', { gamecardId: 'DEEP_XIAOTING_EROSION' });
+  const xiaotingState = game({
+    playZone: [xiaotingDeepSea],
+  }, {
+    unitZone: [xiaoting, fieldTarget, null, null, null, null],
+    erosionFront: [erosionTarget],
+    isTurn: true,
+  }, { currentTurnPlayer: 1 });
+  markDeepSeaLock(xiaotingState, xiaotingDeepSea);
+  await ServerGameService.activateEffect(xiaotingState, 'P1', xiaoting.gamecardId, 0);
+  await answerPendingQuery(xiaotingState, 'P1', [fieldTarget.gamecardId]);
+  await answerPendingQuery(xiaotingState, 'P1', [erosionTarget.gamecardId]);
+  await passIfCountering(xiaotingState);
+  const xiaotingDrawCount = await triggerDeepSeaDrawCheck(xiaotingState);
+  details.push(`xiaoting:${xiaotingDrawCount}`);
+
+  return xiaotingDrawCount === 1
+    ? pass(name, details.join(','))
+    : fail(name, details.join(','));
+}
+
+async function testOtherworldFantasyDiscardEnablesKuyaGraveDraw(): Promise<ScenarioResult> {
+  const name = 'PR Otherworld Fantasy discard enables Kuya grave draw';
+  const otherworld = cloneScriptCard(prOtherworldFantasy as Card, 'PLAY');
+  const girls = cloneScriptCard(sp03B01 as Card, 'HAND');
+  const targetName = testCard({ id: 'OTHERWORLD_KUYA_TARGET', fullName: 'Otherworld Target', cardlocation: 'GRAVE' });
+  const drawCard = testCard({ id: 'OTHERWORLD_KUYA_DRAW', fullName: 'Otherworld Kuya Draw', cardlocation: 'DECK' });
+  const state = game({
+    hand: [girls],
+    deck: [drawCard],
+    playZone: [otherworld],
+  }, {
+    grave: [targetName],
+  });
+
+  const otherworldEffect = otherworld.effects![0];
+  await (otherworldEffect as any).onCostResolve(otherworld, state, state.players.BOT, [girls.gamecardId], {
+    step: 'DISCARD',
+    mode: 'MILL_DECK_SAME_NAME'
+  });
+
+  const girlsInGrave = state.players.BOT.grave.find((card: Card) => card.gamecardId === girls.gamecardId);
+  const markedAsCost = !!girlsInGrave && (girlsInGrave as any).data?.lastMovedAsCostTurn === state.turnCount;
+  if (!girlsInGrave || !markedAsCost) {
+    return fail(name, `girlsInGrave=${!!girlsInGrave}, marked=${markedAsCost}`);
+  }
+
+  await ServerGameService.activateEffect(state, 'BOT', girlsInGrave.gamecardId, 0);
+  if (state.pendingQuery?.callbackKey === 'DECLARE_EFFECT_TARGET_MODE') {
+    await answerPendingQuery(state, 'BOT', ['GRAVE_DRAW']);
+  }
+  await passIfCountering(state);
+  const drew = state.players.BOT.hand.some((card: Card) => card.gamecardId === drawCard.gamecardId);
+  return drew
+    ? pass(name, `marked=${markedAsCost}, drew=${drew}`)
+    : fail(name, `marked=${markedAsCost}, drew=${drew}, pending=${state.pendingQuery?.callbackKey || 'none'}`);
 }
 
 async function testBlueMerchantPutsOnlyKyubiNonGodItems(): Promise<ScenarioResult> {
@@ -2722,6 +2854,8 @@ const scenarios: ScenarioRun[] = [
   testYukatiaAllianceProtectionAndDestroy,
   testEmptyFantasyRecoverAndPreventEffectDamage,
   testPrFantasyStories,
+  testDeepSeaFantasyDedupeAdventurerSwitches,
+  testOtherworldFantasyDiscardEnablesKuyaGraveDraw,
   testBlueMerchantPutsOnlyKyubiNonGodItems,
   testBlueAishaRecoversAfterOpponentExileAndHouseRevives,
   testBlueAdventurerSupportAndErosionEntry,

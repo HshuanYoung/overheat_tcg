@@ -392,6 +392,62 @@ async function testPeonySnowModes(): Promise<ScenarioResult> {
     : fail(name, `pairDestroyed=${pairDestroyed}, stackFinished=${pairStackFinished}, recruited=${recruited}`);
 }
 
+async function testPeonyDestroyPairTriggersSeisoLeaveEffects(): Promise<ScenarioResult> {
+  const name = 'SP03-W03 destroy pair triggers unified Seiso leave effects';
+  const cases = [
+    { card: sp03W01 as Card, expectedEffectId: '101000291_leave_destroy' },
+    { card: sp03G01 as Card, expectedEffectId: '103000299_leave_army_boost' },
+    { card: sp03G02 as Card, expectedEffectId: '103000300_leave_revive_seiso' },
+    { card: sp03Y01 as Card, expectedEffectId: '105000294_leave_put_seiso_from_deck' },
+  ];
+  const results: string[] = [];
+
+  for (const entry of cases) {
+    const peony = cloneScriptCard(sp03W03 as Card, 'UNIT', { gamecardId: `PEONY_${entry.card.id}` });
+    const ownTarget = cloneScriptCard(entry.card, 'UNIT', { gamecardId: `PEONY_TARGET_${entry.card.id}` });
+    const payer = testCard({ id: `PEONY_PAYER_${entry.card.id}`, fullName: `Peony Payer ${entry.card.id}`, cardlocation: 'UNIT' });
+    const lowEnemy = testCard({ id: `PEONY_ENEMY_${entry.card.id}`, fullName: `Peony Enemy ${entry.card.id}`, acValue: 3, type: 'ITEM', godMark: false, cardlocation: 'ITEM' });
+    const lowDestroyTarget = testCard({ id: `PEONY_LOW_${entry.card.id}`, fullName: `Peony Low ${entry.card.id}`, acValue: 3, godMark: false, cardlocation: 'UNIT' });
+    const graveSeiso = cloneScriptCard(sp03W01 as Card, 'GRAVE', { gamecardId: `PEONY_GRAVE_SEISO_${entry.card.id}` });
+    const deckSeiso = cloneScriptCard(sp03W01 as Card, 'DECK', { gamecardId: `PEONY_DECK_SEISO_${entry.card.id}` });
+    const state = game({
+      deck: [deckSeiso],
+      grave: [graveSeiso],
+      unitZone: [peony, ownTarget, payer, lowDestroyTarget, null, null],
+    }, {
+      itemZone: [lowEnemy],
+    });
+
+    await ServerGameService.activateEffect(state, 'BOT', peony.gamecardId, 1);
+    await answerPendingQuery(state, 'BOT', ['DESTROY_PAIR']);
+    await answerPendingQuery(state, 'BOT', [ownTarget.gamecardId]);
+    await answerPendingQuery(state, 'BOT', [lowEnemy.gamecardId]);
+    if (state.phase !== 'COUNTERING') {
+      return fail(name, `${entry.card.id}: expected COUNTERING got ${state.phase}`);
+    }
+    await ServerGameService.passConfrontation(state, state.priorityPlayerId);
+    if (state.pendingQuery?.context?.step !== 'PAY_DESTROY_PAIR') {
+      return fail(name, `${entry.card.id}: expected payment query got ${state.pendingQuery?.context?.step || 'none'}`);
+    }
+    await answerPendingQuery(state, 'BOT', [JSON.stringify({ exhaustUnitIds: [payer.gamecardId] })]);
+    if (state.pendingQuery?.callbackKey === 'TRIGGER_ORDER_CHOICE') {
+      const option = (state.pendingQuery.options || []).find((option: any) => option.effectId === entry.expectedEffectId);
+      await answerPendingQuery(state, 'BOT', [option?.id || state.pendingQuery.options?.[0]?.id]);
+    }
+    const triggeredEffectId = state.pendingQuery?.context?.effectId;
+    const triggered = triggeredEffectId === entry.expectedEffectId;
+    results.push(`${entry.card.id}:${triggeredEffectId || 'none'}`);
+    if (!triggered) {
+      return fail(name, `expected ${entry.expectedEffectId}, got ${triggeredEffectId || 'none'} (${results.join(',')})`);
+    }
+    if (state.pendingQuery?.callbackKey === 'TRIGGER_CHOICE') {
+      await answerPendingQuery(state, 'BOT', ['NO']);
+    }
+  }
+
+  return pass(name, results.join(','));
+}
+
 async function testSnowHouseDrawAndDamage(): Promise<ScenarioResult> {
   const name = 'SP03-W04 draws on own AC3 destroy and gives irodori attacker damage';
   const house = cloneScriptCard(sp03W04 as Card, 'ITEM');
@@ -1291,6 +1347,7 @@ const scenarios: { name: string; run: ScenarioRun }[] = [
   { name: 'SP03-W01 destroys AC3 non-god when leaving by own effect', run: testPowderSnowLeaveDestroysLowUnit },
   { name: 'SP03-W02 enters by irodori 2 and readies two Seiso units', run: testGraySnowIrodoriReadiesTwoSeiso },
   { name: 'SP03-W03 destroys paired targets and can set up Seiso recruit', run: testPeonySnowModes },
+  { name: 'SP03-W03 destroy pair triggers unified Seiso leave effects', run: testPeonyDestroyPairTriggersSeisoLeaveEffects },
   { name: 'SP03-W04 draws on own AC3 destroy and gives irodori attacker damage', run: testSnowHouseDrawAndDamage },
   { name: 'SP03-G01 leaving by own effect boosts AC3 army damage and power', run: testMochiyukiLeaveBoostsAccessThreeArmy },
   { name: 'SP03-G02 leaving revives AC3 Seiso unit from grave', run: testTamayukiRevivesSeisoFromGrave },

@@ -16,7 +16,7 @@ const costCards = (playerState: any, instance: Card) => [
   ...playerState.itemZone,
   ...playerState.hand
 ].filter((card: Card | null): card is Card =>
-  !!card && card.gamecardId !== instance.gamecardId
+  !!card
 );
 
 const deckTargets = (playerState: any) =>

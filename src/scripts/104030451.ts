@@ -1,7 +1,47 @@
-import { Card, GameState, PlayerState, CardEffect, TriggerLocation } from '../types/game';
+import { Card, PlayerState, TriggerLocation } from '../types/game';
 import { AtomicEffectExecutor } from '../services/AtomicEffectExecutor';
 import { EventEngine } from '../services/EventEngine';
-import { exhaustCost } from './BaseUtil';
+import { exhaustCost, getCurrentEffectResolutionBatchKey } from './BaseUtil';
+
+const ADVENTURER_GUILD_FACTION = '冒险家公会';
+
+const isNonGodAdventurerUnit = (card: Card | null | undefined): card is Card =>
+  !!card &&
+  card.type === 'UNIT' &&
+  !card.godMark &&
+  card.faction === ADVENTURER_GUILD_FACTION;
+
+const collectFieldSpecialNames = (playerState: PlayerState) =>
+  new Set(playerState.unitZone.filter(u => u && u.specialName).map(u => u!.specialName));
+
+const collectItemSpecialNames = (playerState: PlayerState) =>
+  new Set(playerState.itemZone.filter(i => i && i.specialName).map(i => i!.specialName));
+
+const canSelectXiaotingFieldUnit = (unit: Card | null | undefined, instance: Card): unit is Card =>
+  isNonGodAdventurerUnit(unit) &&
+  unit.cardlocation === 'UNIT' &&
+  unit.gamecardId !== instance.gamecardId;
+
+const canSelectXiaotingErosionUnit = (
+  card: Card | null | undefined,
+  fieldNames: Set<string>,
+  itemNames: Set<string>
+): card is Card =>
+  isNonGodAdventurerUnit(card) &&
+  card.cardlocation === 'EROSION_FRONT' &&
+  card.displayState === 'FRONT_UPRIGHT' &&
+  (!card.specialName || (!fieldNames.has(card.specialName) && !itemNames.has(card.specialName)));
+
+const collectXiaotingFieldUnits = (playerState: PlayerState, instance: Card) =>
+  playerState.unitZone.filter((unit): unit is Card => canSelectXiaotingFieldUnit(unit, instance));
+
+const collectXiaotingErosionUnits = (playerState: PlayerState) => {
+  const fieldNames = collectFieldSpecialNames(playerState);
+  const itemNames = collectItemSpecialNames(playerState);
+  return playerState.erosionFront.filter((card): card is Card =>
+    canSelectXiaotingErosionUnit(card, fieldNames, itemNames)
+  );
+};
 
 const card: Card = {
   id: '104030451',
@@ -35,24 +75,8 @@ const card: Card = {
       condition: (gameState, playerState, instance) => {
         if (instance.isExhausted) return false;
 
-        const hasOtherFieldUnit = playerState.unitZone.some(u =>
-          u !== null &&
-          u.gamecardId !== instance.gamecardId &&
-          !u.godMark &&
-          u.faction === '冒险家公会'
-        );
-
-        const fieldSpecialNames = new Set(playerState.unitZone.filter(u => u && u.specialName).map(u => u!.specialName));
-        const itemSpecialNames = new Set(playerState.itemZone.filter(i => i && i.specialName).map(i => i!.specialName));
-
-        const hasErosionUnit = playerState.erosionFront.some(c =>
-          c !== null &&
-          c.displayState === 'FRONT_UPRIGHT' &&
-          c.type === 'UNIT' &&
-          !c.godMark &&
-          c.faction === '冒险家公会' &&
-          (!c.specialName || (!fieldSpecialNames.has(c.specialName) && !itemSpecialNames.has(c.specialName)))
-        );
+        const hasOtherFieldUnit = collectXiaotingFieldUnits(playerState, instance).length > 0;
+        const hasErosionUnit = collectXiaotingErosionUnits(playerState).length > 0;
 
         return hasOtherFieldUnit && hasErosionUnit;
       },
@@ -66,13 +90,7 @@ const card: Card = {
           controller: 'SELF',
           step: 'FIELD_UNIT',
           getCandidates: (_gameState, playerState, instance) =>
-            playerState.unitZone
-              .filter((unit): unit is Card =>
-                !!unit &&
-                unit.gamecardId !== instance.gamecardId &&
-                !unit.godMark &&
-                unit.faction === '冒险家公会'
-              )
+            collectXiaotingFieldUnits(playerState, instance)
               .map(card => ({ card, source: 'UNIT' as TriggerLocation }))
         }, {
           title: '选择侵蚀区单位',
@@ -82,42 +100,15 @@ const card: Card = {
           zones: ['EROSION_FRONT'],
           controller: 'SELF',
           step: 'EROSION_UNIT',
-          getCandidates: (_gameState, playerState) => {
-            const fieldSpecialNames = new Set(playerState.unitZone.filter(u => u && u.specialName).map(u => u!.specialName));
-            const itemSpecialNames = new Set(playerState.itemZone.filter(i => i && i.specialName).map(i => i!.specialName));
-            return playerState.erosionFront
-              .filter((card): card is Card =>
-                !!card &&
-                card.displayState === 'FRONT_UPRIGHT' &&
-                card.type === 'UNIT' &&
-                !card.godMark &&
-                card.faction === '冒险家公会' &&
-                (!card.specialName || (!fieldSpecialNames.has(card.specialName) && !itemSpecialNames.has(card.specialName)))
-              )
-              .map(card => ({ card, source: 'EROSION_FRONT' as TriggerLocation }));
-          }
+          getCandidates: (_gameState, playerState) =>
+            collectXiaotingErosionUnits(playerState)
+              .map(card => ({ card, source: 'EROSION_FRONT' as TriggerLocation }))
         }]
       },
       cost: exhaustCost,
       execute: async (card, gameState, playerState) => {
-        const fieldUnits = playerState.unitZone.filter(u =>
-          u !== null &&
-          u.gamecardId !== card.gamecardId &&
-          !u.godMark &&
-          u.faction === '冒险家公会'
-        ) as Card[];
-
-        const fieldSpecialNames = new Set(playerState.unitZone.filter(u => u && u.specialName).map(u => u!.specialName));
-        const itemSpecialNames = new Set(playerState.itemZone.filter(i => i && i.specialName).map(i => i!.specialName));
-
-        const erosionUnits = playerState.erosionFront.filter(c =>
-          c !== null &&
-          c.displayState === 'FRONT_UPRIGHT' &&
-          c.type === 'UNIT' &&
-          !c.godMark &&
-          c.faction === '冒险家公会' &&
-          (!c.specialName || (!fieldSpecialNames.has(c.specialName) && !itemSpecialNames.has(c.specialName)))
-        ) as Card[];
+        const fieldUnits = collectXiaotingFieldUnits(playerState, card);
+        const erosionUnits = collectXiaotingErosionUnits(playerState);
 
         if (!card.isExhausted) {
           card.isExhausted = true;
@@ -156,19 +147,14 @@ const card: Card = {
 
         if (step === 1) {
           const fieldUnitId = selections[0];
+          const fieldUnit = playerState.unitZone.find(u => u?.gamecardId === fieldUnitId);
+          if (!canSelectXiaotingFieldUnit(fieldUnit, card)) {
+            gameState.logs.push(`[龙翼看板娘[小婷]] 结算时场上目标已不合法，效果发动失败。`);
+            return;
+          }
 
           // 3. Step 2: Select Erosion Unit
-          const fieldSpecialNames = new Set(playerState.unitZone.filter(u => u && u.specialName).map(u => u!.specialName));
-          const itemSpecialNames = new Set(playerState.itemZone.filter(i => i && i.specialName).map(i => i!.specialName));
-
-          const erosionUnits = playerState.erosionFront.filter(c =>
-            c !== null &&
-            c.displayState === 'FRONT_UPRIGHT' &&
-            c.type === 'UNIT' &&
-            !c.godMark &&
-            c.faction === '冒险家公会' &&
-            (!c.specialName || (!fieldSpecialNames.has(c.specialName) && !itemSpecialNames.has(c.specialName)))
-          ) as Card[];
+          const erosionUnits = collectXiaotingErosionUnits(playerState);
 
           gameState.pendingQuery = {
             id: Math.random().toString(36).substring(7),
@@ -195,13 +181,16 @@ const card: Card = {
           const erosionUnit = playerState.erosionFront.find(c => c?.gamecardId === erosionUnitId);
 
           if (fieldUnit && erosionUnit) {
+            const effectResolutionBatchKey = getCurrentEffectResolutionBatchKey(gameState);
             const fieldUnitIndex = playerState.unitZone.findIndex(u => u?.gamecardId === fieldUnitId);
             const erosionUnitIndex = playerState.erosionFront.findIndex(c => c?.gamecardId === erosionUnitId);
-            if (fieldUnitIndex < 0) {
+            if (fieldUnitIndex < 0 || !canSelectXiaotingFieldUnit(fieldUnit, card)) {
               gameState.logs.push(`[龙翼看板娘[小婷]] 结算时场上目标已不合法，效果发动失败。`);
               return;
             }
-            if (erosionUnitIndex < 0) {
+            const fieldNames = collectFieldSpecialNames(playerState);
+            const itemNames = collectItemSpecialNames(playerState);
+            if (erosionUnitIndex < 0 || !canSelectXiaotingErosionUnit(erosionUnit, fieldNames, itemNames)) {
               gameState.logs.push(`[龙翼看板娘[小婷]] 结算时侵蚀区目标已不合法，效果发动失败。`);
               return;
             }
@@ -216,6 +205,14 @@ const card: Card = {
             erosionUnit.displayState = 'FRONT_UPRIGHT';
             erosionUnit.cardlocation = 'UNIT';
             erosionUnit.playedTurn = gameState.turnCount;
+            if ((playerState as any).ownEffectPlacedUnitsEnterExhaustedSilencedTurn === gameState.turnCount) {
+              const data = (erosionUnit as any).data || {};
+              (erosionUnit as any).data = data;
+              erosionUnit.isExhausted = true;
+              data.fullEffectSilencedTurn = gameState.turnCount;
+              data.fullEffectSilenceSource = (playerState as any).ownEffectPlacedUnitsEnterExhaustedSilencedSourceName || 'Deep Sea Fantasy';
+              data.placedByOwnEffectForcedExhaustedTurn = gameState.turnCount;
+            }
 
             playerState.unitZone[fieldUnitIndex] = erosionUnit;
             playerState.erosionFront[erosionUnitIndex] = fieldUnit;
@@ -235,14 +232,16 @@ const card: Card = {
               targetZone: 'EROSION_FRONT',
               effectSourcePlayerUid: playerState.uid,
               effectSourceCardId: card.gamecardId,
-              previousSourceCardId: fieldUnit.gamecardId
+              previousSourceCardId: fieldUnit.gamecardId,
+              effectResolutionBatchKey
             });
             EventEngine.handleCardEnteredZone(gameState, playerState.uid, erosionUnit, 'UNIT', true, {
               sourceZone: 'EROSION_FRONT',
               targetZone: 'UNIT',
               effectSourcePlayerUid: playerState.uid,
               effectSourceCardId: card.gamecardId,
-              previousSourceCardId: erosionUnit.gamecardId
+              previousSourceCardId: erosionUnit.gamecardId,
+              effectResolutionBatchKey
             });
             EventEngine.dispatchMovementSubEvents(gameState, {
               card: fieldUnit,
@@ -252,7 +251,8 @@ const card: Card = {
               isEffect: true,
               effectSourcePlayerUid: playerState.uid,
               effectSourceCardId: card.gamecardId,
-              previousSourceCardId: fieldUnit.gamecardId
+              previousSourceCardId: fieldUnit.gamecardId,
+              extraData: effectResolutionBatchKey ? { effectResolutionBatchKey } : undefined
             });
             EventEngine.dispatchMovementSubEvents(gameState, {
               card: erosionUnit,
@@ -262,7 +262,8 @@ const card: Card = {
               isEffect: true,
               effectSourcePlayerUid: playerState.uid,
               effectSourceCardId: card.gamecardId,
-              previousSourceCardId: erosionUnit.gamecardId
+              previousSourceCardId: erosionUnit.gamecardId,
+              extraData: effectResolutionBatchKey ? { effectResolutionBatchKey } : undefined
             });
 
             gameState.logs.push(`[龙翼看板娘[小婷]] 效果生效：${fieldUnit.fullName} 与 ${erosionUnit.fullName} 进行了互换。`);

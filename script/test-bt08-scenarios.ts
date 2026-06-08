@@ -35,6 +35,7 @@ import bt08G09 from '../src/scripts/303090069';
 import bt08G10 from '../src/scripts/303080070';
 import bt08G11 from '../src/scripts/103090421';
 import bt07G05 from '../src/scripts/103080315';
+import bt04Xiaoting from '../src/scripts/104030451';
 import bt08B01 from '../src/scripts/104020410';
 import bt08B02 from '../src/scripts/104020411';
 import bt08B03 from '../src/scripts/104030412';
@@ -1778,6 +1779,95 @@ async function testBlueErosionEntryAndAdventurers(): Promise<ScenarioResult> {
     : fail(name, `sodo=${sodoOnField}, albertDiscard=${albertDiscarded}, field=${fieldTargetAllowed}/${graveDuplicateBlocked}/${fieldTargetCycled}, bounced=${bounced}, drew=${drew}, buffed=${buffed}`);
 }
 
+async function testXiaotingFiltersNonGodAdventurerTargets(): Promise<ScenarioResult> {
+  const name = 'BT04 Xiaoting only swaps non-god Adventurer units';
+  const xiaoting = cloneScriptCard(bt04Xiaoting as Card, 'UNIT');
+  const fieldTarget = testCard({
+    id: 'XIAOTING_FIELD_TARGET',
+    fullName: 'Xiaoting Field Target',
+    type: 'UNIT',
+    faction: '冒险家公会',
+    godMark: false,
+    cardlocation: 'UNIT',
+  });
+  const godFieldTarget = testCard({
+    id: 'XIAOTING_GOD_FIELD',
+    fullName: 'Xiaoting God Field',
+    type: 'UNIT',
+    faction: '冒险家公会',
+    godMark: true,
+    cardlocation: 'UNIT',
+  });
+  const erosionTarget = testCard({
+    id: 'XIAOTING_EROSION_TARGET',
+    fullName: 'Xiaoting Erosion Target',
+    type: 'UNIT',
+    faction: '冒险家公会',
+    godMark: false,
+    cardlocation: 'EROSION_FRONT',
+    displayState: 'FRONT_UPRIGHT',
+  });
+  const godErosionTarget = testCard({
+    id: 'XIAOTING_GOD_EROSION',
+    fullName: 'Xiaoting God Erosion',
+    type: 'UNIT',
+    faction: '冒险家公会',
+    godMark: true,
+    cardlocation: 'EROSION_FRONT',
+    displayState: 'FRONT_UPRIGHT',
+  });
+  const stateA = game({
+    unitZone: [xiaoting, fieldTarget, godFieldTarget, null, null, null],
+    erosionFront: [erosionTarget, godErosionTarget],
+  });
+
+  await ServerGameService.activateEffect(stateA, 'BOT', xiaoting.gamecardId, 0);
+  const fieldOptions = (stateA.pendingQuery?.options || []).map((option: any) => option.card.gamecardId);
+  const fieldFilterWorks = fieldOptions.includes(fieldTarget.gamecardId) &&
+    !fieldOptions.includes(godFieldTarget.gamecardId) &&
+    !fieldOptions.includes(xiaoting.gamecardId);
+  await answerPendingQuery(stateA, 'BOT', [fieldTarget.gamecardId]);
+  const erosionOptions = (stateA.pendingQuery?.options || []).map((option: any) => option.card.gamecardId);
+  const erosionFilterWorks = erosionOptions.includes(erosionTarget.gamecardId) &&
+    !erosionOptions.includes(godErosionTarget.gamecardId);
+
+  const recheckXiaoting = cloneScriptCard(bt04Xiaoting as Card, 'UNIT', { gamecardId: 'XIAOTING_RECHECK_SOURCE' });
+  const recheckField = testCard({
+    id: 'XIAOTING_RECHECK_FIELD',
+    fullName: 'Xiaoting Recheck Field',
+    type: 'UNIT',
+    faction: '冒险家公会',
+    godMark: false,
+    cardlocation: 'UNIT',
+  });
+  const recheckErosion = testCard({
+    id: 'XIAOTING_RECHECK_EROSION',
+    fullName: 'Xiaoting Recheck Erosion',
+    type: 'UNIT',
+    faction: '冒险家公会',
+    godMark: false,
+    cardlocation: 'EROSION_FRONT',
+    displayState: 'FRONT_UPRIGHT',
+  });
+  const stateB = game({
+    unitZone: [recheckXiaoting, recheckField, null, null, null, null],
+    erosionFront: [recheckErosion],
+  });
+  await ServerGameService.activateEffect(stateB, 'BOT', recheckXiaoting.gamecardId, 0);
+  await answerPendingQuery(stateB, 'BOT', [recheckField.gamecardId]);
+  await answerPendingQuery(stateB, 'BOT', [recheckErosion.gamecardId]);
+  recheckErosion.godMark = true;
+  if (stateB.phase !== 'COUNTERING') throw new Error(`Expected COUNTERING after activation, got ${stateB.phase}`);
+  await ServerGameService.passConfrontation(stateB, stateB.priorityPlayerId);
+  const swapBlocked = stateB.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === recheckField.gamecardId) &&
+    stateB.players.BOT.erosionFront.some((card: Card | null) => card?.gamecardId === recheckErosion.gamecardId) &&
+    !stateB.players.BOT.unitZone.some((unit: Card | null) => unit?.gamecardId === recheckErosion.gamecardId);
+
+  return fieldFilterWorks && erosionFilterWorks && swapBlocked
+    ? pass(name, `field=${fieldFilterWorks}, erosion=${erosionFilterWorks}, recheck=${swapBlocked}`)
+    : fail(name, `field=${fieldFilterWorks}(${fieldOptions.join(',')}), erosion=${erosionFilterWorks}(${erosionOptions.join(',')}), recheck=${swapBlocked}`);
+}
+
 async function testBlueCounterAndCarriage(): Promise<ScenarioResult> {
   const name = 'BT08-B08/B09 counters ACCESS 3 non-god and carriage mills/wins';
   const escort = cloneScriptCard(bt08B08 as Card, 'PLAY');
@@ -1945,6 +2035,27 @@ async function testYellowHighAlchemyPlacements(): Promise<ScenarioResult> {
     (unit as any).data?.enteredFromDeckByAlchemySourceCardId === cecilia.gamecardId &&
     (unit as any).data?.highAlchemyMaterialColors?.includes('RED')
   );
+
+  const selfCecilia = cloneScriptCard(bt08Y03 as Card, 'UNIT', { gamecardId: 'Y03_SELF_CECILIA' });
+  const selfHandA = testCard({ id: 'Y03_SELF_HAND_A', fullName: 'Y03 Self Hand A', color: 'RED', cardlocation: 'HAND' });
+  const selfHandB = testCard({ id: 'Y03_SELF_HAND_B', fullName: 'Y03 Self Hand B', color: 'WHITE', cardlocation: 'HAND' });
+  const selfTarget = testCard({ id: 'Y03_SELF_TARGET', fullName: 'Y03 Self Target', type: 'UNIT', color: 'GREEN', godMark: false, cardlocation: 'DECK' });
+  const selfState = game({
+    hand: [selfHandA, selfHandB],
+    deck: [selfTarget],
+    unitZone: [selfCecilia, null, null, null, null, null],
+  });
+  await activateAndResolveByOpponentPass(selfState, 'BOT', selfCecilia, 0);
+  const selfMaterialOptions = (selfState.pendingQuery?.options || []).map((option: any) => option.card.gamecardId);
+  const selfMaterialAllowed = selfMaterialOptions.includes(selfCecilia.gamecardId);
+  await answerPendingQuery(selfState, 'BOT', [selfCecilia.gamecardId, selfHandA.gamecardId, selfHandB.gamecardId]);
+  await answerPendingQuery(selfState, 'BOT', [selfTarget.gamecardId]);
+  const selfSentToGrave = selfState.players.BOT.grave.some((card: Card) => card.gamecardId === selfCecilia.gamecardId);
+  const selfTargetPlaced = selfState.players.BOT.unitZone.some((unit: Card | null) =>
+    unit?.gamecardId === selfTarget.gamecardId &&
+    (unit as any).data?.enteredFromDeckByAlchemySourceCardId === selfCecilia.gamecardId
+  );
+
   const triggerCecilia = cloneScriptCard(bt08Y03 as Card, 'UNIT', { gamecardId: 'Y03_TRIGGER_CECILIA' });
   const rawStoneMaterial = cloneScriptCard(bt07Y04 as Card, 'UNIT');
   const triggerWhite = testCard({ id: 'Y03_TRIGGER_WHITE', fullName: 'Y03 Trigger White', color: 'WHITE', cardlocation: 'HAND' });
@@ -2019,9 +2130,9 @@ async function testYellowHighAlchemyPlacements(): Promise<ScenarioResult> {
     stateB.players.BOT.grave.some((card: Card) => card.gamecardId === fieldMaterialB.gamecardId) &&
     stateB.players.BOT.grave.some((card: Card) => card.gamecardId === deckGod.gamecardId);
 
-  return y03Placed && rawStoneTriggered && fullCanActivate && fullFieldPlaced && y09Placed && materialsSent
-    ? pass(name, `y03=${y03Placed}, rawTrigger=${rawStoneTriggered}, full=${fullCanActivate}/${fullFieldPlaced}, y09=${y09Placed}, materials=${materialsSent}`)
-    : fail(name, `y03=${y03Placed}, rawTrigger=${rawStoneTriggered}, full=${fullCanActivate}/${fullFieldPlaced}, y09=${y09Placed}, materials=${materialsSent}`);
+  return y03Placed && selfMaterialAllowed && selfSentToGrave && selfTargetPlaced && rawStoneTriggered && fullCanActivate && fullFieldPlaced && y09Placed && materialsSent
+    ? pass(name, `y03=${y03Placed}, self=${selfMaterialAllowed}/${selfSentToGrave}/${selfTargetPlaced}, rawTrigger=${rawStoneTriggered}, full=${fullCanActivate}/${fullFieldPlaced}, y09=${y09Placed}, materials=${materialsSent}`)
+    : fail(name, `y03=${y03Placed}, self=${selfMaterialAllowed}/${selfSentToGrave}/${selfTargetPlaced}, rawTrigger=${rawStoneTriggered}, full=${fullCanActivate}/${fullFieldPlaced}, y09=${y09Placed}, materials=${materialsSent}`);
 }
 
 async function testYellowHighAlchemyPhantomBeastEntryRestriction(): Promise<ScenarioResult> {
@@ -2278,6 +2389,7 @@ const scenarios: { name: string; run: ScenarioRun }[] = [
   { name: 'BT08-G11 silences on Sernobu god resonance and revives silver music', run: testGreenG11ResonanceModes },
   { name: 'BT08-B01/B02/B07 wealth steal, dream recovery, and story modes', run: testBlueWealthStealRecoverAndStory },
   { name: 'BT08-B03/B04/B05/B06 erosion entry and Adventurer bonuses', run: testBlueErosionEntryAndAdventurers },
+  { name: 'BT04 Xiaoting only swaps non-god Adventurer units', run: testXiaotingFiltersNonGodAdventurerTargets },
   { name: 'BT08-B08/B09 counters ACCESS 3 non-god and carriage mills/wins', run: testBlueCounterAndCarriage },
   { name: 'BT08-B10/B11 Sword Immortal search, boost, hand entry, and equipment bonus', run: testBlueSwordImmortalPackage },
   { name: 'BT08-Y01/Y02/Y08 face-down exile and Feijing delayed return', run: testYellowFaceDownExileAndFeijingReturn },

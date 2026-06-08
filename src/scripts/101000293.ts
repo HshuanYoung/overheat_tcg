@@ -106,6 +106,7 @@ const createPeonyDestroyPaymentQuery = (gameState: any, playerState: any, instan
       effectId: '101000293_seiso_modes',
       step: 'PAY_DESTROY_PAIR',
       resumeStackAfterCost: true,
+      skipFinalizeAfterCost: true,
       ownTargetId: ownTarget.gamecardId,
       oppTargetId: oppTarget.gamecardId
     }
@@ -228,6 +229,17 @@ const effect_101000293_seiso_modes: CardEffect = {
       () => 'UNIT'
     );
   },
+  onCostResolve: async (instance, gameState, playerState, _selections, context) => {
+    if (context?.step !== 'PAY_DESTROY_PAIR') return;
+    const ownTarget = context.ownTargetId ? AtomicEffectExecutor.findCardById(gameState, context.ownTargetId) : undefined;
+    const oppTarget = context.oppTargetId ? AtomicEffectExecutor.findCardById(gameState, context.oppTargetId) : undefined;
+    if (isValidPeonyOwnTarget(gameState, playerState, ownTarget)) {
+      destroyByEffect(gameState, ownTarget, instance);
+    }
+    if (isValidPeonyOpponentTarget(gameState, playerState, oppTarget)) {
+      destroyByEffect(gameState, oppTarget, instance);
+    }
+  },
   onQueryResolve: async (instance, gameState, playerState, selections, context) => {
     const declaredMode = context?.selectedModeId || context?.modeId;
     if (declaredMode === 'SETUP_RECRUIT' || declaredMode === 'DESTROY_PAIR') {
@@ -339,6 +351,7 @@ const effect_101000293_seiso_modes: CardEffect = {
           effectId: '101000293_seiso_modes',
           step: 'PAY_DESTROY_PAIR',
           resumeStackAfterCost: true,
+          skipFinalizeAfterCost: true,
           ownTargetId: ownTarget.gamecardId,
           oppTargetId: oppTarget.gamecardId
         }
@@ -347,15 +360,6 @@ const effect_101000293_seiso_modes: CardEffect = {
     }
 
     if (context?.step !== 'PAY_DESTROY_PAIR') return;
-    context.cancelActivation = true;
-    const ownTarget = context.ownTargetId ? AtomicEffectExecutor.findCardById(gameState, context.ownTargetId) : undefined;
-    const oppTarget = context.oppTargetId ? AtomicEffectExecutor.findCardById(gameState, context.oppTargetId) : undefined;
-    if (isValidPeonyOwnTarget(gameState, playerState, ownTarget)) {
-      destroyByEffect(gameState, ownTarget, instance);
-    }
-    if (isValidPeonyOpponentTarget(gameState, playerState, oppTarget)) {
-      destroyByEffect(gameState, oppTarget, instance);
-    }
   }
 };
 

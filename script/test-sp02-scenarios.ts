@@ -10,6 +10,9 @@ import sp02Y01 from '../src/scripts/105110284';
 import sp02Y02 from '../src/scripts/105000285';
 import sp02Y03 from '../src/scripts/105000323';
 import sp02Y09 from '../src/scripts/105000325';
+import snowHouse from '../src/scripts/301000048';
+import treasureBox from '../src/scripts/304000057';
+import twilightBeach from '../src/scripts/305000049';
 import { moveCardAsCost } from '../src/scripts/BaseUtil';
 
 type ScenarioResult = {
@@ -402,9 +405,12 @@ async function testFoxReporterDoesNotSearchItself(): Promise<ScenarioResult> {
   const discard = testCard({ id: 'FOX_DISCARD_COST', fullName: 'Fox Discard Cost', cardlocation: 'HAND' });
   const reporterInDeck = cloneScriptCard(foxReporter as Card, 'DECK');
   const irodoriTarget = cloneScriptCard(sp02Y01 as Card, 'DECK');
+  const snowHouseInDeck = cloneScriptCard(snowHouse as Card, 'DECK');
+  const treasureBoxInDeck = cloneScriptCard(treasureBox as Card, 'DECK');
+  const twilightBeachInDeck = cloneScriptCard(twilightBeach as Card, 'DECK');
   const state = game({
     hand: [discard],
-    deck: [reporterInDeck, irodoriTarget],
+    deck: [reporterInDeck, snowHouseInDeck, treasureBoxInDeck, twilightBeachInDeck, irodoriTarget],
     unitZone: [reporter, null, null, null, null, null],
   });
 
@@ -429,10 +435,13 @@ async function testFoxReporterDoesNotSearchItself(): Promise<ScenarioResult> {
 
   const optionIds = new Set((state.pendingQuery?.options || []).map((option: any) => option.id));
   const excludesReporter = !optionIds.has(reporterInDeck.gamecardId);
+  const excludesIrodoriReferenceItems = !optionIds.has(snowHouseInDeck.gamecardId) &&
+    !optionIds.has(treasureBoxInDeck.gamecardId) &&
+    !optionIds.has(twilightBeachInDeck.gamecardId);
   const includesIrodori = optionIds.has(irodoriTarget.gamecardId);
 
-  if (!excludesReporter || !includesIrodori) {
-    return fail(name, `options=${Array.from(optionIds).join(',')}, excludesReporter=${excludesReporter}, includesIrodori=${includesIrodori}`);
+  if (!excludesReporter || !excludesIrodoriReferenceItems || !includesIrodori) {
+    return fail(name, `options=${Array.from(optionIds).join(',')}, excludesReporter=${excludesReporter}, excludesItems=${excludesIrodoriReferenceItems}, includesIrodori=${includesIrodori}`);
   }
 
   await answerPendingQuery(state, 'BOT', [irodoriTarget.gamecardId]);
@@ -440,7 +449,7 @@ async function testFoxReporterDoesNotSearchItself(): Promise<ScenarioResult> {
   const reporterStillInDeck = state.players.BOT.deck.some((card: Card) => card.gamecardId === reporterInDeck.gamecardId);
 
   return searchedIrodori && reporterStillInDeck
-    ? pass(name, `searched=${irodoriTarget.id}, reporterStillInDeck=${reporterStillInDeck}`)
+    ? pass(name, `searched=${irodoriTarget.id}, reporterStillInDeck=${reporterStillInDeck}, excludesItems=${excludesIrodoriReferenceItems}`)
     : fail(name, `searchedIrodori=${searchedIrodori}, reporterStillInDeck=${reporterStillInDeck}, query=${state.pendingQuery?.callbackKey || 'none'}`);
 }
 

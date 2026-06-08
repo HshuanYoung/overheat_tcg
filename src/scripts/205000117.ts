@@ -5,6 +5,7 @@ import {
   createSelectCardQuery,
   getOpponentUid,
   moveCard,
+  moveCardAsCost,
   story
 } from './BaseUtil';
 
@@ -111,7 +112,7 @@ const cardEffects: CardEffect[] = [story('205000117_otherworld_fantasy', '选择
       context.cancelActivation = true;
       return;
     }
-    moveCard(gameState, playerState.uid, discarded, 'GRAVE', instance);
+    moveCardAsCost(gameState, playerState.uid, discarded, 'GRAVE', instance);
   },
   onQueryResolve: async (instance, gameState, playerState, selections, context) => {
     const mode = context?.modeId || context?.selectedModeId || context?.mode;

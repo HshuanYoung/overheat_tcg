@@ -4817,6 +4817,19 @@ export const ServerGameService = {
         return gameState;
       }
 
+      if (query.context?.skipFinalizeAfterCost) {
+        if (query.context?.resumeStackAfterCost && gameState.isResolvingStack) {
+          if (gameState.counterStack.length > 0) {
+            await ServerGameService.resolveCounterStack(gameState, onUpdate);
+          } else {
+            await ServerGameService.finishCounteringStack(gameState, onUpdate);
+          }
+        } else if (!gameState.isCountering) {
+          await ServerGameService.checkTriggeredEffects(gameState, onUpdate);
+        }
+        return gameState;
+      }
+
       if (query.context?.pendingAction === 'PLAY_CARD_EFFECT_COST') {
         await ServerGameService.playCard(
           gameState,

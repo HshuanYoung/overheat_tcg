@@ -44,7 +44,7 @@ interface BattleAnimationLayerProps {
 
 const DISPLAY_MS: Record<BattleAnimationType, number> = {
   'card-played': 1100,
-  'effect-activated': 900,
+  'effect-activated': 1800,
   damage: 950,
   attack: 1000,
   goddess: 1800,

@@ -5,6 +5,7 @@ import {
   canPutUnitOntoBattlefield,
   createSelectCardQuery,
   destroyByEffect,
+  isSelfLeftFieldByBattleOrOwnEffect,
   ownUnits,
   ownerUidOf,
   putUnitOntoField
@@ -83,19 +84,7 @@ const effect_105000294_leave_put_seiso_from_deck: CardEffect = {
   triggerLocation: ['UNIT', 'GRAVE', 'EXILE', 'HAND', 'DECK', 'EROSION_FRONT', 'EROSION_BACK'],
   description: '同名1回合1次：这张卡由于战斗或自己的卡牌效果离开战场时，将卡组1张ACCESS 3《清霜》单位放置到战场。',
   condition: (_gameState, playerState, instance, event) => {
-    const isSelfLeave =
-      event?.sourceCard === instance ||
-      event?.sourceCardId === instance.gamecardId ||
-      event?.data?.previousSourceCardId === instance.gamecardId ||
-      (
-        !!event?.sourceCard?.runtimeFingerprint &&
-        event.sourceCard.runtimeFingerprint === instance.runtimeFingerprint
-      );
-    if (!isSelfLeave) return false;
-    if (event.data?.sourceZone !== 'UNIT') return false;
-    const leftByOwnEffect = !!event.data?.isEffect && event.data?.effectSourcePlayerUid === playerState.uid;
-    const leftByBattle = !event.data?.isEffect && event.data?.targetZone === 'GRAVE';
-    return (leftByOwnEffect || leftByBattle) &&
+    return isSelfLeftFieldByBattleOrOwnEffect(event, instance, playerState.uid) &&
       playerState.unitZone.filter(Boolean).length < 6 &&
       playerState.deck.some((card: Card) => isSeisoUnit(card) && isAccessThree(card) && canPutUnitOntoBattlefield(playerState, card));
   },

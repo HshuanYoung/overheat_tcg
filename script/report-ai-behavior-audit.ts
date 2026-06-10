@@ -267,6 +267,20 @@ function booleanDetail(log: any, key: string) {
   return value === true || value === 'true' || value === 1 || value === '1';
 }
 
+function holdLogExplainsSkippedAttack(log: any) {
+  if (String(log?.action || '') !== 'HOLD_ATTACKERS') return false;
+  const reservedDefenders = numericDetail(log, 'reservedDefenders');
+  const lastChanceFullyBlocked = booleanDetail(log, 'lastChanceFullyBlocked');
+  const fullyBlockablePressure = booleanDetail(log, 'fullyBlockablePressure') ||
+    numericDetail(log, 'damageThroughLikelyDefenders') <= 0;
+  const preservesDefense =
+    reservedDefenders > 0 ||
+    numericDetail(log, 'currentReserveDefenders') > 0 ||
+    numericDetail(log, 'currentDefendersNeededNextTurn') > 0 ||
+    booleanDetail(log, 'dynamicCounterPressure');
+  return lastChanceFullyBlocked || (fullyBlockablePressure && preservesDefense);
+}
+
 function candidateText(log: any) {
   if (!Array.isArray(log?.candidates)) return '';
   return log.candidates
@@ -452,7 +466,13 @@ function analyzeTurnWindows(findings: BehaviorFinding[], result: any) {
       }
     }
 
-    if (attackBeforeDeveloping && ended && attackLogs.length === 0) {
+    const explanatoryHold = afterPlan.find(holdLogExplainsSkippedAttack);
+    const planFullyBlockable =
+      damageThroughLikelyDefenders <= 0 &&
+      hasLikelyDefenders &&
+      likelyDefenders >= numericDetail(plan, 'attackers');
+
+    if (attackBeforeDeveloping && ended && attackLogs.length === 0 && !explanatoryHold && !planFullyBlockable) {
       addFinding(findings, result, 'MISSED_ATTACK_WINDOW', {
         deck,
         turn: plan.turn,

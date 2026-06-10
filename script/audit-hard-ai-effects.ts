@@ -23,6 +23,10 @@ const severityRank: Record<Severity, number> = {
   info: 1,
 };
 
+const NON_TARGET_SELECTION_EFFECT_IDS = new Set([
+  '104030459_swap_activate',
+]);
+
 const args = new Set(process.argv.slice(2));
 const failOn = (() => {
   const raw = process.argv.find(arg => arg.startsWith('--fail-on='));
@@ -87,6 +91,10 @@ function hasCardSpecificProfile(profile: DeckAiProfile, card: Card, effect: Card
   );
 }
 
+function isNonTargetSelectionEffect(effect: CardEffect) {
+  return NON_TARGET_SELECTION_EFFECT_IDS.has(effect.id || '');
+}
+
 function addFinding(
   findings: AuditFinding[],
   severity: Severity,
@@ -118,6 +126,7 @@ function auditEffect(profile: DeckAiProfile, card: Card, effect: CardEffect, fin
   const hasTargetSpec = !!effect.targetSpec;
   const hasCondition = !!effect.condition;
   const usesSelectionQuery = /createSelectCardQuery|pendingQuery|SELECT_CARD|targetSpec|getCandidates/.test(source);
+  const nonTargetSelectionEffect = isNonTargetSelectionEffect(effect);
   const manualSpecificTiming = hasManualSpecificTiming(timing.reasons);
   const profileSpecific = hasCardSpecificProfile(profile, card, effect);
 
@@ -152,7 +161,7 @@ function auditEffect(profile: DeckAiProfile, card: Card, effect: CardEffect, fin
     );
   }
 
-  if ((tags.has('removal') || tags.has('tempo')) && usesSelectionQuery && !hasTargetSpec && !manualSpecificTiming && !profileSpecific) {
+  if ((tags.has('removal') || tags.has('tempo')) && usesSelectionQuery && !hasTargetSpec && !nonTargetSelectionEffect && !manualSpecificTiming && !profileSpecific) {
     addFinding(
       findings,
       'warning',
@@ -163,7 +172,7 @@ function auditEffect(profile: DeckAiProfile, card: Card, effect: CardEffect, fin
       'Removal or tempo effect has no structured targetSpec; audit target selection so AI does not choose own or low-value targets.'
     );
   }
-  if ((tags.has('removal') || tags.has('tempo')) && usesSelectionQuery && !hasTargetSpec && profileSpecific) {
+  if ((tags.has('removal') || tags.has('tempo')) && usesSelectionQuery && !hasTargetSpec && !nonTargetSelectionEffect && profileSpecific) {
     addFinding(
       findings,
       'info',

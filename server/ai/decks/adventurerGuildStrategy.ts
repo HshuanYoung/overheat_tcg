@@ -1998,6 +1998,9 @@ function scoreAssociationChoice(gameState: GameState, player: PlayerState, query
 function scoreAdventurerGuildCardSelection(gameState: GameState, player: PlayerState, query: EffectQuery, option: any) {
   const card = option.card as Card | undefined;
   if (!card) return undefined;
+  const optionIsMine = typeof option.isMine === 'boolean'
+    ? option.isMine
+    : !!findCardInPlayerZones(player, card.gamecardId);
   const effectId = String(query.context?.effectId || '');
   const step = String(query.context?.step || '');
   const sourceCard = query.context?.sourceCardId
@@ -2083,10 +2086,11 @@ function scoreAdventurerGuildCardSelection(gameState: GameState, player: PlayerS
       if (routeQueryTargetBonus > 0) return routeQueryTargetBonus;
       if (routeTargetBonus > 0) return routeTargetBonus;
       if (defensiveWindow) {
-        const defensePriority = kathyDefenseTargetPriority(card, !!option.isMine);
+        const defensePriority = kathyDefenseTargetPriority(card, optionIsMine);
         return defensePriority > 0 ? defensePriority : undefined;
       }
-      return option.isMine ? -80 : 80 + (card.power || 0) / 100 + (card.damage || 0) * 10;
+      if (optionIsMine || card.godMark || card.isExhausted) return -120;
+      return 80 + (card.power || 0) / 100 + (card.damage || 0) * 10;
     }
   }
 

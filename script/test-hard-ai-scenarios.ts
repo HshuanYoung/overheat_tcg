@@ -75,6 +75,17 @@ const makeScenarioCard = (overrides: Partial<Card> = {}): Card => {
   } as Card;
 };
 
+const makeLibraryCardById = (cardId: string, overrides: Partial<Card> = {}): Card => {
+  const template = Object.values(SERVER_CARD_LIBRARY).find(card => card?.id === cardId);
+  if (!template) throw new Error(`Missing library card ${cardId}`);
+  return makeScenarioCard({
+    ...template,
+    uniqueId: template.uniqueId || `${cardId}:TEST`,
+    gamecardId: `${cardId}_SCENARIO_${++scenarioCardSeq}`,
+    ...overrides,
+  });
+};
+
 const querySelection = (state: GameState, query: EffectQuery) =>
   ServerGameService.getBotQuerySelectionsForPlayer(state, 'BOT_PLAYER', query);
 
@@ -3125,6 +3136,143 @@ const regressionCases: RegressionCase[] = [{
     }
   },
 }, {
+  name: 'pure-yellow-steel treats fully blockable last-chance pressure as defense',
+  profileId: 'pure-yellow-steel',
+  run: async deck => {
+    const state = await createScenarioState('pure-yellow-steel', deck);
+    const profile = AI_DECK_PROFILES.find(candidate => candidate.id === 'pure-yellow-steel');
+    assert(profile, 'Missing pure-yellow-steel profile');
+
+    state.turnCount = 33;
+    state.phase = 'MAIN';
+    state.currentTurnPlayer = state.playerIds.indexOf('BOT_PLAYER') as 0 | 1;
+
+    const bot = state.players.BOT_PLAYER;
+    const opponent = state.players.TEST_PLAYER;
+    bot.isTurn = true;
+    opponent.isTurn = false;
+    bot.hand = [];
+    bot.deck = Array.from({ length: 2 }, (_, index) =>
+      makeScenarioCard({ id: `STEEL_FULLY_BLOCKED_LAST_CHANCE_BOT_DECK_${index}`, fullName: `Steel Fully Blocked Last Chance Bot Deck ${index}`, cardlocation: 'DECK' })
+    );
+    bot.unitZone = [null, null, null, null, null, null];
+    bot.itemZone = [null, null, null, null, null, null];
+    bot.erosionFront = [null, null, null, null, null, null, null, null, null, null];
+    bot.erosionBack = [null, null, null, null, null, null, null, null, null, null];
+    opponent.deck = Array.from({ length: 4 }, (_, index) =>
+      makeScenarioCard({ id: `STEEL_FULLY_BLOCKED_LAST_CHANCE_OPPONENT_DECK_${index}`, fullName: `Steel Fully Blocked Last Chance Opponent Deck ${index}`, cardlocation: 'DECK' })
+    );
+    opponent.unitZone = [null, null, null, null, null, null];
+    opponent.erosionFront = [null, null, null, null, null, null, null, null, null, null];
+    opponent.erosionBack = [null, null, null, null, null, null, null, null, null, null];
+
+    [3, 2, 2, 2, 1, 1].forEach((damage, index) => {
+      putUnitForScenario(state, 'BOT_PLAYER', makeScenarioCard({
+        id: `STEEL_FULLY_BLOCKED_LAST_CHANCE_ATTACKER_${index}`,
+        fullName: `Steel Fully Blocked Last Chance Attacker ${index}`,
+        type: 'UNIT',
+        cardlocation: 'UNIT',
+        power: index === 1 ? 4000 : 2500,
+        basePower: index === 1 ? 4000 : 2500,
+        damage,
+        baseDamage: damage,
+        playedTurn: 0,
+      }), index);
+    });
+
+    [3, 2, 1, 1, 1, 1].forEach((damage, index) => {
+      putUnitForScenario(state, 'TEST_PLAYER', makeScenarioCard({
+        id: `STEEL_FULLY_BLOCKED_LAST_CHANCE_DEFENDER_${index}`,
+        fullName: `Steel Fully Blocked Last Chance Defender ${index}`,
+        type: 'UNIT',
+        cardlocation: 'UNIT',
+        power: 9000,
+        basePower: 9000,
+        damage,
+        baseDamage: damage,
+        playedTurn: 0,
+      }), index);
+    });
+
+    const plan = buildTurnPlan(state, bot, profile);
+    assert(plan.lastChanceAttack === true, `Expected the low-deck race marker to remain visible, got notes: ${plan.notes.join(', ')}`);
+    assert(plan.damageThroughLikelyDefenders === 0, `Expected all pressure to be blockable, got ${plan.damageThroughLikelyDefenders}`);
+    assert(plan.likelyDefenders >= plan.attackers, `Expected defenders to cover all attackers, got ${plan.likelyDefenders}/${plan.attackers}`);
+    assert(plan.attackBeforeDeveloping === false, `Expected fully blockable last-chance not to force attack before developing, got notes: ${plan.notes.join(', ')}`);
+    assert(plan.mode === 'defense' || plan.mode === 'stabilize', `Expected a defensive/stabilize plan, got ${plan.mode}`);
+    assert(plan.notes.includes('last-chance pressure fully blockable; preserve defenders'), `Expected fully blockable note, got ${plan.notes.join(', ')}`);
+  },
+}, {
+  name: 'pure-yellow-steel treats fully blockable desperation pressure as defense',
+  profileId: 'pure-yellow-steel',
+  run: async deck => {
+    const state = await createScenarioState('pure-yellow-steel', deck);
+    const profile = AI_DECK_PROFILES.find(candidate => candidate.id === 'pure-yellow-steel');
+    assert(profile, 'Missing pure-yellow-steel profile');
+
+    state.turnCount = 12;
+    state.phase = 'MAIN';
+    state.currentTurnPlayer = state.playerIds.indexOf('BOT_PLAYER') as 0 | 1;
+
+    const bot = state.players.BOT_PLAYER;
+    const opponent = state.players.TEST_PLAYER;
+    bot.isTurn = true;
+    opponent.isTurn = false;
+    bot.hand = [];
+    bot.deck = Array.from({ length: 4 }, (_, index) =>
+      makeScenarioCard({ id: `STEEL_FULLY_BLOCKED_DESPERATION_BOT_DECK_${index}`, fullName: `Steel Fully Blocked Desperation Bot Deck ${index}`, cardlocation: 'DECK' })
+    );
+    bot.unitZone = [null, null, null, null, null, null];
+    bot.itemZone = [null, null, null, null, null, null];
+    bot.erosionFront = [null, null, null, null, null, null, null, null, null, null];
+    bot.erosionBack = [null, null, null, null, null, null, null, null, null, null];
+    opponent.deck = Array.from({ length: 20 }, (_, index) =>
+      makeScenarioCard({ id: `STEEL_FULLY_BLOCKED_DESPERATION_OPPONENT_DECK_${index}`, fullName: `Steel Fully Blocked Desperation Opponent Deck ${index}`, cardlocation: 'DECK' })
+    );
+    opponent.unitZone = [null, null, null, null, null, null];
+    opponent.erosionFront = [null, null, null, null, null, null, null, null, null, null];
+    opponent.erosionBack = [null, null, null, null, null, null, null, null, null, null];
+
+    [2, 1].forEach((damage, index) => {
+      putUnitForScenario(state, 'BOT_PLAYER', makeScenarioCard({
+        id: `STEEL_FULLY_BLOCKED_DESPERATION_ATTACKER_${index}`,
+        fullName: `Steel Fully Blocked Desperation Attacker ${index}`,
+        type: 'UNIT',
+        cardlocation: 'UNIT',
+        power: 2500,
+        basePower: 2500,
+        damage,
+        baseDamage: damage,
+        playedTurn: 0,
+      }), index);
+    });
+
+    [3, 2].forEach((damage, index) => {
+      const defender = makeScenarioCard({
+        id: `STEEL_FULLY_BLOCKED_DESPERATION_DEFENDER_${index}`,
+        fullName: `Steel Fully Blocked Desperation Defender ${index}`,
+        type: 'UNIT',
+        cardlocation: 'UNIT',
+        power: 9000,
+        basePower: 9000,
+        damage,
+        baseDamage: damage,
+        playedTurn: 0,
+      });
+      defender.canAttack = false;
+      putUnitForScenario(state, 'TEST_PLAYER', defender, index);
+    });
+
+    const plan = buildTurnPlan(state, bot, profile);
+    assert(plan.desperationAttack === true, `Expected low-deck desperation marker, got notes: ${plan.notes.join(', ')}`);
+    assert(plan.lastChanceAttack === false, 'Expected this regression to cover the non-lastChance desperation branch');
+    assert(plan.damageThroughLikelyDefenders === 0, `Expected all pressure to be blockable, got ${plan.damageThroughLikelyDefenders}`);
+    assert(plan.likelyDefenders >= plan.attackers, `Expected defenders to cover all attackers, got ${plan.likelyDefenders}/${plan.attackers}`);
+    assert(plan.attackBeforeDeveloping === false, `Expected fully blockable desperation not to force attack before developing, got notes: ${plan.notes.join(', ')}`);
+    assert(plan.mode === 'defense' || plan.mode === 'stabilize', `Expected a defensive/stabilize plan, got ${plan.mode}`);
+    assert(plan.notes.includes('desperation pressure fully blockable; preserve defenders'), `Expected fully blockable desperation note, got ${plan.notes.join(', ')}`);
+  },
+}, {
   name: 'pure-yellow-steel keeps attacking when last-chance defense cannot cover next turn',
   profileId: 'pure-yellow-steel',
   run: async deck => {
@@ -3826,6 +3974,104 @@ const regressionCases: RegressionCase[] = [{
     assert(bot.hand.some(card => card.gamecardId === kathy.gamecardId), 'Expected Kathy to remain in hand');
     assert(bot.unitZone.some(card => card?.gamecardId === albert.gamecardId && !card.isExhausted), 'Expected Albert to remain ready as a blocker');
     assert(bot.unitZone.some(card => card?.gamecardId === xiaoting.gamecardId && !card.isExhausted), 'Expected Xiaoting to remain ready as a blocker');
+  },
+}, {
+  name: 'adventurer-guild kathy entry exhaust targets opponent non-godmark units only',
+  profileId: 'adventurer-guild',
+  run: async deck => {
+    const state = await createScenarioState('adventurer-guild', deck);
+    state.turnCount = 6;
+    state.phase = 'MAIN';
+    state.currentTurnPlayer = state.playerIds.indexOf('BOT_PLAYER') as 0 | 1;
+
+    const bot = state.players.BOT_PLAYER;
+    const opponent = state.players.TEST_PLAYER;
+    bot.isTurn = true;
+    opponent.isTurn = false;
+    bot.hand = [];
+    bot.deck = Array.from({ length: 20 }, (_, index) =>
+      makeScenarioCard({ id: `KATHY_TARGET_BOT_DECK_${index}`, fullName: `Kathy Target Bot Deck ${index}`, cardlocation: 'DECK' })
+    );
+    bot.unitZone = [null, null, null, null, null, null];
+    bot.itemZone = [null, null, null, null, null, null];
+    opponent.unitZone = [null, null, null, null, null, null];
+
+    const kathy = makeLibraryCardById(ADVENTURER_GUILD_CARD_IDS.kathy, {
+      cardlocation: 'UNIT',
+    });
+    const ownUnit = makeScenarioCard({
+      id: 'KATHY_TARGET_OWN_UNIT',
+      fullName: 'Kathy Target Own Unit',
+      type: 'UNIT',
+      cardlocation: 'UNIT',
+      power: 8000,
+      basePower: 8000,
+      damage: 4,
+      baseDamage: 4,
+    });
+    const opponentGodmark = makeScenarioCard({
+      id: 'KATHY_TARGET_OPPONENT_GODMARK',
+      fullName: 'Kathy Target Opponent Godmark',
+      type: 'UNIT',
+      cardlocation: 'UNIT',
+      godMark: true,
+      baseGodMark: true,
+      power: 9000,
+      basePower: 9000,
+      damage: 5,
+      baseDamage: 5,
+    });
+    const opponentThreat = makeScenarioCard({
+      id: 'KATHY_TARGET_OPPONENT_THREAT',
+      fullName: 'Kathy Target Opponent Threat',
+      type: 'UNIT',
+      cardlocation: 'UNIT',
+      power: 5000,
+      basePower: 5000,
+      damage: 4,
+      baseDamage: 4,
+    });
+
+    putUnitForScenario(state, 'BOT_PLAYER', kathy, 0);
+    putUnitForScenario(state, 'BOT_PLAYER', ownUnit, 1);
+    putUnitForScenario(state, 'TEST_PLAYER', opponentGodmark, 0);
+    putUnitForScenario(state, 'TEST_PLAYER', opponentThreat, 1);
+
+    const swapEffect = kathy.effects?.find(candidate => candidate.id === '104030459_swap_activate');
+    assert(!swapEffect?.targetSpec, 'Expected Kathy swap activate to remain a non-targeting effect without targetSpec');
+
+    const effect = kathy.effects?.find(candidate => candidate.id === '104030459_entry_exhaust');
+    assert(effect?.targetSpec?.controller === 'OPPONENT', 'Expected Kathy entry exhaust to declare opponent-only targetSpec');
+    assert(effect?.targetSpec?.zones?.includes('UNIT'), 'Expected Kathy entry exhaust to declare UNIT target zone');
+    assert(effect?.targetSpec?.title === '选择要横置的单位', `Expected Chinese Kathy entry title, got ${effect?.targetSpec?.title || 'none'}`);
+    assert(effect?.targetSpec?.description === '请选择对手的1个非神蚀单位，将其横置。', `Expected Chinese Kathy entry description, got ${effect?.targetSpec?.description || 'none'}`);
+
+    const candidates = ServerGameService.getTargetCandidates(state, 'BOT_PLAYER', kathy, effect, effect.targetSpec);
+    assert(candidates.length === 1, `Expected one legal Kathy target, got ${candidates.map(candidate => candidate.card.fullName).join(', ')}`);
+    assert(candidates[0]?.card.gamecardId === opponentThreat.gamecardId, `Expected legal target to be opponent threat, got ${candidates[0]?.card.fullName || 'none'}`);
+
+    const query: EffectQuery = {
+      id: 'KATHY_ENTRY_TARGET_QUERY',
+      type: 'SELECT_CARD',
+      playerUid: 'BOT_PLAYER',
+      options: [
+        { card: ownUnit, id: ownUnit.gamecardId },
+        { card: opponentGodmark, id: opponentGodmark.gamecardId },
+        { card: opponentThreat, id: opponentThreat.gamecardId },
+      ],
+      title: 'Kathy entry target',
+      description: 'Select target for Kathy entry exhaust',
+      minSelections: 1,
+      maxSelections: 1,
+      callbackKey: 'EFFECT_RESOLVE',
+      context: {
+        sourceCardId: kathy.gamecardId,
+        effectId: '104030459_entry_exhaust',
+        step: 'SELECT_TARGET',
+      },
+    };
+    const selections = querySelection(state, query);
+    assert(selections[0] === opponentThreat.gamecardId, `Expected Kathy to select opponent non-godmark unit, got ${selections.join(',') || 'none'}`);
   },
 }, {
   name: 'adventurer-guild holds albert cycle in a generic countering window',

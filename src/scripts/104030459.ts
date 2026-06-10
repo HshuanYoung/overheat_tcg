@@ -33,6 +33,17 @@ const trigger_104030459_entry_exhaust: CardEffect = {
   triggerLocation: ['UNIT'],
   isMandatory: false,
   description: '【诱发】这个单位从侵蚀区正面进入战场时，你可以选择发动：横置这张卡：选择对手的1个非神蚀单位，将其横置。',
+  targetSpec: {
+    preselect: false,
+    title: '选择要横置的单位',
+    description: '请选择对手的1个非神蚀单位，将其横置。',
+    minSelections: 1,
+    maxSelections: 1,
+    zones: ['UNIT'],
+    controller: 'OPPONENT',
+    filter: { godMark: false },
+    step: 'SELECT_TARGET',
+  },
   condition: (gameState: GameState, playerState: PlayerState, instance: Card, event?: GameEvent) => {
     if (!(event?.type === 'CARD_EROSION_TO_FIELD' && event.sourceCardId === instance.gamecardId)) return false;
 

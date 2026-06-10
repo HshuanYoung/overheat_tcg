@@ -987,6 +987,43 @@ export function buildTurnPlan(gameState: GameState, player: PlayerState, profile
       : 'adventurer guild last-chance attack when defense cannot cover');
   }
 
+  const lastChanceFullyBlockable =
+    lastChanceAttack &&
+    finalDamageThroughLikelyDefenders <= 0 &&
+    likelyDefenders >= attackers.length &&
+    !pureYellowSteelDeckRaceClose &&
+    !adventurerGuildLastChance &&
+    !hasBatraReadyDefenderAttackWindow;
+
+  if (lastChanceFullyBlockable) {
+    mode = incomingThreat.lethalWithoutBlocks ? 'defense' : 'stabilize';
+    attackBeforeDeveloping = false;
+    reserveDefenders = Math.max(
+      reserveDefenders,
+      Math.min(maxReserveDefenders, Math.max(incomingThreat.defendersNeeded, 1))
+    );
+    notes.push('last-chance pressure fully blockable; preserve defenders');
+  }
+
+  const desperationFullyBlockable =
+    desperationAttack &&
+    !lastChanceAttack &&
+    finalDamageThroughLikelyDefenders <= 0 &&
+    likelyDefenders >= attackers.length &&
+    !lethalWindow &&
+    !hasForcingTacticalClose &&
+    !hasBatraReadyDefenderAttackWindow;
+
+  if (desperationFullyBlockable) {
+    mode = incomingThreat.lethalWithoutBlocks || incomingThreat.lethalThroughOneBlock ? 'defense' : 'stabilize';
+    attackBeforeDeveloping = false;
+    reserveDefenders = Math.max(
+      reserveDefenders,
+      Math.min(maxReserveDefenders, Math.max(incomingThreat.defendersNeeded, 1))
+    );
+    notes.push('desperation pressure fully blockable; preserve defenders');
+  }
+
   if (hasBatraReadyDefenderAttackWindow && gameState.turnCount > 1) {
     attackBeforeDeveloping = true;
     reserveDefenders = Math.min(
